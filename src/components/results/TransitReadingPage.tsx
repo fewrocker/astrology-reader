@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
-import type { PlanetName } from '../../engine/types'
+import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
@@ -98,7 +98,7 @@ function IngressesSection({ transitData }: { transitData: TransitData }) {
             <div className="flex-1">
               <span className="text-mystic-text text-sm font-medium">{ing.planet}</span>
               <span className="text-mystic-muted text-sm"> enters </span>
-              <span className="text-mystic-gold text-sm">{ZODIAC_GLYPHS[ing.toSign as keyof typeof ZODIAC_GLYPHS]} {ing.toSign}</span>
+              <span className="text-mystic-gold text-sm">{ZODIAC_GLYPHS[ing.toSign as ZodiacSign]} {ing.toSign}</span>
             </div>
             <span className="text-mystic-muted text-xs">{ing.approximateDate}</span>
           </div>
@@ -160,7 +160,7 @@ function CurrentPlanetsTable({ transitData }: { transitData: TransitData }) {
                   <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
                   {p.name}
                 </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign]} {p.sign}</td>
+                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>
                 <td className="px-3 py-2 text-mystic-muted">{formatPosition(p)}</td>
                 <td className="px-3 py-2 text-mystic-muted">
                   {p.retrograde ? <span className="text-red-400">℞ Retrograde</span> : 'Direct'}

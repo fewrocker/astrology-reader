@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import type { PlanetName } from '../../engine/types'
+import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
@@ -170,7 +170,7 @@ function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[];
                   <span className="mr-2">{PLANET_GLYPHS[h.planet as PlanetName] ?? '☊'}</span>
                   {h.planet}
                 </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[h.sign as keyof typeof ZODIAC_GLYPHS]} {h.sign}</td>
+                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[h.sign as ZodiacSign]} {h.sign}</td>
                 <td className="px-3 py-2 text-mystic-text font-heading">House {h.house}</td>
               </tr>
             ))}
@@ -204,7 +204,7 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
                   <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
                   {p.name}
                 </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign]} {p.sign}</td>
+                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>
                 <td className="px-3 py-2 text-mystic-muted">{formatPosition(p)}</td>
               </tr>
             ))}
@@ -254,7 +254,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
                   <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
                   {p.name}
                 </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign]} {p.sign}</td>
+                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>
                 <td className="px-3 py-2 text-mystic-muted">{formatPosition(p)}</td>
                 {!chartData.unknownTime && <td className="px-3 py-2 text-mystic-muted">{p.house}</td>}
               </tr>
