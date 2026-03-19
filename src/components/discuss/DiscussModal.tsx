@@ -431,39 +431,30 @@ function SuggestionChip({ text, onClick }: { text: string; onClick: (text: strin
   )
 }
 
-/** Reveals paragraphs one by one with a fade-in + slide-up. */
+/** Streams text word-by-word like a GPT response. */
 function RevealText({ text }: { text: string }) {
-  const lines = useMemo(() => text.split('\n'), [text])
-  const [visible, setVisible] = useState(0)
+  const words = useMemo(() => text.split(/(\s+)/), [text])
+  const [count, setCount] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    setVisible(0)
-    if (lines.length <= 1) { setVisible(lines.length); return }
-    let i = 1
-    setVisible(1)
+    setCount(0)
+    let i = 0
     const id = setInterval(() => {
-      i++
-      setVisible(i)
-      if (i >= lines.length) clearInterval(id)
-    }, 120)
+      i += 2 // reveal 2 tokens (word + space) per tick
+      if (i >= words.length) { setCount(words.length); clearInterval(id) }
+      else setCount(i)
+    }, 30)
     return () => clearInterval(id)
-  }, [lines])
+  }, [words])
+
+  const revealed = words.slice(0, count).join('')
 
   return (
-    <>
-      {lines.map((line, j) => (
-        <p
-          key={j}
-          className={j > 0 ? 'mt-2' : ''}
-          style={{
-            opacity: j < visible ? 1 : 0,
-            transform: j < visible ? 'translateY(0)' : 'translateY(6px)',
-            transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
-          }}
-        >
-          {line}
-        </p>
+    <div ref={containerRef}>
+      {revealed.split('\n').map((line, j) => (
+        <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
       ))}
-    </>
+    </div>
   )
 }
