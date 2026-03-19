@@ -7,6 +7,6 @@ Build an astrology website for daily birth chart readings. It has to be very tho
 ## Phases
 
 - [x] PLANNING
-- [ ] SETUP
+- [x] SETUP
 - [ ] DEVELOPMENT
 - [ ] REVIEW
