@@ -8,5 +8,5 @@ Build an astrology website for daily birth chart readings. It has to be very tho
 
 - [x] PLANNING
 - [x] SETUP
-- [ ] DEVELOPMENT
-- [ ] REVIEW
+- [x] DEVELOPMENT
+- [x] REVIEW
