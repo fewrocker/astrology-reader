@@ -18,9 +18,9 @@ const PLANET_R = INNER_R + 30
 const ASPECT_R = INNER_R - 15
 
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
-  // In astrology charts, 0° Aries is at the left (9 o'clock) and goes counter-clockwise
-  // We rotate so ASC (the chart's 0 point) is at the left
-  const rad = (180 - angleDeg) * (Math.PI / 180)
+  // In Western astrology charts, ASC is at the left (9 o'clock)
+  // and ecliptic degrees increase clockwise around the wheel
+  const rad = (180 + angleDeg) * (Math.PI / 180)
   return {
     x: cx + r * Math.cos(rad),
     y: cy - r * Math.sin(rad),
@@ -71,9 +71,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         const largeArc = 0
         const d = [
           `M ${p4.x} ${p4.y}`,
-          `A ${SIGN_R} ${SIGN_R} 0 ${largeArc} 0 ${p3.x} ${p3.y}`,
+          `A ${SIGN_R} ${SIGN_R} 0 ${largeArc} 1 ${p3.x} ${p3.y}`,
           `L ${p2.x} ${p2.y}`,
-          `A ${OUTER_R} ${OUTER_R} 0 ${largeArc} 1 ${p1.x} ${p1.y}`,
+          `A ${OUTER_R} ${OUTER_R} 0 ${largeArc} 0 ${p1.x} ${p1.y}`,
           'Z',
         ].join(' ')
 
