@@ -372,12 +372,11 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
 
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-mystic-surface border border-mystic-border rounded-lg px-5 py-4 text-sm text-mystic-muted">
-                <div className="flex items-center gap-3">
-                  <span className="discuss-loading-stars">✦</span>
-                  <span className="discuss-loading-text">
-                    {['Consulting the celestial spheres', 'Aligning the planetary wisdom', 'Channeling the astral light', 'Weaving the starlight'][Math.floor(Date.now() / 4000) % 4]}…
-                  </span>
+              <div className="bg-mystic-surface border border-mystic-border rounded-lg px-5 py-4">
+                <div className="discuss-thinking">
+                  <span className="discuss-thinking-dot">✦</span>
+                  <span className="discuss-thinking-dot">✧</span>
+                  <span className="discuss-thinking-dot">✦</span>
                 </div>
               </div>
             </div>
