@@ -81,9 +81,8 @@ This is a **mini-lifecycle** scoped to a single enhancement:
    - Update `planning/define-product.md` feature list if a new feature was added
 
 **4. Documentation Sync**
-   - Identify which development step folders are affected by this enhancement
-   - Update the `docs.md` in each affected `development/<step-name>/` folder to reflect the changes
-   - If the enhancement adds a new feature, create its documentation in the enhancement folder
+   - Update `documentation.md` to reflect any changed or added features
+   - Update `planning/define-product.md` feature list if a new feature was added
 
 ### `/document`
 
@@ -96,9 +95,7 @@ Update feature documentation based on recent changes.
 5. Read the diffs and understand what changed:
    - Which features were affected?
    - What was added, modified, or removed?
-6. For each affected feature:
-   - Find its `development/<step-name>/docs.md`
-   - Update the documentation to reflect the current state
+6. Update `documentation.md` to reflect the current state of all affected features
 7. If an enhancement caused the changes, also update `enhancements/<name>/result.md`
 8. Update `state.md` → `## Last Documented Commit` with the current HEAD commit hash
 9. Output a summary of what documentation was updated
@@ -122,12 +119,76 @@ Guide the project direction after it has started.
 6. Execute the plan updates (modify development plans, not code)
 7. Update `state.md` to reflect the steering was applied
 
+### `/fix <USER_PROMPT>`
+
+Fix a bug or error reported by the user.
+
+This is a **mini-lifecycle** scoped to a single bug fix:
+
+**1. Diagnosis** (do NOT write code yet)
+   - Read the user's error description or message
+   - Read `planning/define-product.md` to understand which features are affected
+   - Read `documentation.md` to understand what's currently implemented
+   - Search the codebase for all files related to the bug
+   - Read every related file and identify the root cause
+   - Write the analysis to `bug_fixes/<bug-name>/plan.md` including:
+     - The reported error (verbatim from user)
+     - Which features are affected
+     - Root cause analysis (what's broken and why)
+     - A checklist of fix tasks
+
+**2. Implementation**
+   - Execute each task in the bug fix's `plan.md` checklist
+   - Follow the same rules as development: implement → verify → mark done
+   - Update `state.md` throughout
+
+**3. Verification**
+   - Run the app and verify the bug is fixed
+   - Run the build and confirm zero errors
+   - Re-test related features from `planning/define-product.md` to confirm no regressions
+   - Document results in `bug_fixes/<bug-name>/result.md`
+
+**4. Documentation Sync**
+   - Update `documentation.md` if the fix changes any behavior
+   - If the bug was listed in `review/known-issues.md`, mark it as resolved there
+   - Make a git commit (e.g., `git commit -m "fix: <description>"`)
+   - Update `state.md`
+
+### `/question <USER_PROMPT>`
+
+Answer a question about the project. This is a read-only command — no files are created or modified.
+
+1. Read `plan.md` to understand the project's purpose and scope
+2. Read `planning/define-product.md` to understand the full feature set
+3. Read `state.md` to understand current progress
+4. Read `documentation.md` to understand what's implemented
+5. If the question is about implementation details, search the codebase for relevant files and read them
+6. Answer the question directly — no files created, no state changes
+
+### `/reflect`
+
+Generate a reflection on how well the project followed the origin.md framework, and propose improvements.
+
+1. Read `origin.md` (the framework itself)
+2. Read `state.md`, `plan.md`, and `planning/define-product.md`
+3. Scan the full project structure (list all files, check for expected artifacts)
+4. Review git log for commit discipline and progression
+5. Evaluate adherence to each origin.md rule:
+   - Were gate checks performed?
+   - Was `state.md` kept up to date?
+   - Was `documentation.md` maintained?
+   - Were verification rules followed?
+   - Were features scoped correctly to `planning/define-product.md`?
+6. Identify what was followed, what was skipped, and what broke
+7. Propose specific improvements to origin.md based on what was learned
+8. Write the reflection to `reflections/<date-or-name>.md`
+
 ### `/propose`
 
 Analyze the project and propose high-impact improvements.
 
 1. Read `planning/define-product.md` for the full feature list
-2. Read all `development/<step-name>/docs.md` files to understand current implementation
+2. Read `documentation.md` to understand current implementation
 3. Read `review/known-issues.md` and `review/test-results.md` if they exist
 4. Read `planning/define-product.md` → `## Proposed Features` if it exists
 5. Analyze the project holistically and propose ideas across these categories:
@@ -177,17 +238,19 @@ If `plan.md` does not exist:
 
 1. Create `plan.md`
 2. Copy the user's original prompt **verbatim** into a `## User Prompt` section at the top of `plan.md` (before any analysis or expansion). This raw prompt is preserved forever as the source of truth for the user's intent.
-3. Expand the initial user prompt into a full project definition. Repeat the Great Core Rule on the plan.
-4. Define the main phases as per the Standard Phases below.
+3. Create `state.md` with `## Current Position` set to `Phase: PLANNING, Status: in-progress`
+4. Expand the initial user prompt into a full project definition. Repeat the Great Core Rule on the plan.
+5. Define the main phases as per the Standard Phases below.
 
 * PLANNING
 * SETUP
 * DEVELOPMENT
 * REVIEW
 
-5. For each phase, when you start executing the step:
+6. For each phase, when you start executing the step:
    * create a folder for that step
    * create a `plan.md` with the description and checklist
+   * update `state.md` to reflect the current position
 
 ---
 
@@ -223,6 +286,7 @@ Before proceeding to SETUP:
    - `planning/define-product.md`
 2. **Content verification:** Open `planning/define-product.md` and confirm it contains a clearly numbered feature list (e.g., `F1`, `F2`, or `1.`, `2.`). If the feature list is missing or vague, STOP and rewrite it before proceeding.
 3. Verify each planning doc has substantive content (not just headers or stubs).
+4. **State check:** Verify `state.md` exists and `## Current Position` shows `Phase: PLANNING, Status: complete`.
 
 If any file is missing or fails content verification, STOP and fix it. Do NOT proceed to SETUP until all checks pass.
 
@@ -255,6 +319,7 @@ Before proceeding to DEVELOPMENT:
 2. Verify that project configuration files exist (e.g., `package.json`, framework config).
 3. **Build verification:** Run the project's build or compile command (e.g., `npx vite build`, `npm run build`, `cargo check`) and confirm it exits with **zero errors**. If the build fails, fix the configuration before proceeding.
 4. Verify `setup/tech-stack.md` contains: chosen stack, reasoning, and project structure.
+5. **State check:** Verify `state.md` exists and `## Current Position` shows `Phase: SETUP, Status: complete`.
 
 If any check fails, STOP and fix it. Do NOT proceed to DEVELOPMENT until all checks pass.
 
@@ -330,8 +395,9 @@ For each step in `development/plan.md`, in order:
 4. Write results to files
 5. **Make a meaningful git commit** describing what was implemented (e.g., `git commit -m "feat: add user authentication endpoint"`). Commit granularity should match logical units of work — not too large, not per-line.
 6. Mark the task done in the step's `plan.md`
-7. **After completing ALL tasks in a step's plan.md, mark that step done in `development/plan.md`**
-8. Move to the next step
+7. **Update `state.md`** with current position, last action, and next action
+8. **After completing ALL tasks in a step's plan.md, mark that step done in `development/plan.md`**
+9. Move to the next step
 
 Do NOT start the next step until the current one is fully complete.
 
@@ -350,14 +416,15 @@ After completing each development step:
 
 #### Feature Documentation
 
-After completing each development step:
+Maintain a single `documentation.md` file at the project root. After completing each development step:
 
-1. Create or update `development/<step-name>/docs.md` documenting:
+1. Append a section to `documentation.md` documenting:
    - What the feature does (user-facing behavior)
    - Key files and their roles
    - API endpoints (if applicable)
    - How it connects to other features
-2. This documentation is the living reference for the feature and must be kept current through enhancements
+2. This is a living document — `/enhance`, `/fix`, and any code changes must update it to reflect the current state
+3. If `documentation.md` does not exist yet, create it with a header and the first feature section
 
 ---
 
@@ -382,7 +449,9 @@ This phase runs after ALL development steps are complete.
 Before marking the project complete:
 1. Verify all three files exist in `review/`
 2. Verify `review/test-results.md` has a pass/fail result for every feature in `planning/define-product.md`
-3. The project is only complete when REVIEW is complete
+3. **State check:** Verify `state.md` shows `Phase: REVIEW, Status: complete`
+4. Verify `documentation.md` exists and has a section for every completed development step
+5. The project is only complete when REVIEW is complete
 
 ---
 

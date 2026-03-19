@@ -81,7 +81,7 @@ console.log('ASC:', computeASC(((lst_manual % 360 + 360) % 360)).toFixed(4));
 // What RAMC would give MC = 207.75?
 // MC = atan2(sin(RAMC), cos(RAMC)*cos(ε))
 // For MC = 207.75° we need:
-// sin(RAMC) = sin(207.75°)*cos(oblRad)?  No... 
+// sin(RAMC) = sin(207.75°)*cos(oblRad)?  No...
 // Going backward: for a given MC, find the RAMC
 // tan(RAMC) = cos(ε) * tan(MC)
 const expectedMC = 207.75 * Math.PI / 180;

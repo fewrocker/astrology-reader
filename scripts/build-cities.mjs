@@ -1,7 +1,7 @@
 /**
  * Script to download and process GeoNames cities data into a compact JSON dataset.
  * Run: node scripts/build-cities.mjs
- * 
+ *
  * Downloads cities with population > 5000 from GeoNames,
  * extracts relevant fields, and outputs to src/data/cities.json
  */
