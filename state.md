@@ -9,7 +9,7 @@
 c857731 chore: setup project - Vite, React, TypeScript, Tailwind CSS
 
 ## Last Action
-Implemented "Aspect Patterns Display" enhancement — Grand Trine, T-Square, Grand Cross, and Yod patterns now shown in birth chart reading with interpretation cards, planet/sign details, and element-specific flavor text.
+Simplified results page buttons to just "Discuss" and "Back to Menu".
 
 ## Next Action
 None — enhancement complete, ready for user testing.
@@ -24,3 +24,4 @@ None
 - ENHANCEMENTS: discuss-with-gpt (chat modal + results caching)
 - ENHANCEMENTS: couple-synastry (synastry analysis + couple transits + discuss)
 - ENHANCEMENTS: aspect-patterns-display (pattern detection UI + interpretations)
+- ENHANCEMENTS: simplify-results-buttons (Discuss + Back to Menu only)

@@ -113,7 +113,7 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* generate new reading */}
+      {/* action buttons */}
       <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center">
         <button
           onClick={() => setDiscussOpen(true)}
@@ -122,22 +122,10 @@ export default function ResultsPage() {
           Discuss ✦
         </button>
         <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'transit-select' })}
-          className="px-8 py-3 bg-mystic-purple/10 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/20 transition-colors"
-        >
-          Daily / Weekly / Monthly ☽
-        </button>
-        <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'partner-form' })}
-          className="px-8 py-3 bg-pink-900/10 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/20 transition-colors"
-        >
-          Couple Synastry ♡
-        </button>
-        <button
           onClick={() => dispatch({ type: 'RESET' })}
           className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
         >
-          Generate New Reading
+          Back to Menu
         </button>
       </div>
 
