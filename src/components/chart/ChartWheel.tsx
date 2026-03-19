@@ -83,9 +83,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         </filter>
 
         {/* Sun warm radiance filter */}
-        <filter id="sunGlow" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-          <feFlood floodColor="#e8a820" floodOpacity="0.5" result="color" />
+        <filter id="sunGlow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur" />
+          <feFlood floodColor="#e8a820" floodOpacity="0.6" result="color" />
           <feComposite in="color" in2="blur" operator="in" result="glow" />
           <feMerge>
             <feMergeNode in="glow" />
@@ -94,9 +94,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         </filter>
 
         {/* Moon silvery shimmer filter */}
-        <filter id="moonGlow" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur in="SourceGraphic" stdDeviation="2.8" result="blur" />
-          <feFlood floodColor="#b8c8e8" floodOpacity="0.45" result="color" />
+        <filter id="moonGlow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="blur" />
+          <feFlood floodColor="#b8c8e8" floodOpacity="0.55" result="color" />
           <feComposite in="color" in2="blur" operator="in" result="glow" />
           <feMerge>
             <feMergeNode in="glow" />
@@ -107,9 +107,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         {/* Sweeping light gradient for outer ring */}
         <linearGradient id="sweepGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor="white" stopOpacity="0" />
-          <stop offset="40%" stopColor="white" stopOpacity="0.03" />
-          <stop offset="50%" stopColor="white" stopOpacity="0.045" />
-          <stop offset="60%" stopColor="white" stopOpacity="0.03" />
+          <stop offset="30%" stopColor="white" stopOpacity="0.06" />
+          <stop offset="50%" stopColor="white" stopOpacity="0.1" />
+          <stop offset="70%" stopColor="white" stopOpacity="0.06" />
           <stop offset="100%" stopColor="white" stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -180,7 +180,7 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
       {/* Sweeping light arc across outer ring */}
       <g className="chart-sweep">
         <path
-          d={`M ${CX} ${CY - OUTER_R} A ${OUTER_R} ${OUTER_R} 0 0 1 ${CX + OUTER_R * Math.sin(Math.PI / 5)} ${CY - OUTER_R * Math.cos(Math.PI / 5)} L ${CX + SIGN_R * Math.sin(Math.PI / 5)} ${CY - SIGN_R * Math.cos(Math.PI / 5)} A ${SIGN_R} ${SIGN_R} 0 0 0 ${CX} ${CY - SIGN_R} Z`}
+          d={`M ${CX} ${CY - OUTER_R} A ${OUTER_R} ${OUTER_R} 0 0 1 ${CX + OUTER_R * Math.sin(Math.PI / 3)} ${CY - OUTER_R * Math.cos(Math.PI / 3)} L ${CX + SIGN_R * Math.sin(Math.PI / 3)} ${CY - SIGN_R * Math.cos(Math.PI / 3)} A ${SIGN_R} ${SIGN_R} 0 0 0 ${CX} ${CY - SIGN_R} Z`}
           fill="url(#sweepGrad)"
           opacity="1"
         />
@@ -294,10 +294,10 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
             <circle
               cx={pos.x}
               cy={pos.y}
-              r={isHovered ? 18 : (isSun || isMoon ? 16 : 14)}
+              r={isHovered ? 22 : (isSun ? 22 : isMoon ? 20 : 14)}
               fill="transparent"
               filter={glowFilter}
-              opacity={isHovered ? 0.7 : (isSun ? 0.5 : isMoon ? 0.45 : 0.35)}
+              opacity={isHovered ? 0.8 : (isSun ? 0.65 : isMoon ? 0.55 : 0.35)}
               className={glowClass}
               style={{
                 animationDelay: isSun ? '0s' : isMoon ? '3s' : `${idx * 0.8}s`,
