@@ -38,21 +38,24 @@ function AppContent() {
   }, [state.view]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="min-h-screen bg-mystic-bg flex flex-col items-center px-4 py-12">
-      <header className="text-center mb-10">
-        <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
-        <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
-      </header>
+    <div className="min-h-screen bg-mystic-bg flex flex-col items-center px-4 py-12 relative">
+      <div className="starfield" aria-hidden="true" />
+      <div className="relative z-10 w-full flex flex-col items-center">
+        <header className="text-center mb-10">
+          <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
+          <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
+        </header>
 
-      {state.view === 'form' && <FormWizard />}
-      {state.view === 'loading' && (
-        <div className="text-center py-24">
-          <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }}>✦</div>
-          <p className="text-mystic-gold font-heading text-xl animate-pulse">Calculating your chart...</p>
-          <p className="text-mystic-muted text-sm mt-2">Mapping the heavens at the moment of your birth</p>
-        </div>
-      )}
-      {state.view === 'results' && <ResultsPage />}
+        {state.view === 'form' && <FormWizard />}
+        {state.view === 'loading' && (
+          <div className="text-center py-24" role="status" aria-live="polite">
+            <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">✦</div>
+            <p className="text-mystic-gold font-heading text-xl animate-pulse">Calculating your chart...</p>
+            <p className="text-mystic-muted text-sm mt-2">Mapping the heavens at the moment of your birth</p>
+          </div>
+        )}
+        {state.view === 'results' && <ResultsPage />}
+      </div>
     </div>
   )
 }

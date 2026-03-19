@@ -8,4 +8,4 @@
 - [x] interpretation-database
 - [x] reading-display
 - [x] results-page
-- [ ] ui-polish
+- [x] ui-polish

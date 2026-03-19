@@ -72,7 +72,7 @@ export default function FormWizard() {
       </div>
 
       {/* Step content */}
-      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 mb-6">
+      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 mb-6 glow-gold step-enter" key={formStep}>
         <StepComponent />
       </div>
 
@@ -82,6 +82,7 @@ export default function FormWizard() {
           type="button"
           onClick={handleBack}
           disabled={formStep === 0}
+          aria-label="Go to previous step"
           className="px-6 py-2 rounded-lg text-sm text-mystic-muted hover:text-mystic-text transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           ← Back
@@ -90,6 +91,7 @@ export default function FormWizard() {
           type="button"
           onClick={handleNext}
           disabled={!canNext()}
+          aria-label={formStep === STEPS.length - 1 ? 'Generate your birth chart reading' : 'Go to next step'}
           className="px-6 py-2 rounded-lg text-sm bg-mystic-gold text-mystic-bg font-medium hover:bg-mystic-gold/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         >
           {formStep === STEPS.length - 1 ? 'Generate Reading ✦' : 'Next →'}
