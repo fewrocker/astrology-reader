@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import { getDiscussResponse, getStoredApiKey, type ChatMessage } from '../../services/gptInterpretation'
 import type { ChartData } from '../../engine/types'
@@ -363,9 +363,12 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
                     : 'bg-mystic-surface border border-mystic-border text-mystic-text/90'
                 }`}
               >
-                {msg.content.split('\n').map((line, j) => (
-                  <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
-                ))}
+                {msg.role === 'assistant' && i === messages.length - 1
+                  ? <RevealText text={msg.content} />
+                  : msg.content.split('\n').map((line, j) => (
+                      <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
+                    ))
+                }
               </div>
             </div>
           ))}
@@ -425,5 +428,42 @@ function SuggestionChip({ text, onClick }: { text: string; onClick: (text: strin
     >
       {text}
     </button>
+  )
+}
+
+/** Reveals paragraphs one by one with a fade-in + slide-up. */
+function RevealText({ text }: { text: string }) {
+  const lines = useMemo(() => text.split('\n'), [text])
+  const [visible, setVisible] = useState(0)
+
+  useEffect(() => {
+    setVisible(0)
+    if (lines.length <= 1) { setVisible(lines.length); return }
+    let i = 1
+    setVisible(1)
+    const id = setInterval(() => {
+      i++
+      setVisible(i)
+      if (i >= lines.length) clearInterval(id)
+    }, 120)
+    return () => clearInterval(id)
+  }, [lines])
+
+  return (
+    <>
+      {lines.map((line, j) => (
+        <p
+          key={j}
+          className={j > 0 ? 'mt-2' : ''}
+          style={{
+            opacity: j < visible ? 1 : 0,
+            transform: j < visible ? 'translateY(0)' : 'translateY(6px)',
+            transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
+          }}
+        >
+          {line}
+        </p>
+      ))}
+    </>
   )
 }
