@@ -81,6 +81,37 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
             <feMergeNode in="SourceGraphic" />
           </feMerge>
         </filter>
+
+        {/* Sun warm radiance filter */}
+        <filter id="sunGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
+          <feFlood floodColor="#e8a820" floodOpacity="0.5" result="color" />
+          <feComposite in="color" in2="blur" operator="in" result="glow" />
+          <feMerge>
+            <feMergeNode in="glow" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* Moon silvery shimmer filter */}
+        <filter id="moonGlow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2.8" result="blur" />
+          <feFlood floodColor="#b8c8e8" floodOpacity="0.45" result="color" />
+          <feComposite in="color" in2="blur" operator="in" result="glow" />
+          <feMerge>
+            <feMergeNode in="glow" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+
+        {/* Sweeping light gradient for outer ring */}
+        <linearGradient id="sweepGrad" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="white" stopOpacity="0" />
+          <stop offset="40%" stopColor="white" stopOpacity="0.03" />
+          <stop offset="50%" stopColor="white" stopOpacity="0.045" />
+          <stop offset="60%" stopColor="white" stopOpacity="0.03" />
+          <stop offset="100%" stopColor="white" stopOpacity="0" />
+        </linearGradient>
       </defs>
 
       {/* Background */}
@@ -145,6 +176,15 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
           </g>
         )
       })}
+
+      {/* Sweeping light arc across outer ring */}
+      <g className="chart-sweep">
+        <path
+          d={`M ${CX} ${CY - OUTER_R} A ${OUTER_R} ${OUTER_R} 0 0 1 ${CX + OUTER_R * Math.sin(Math.PI / 5)} ${CY - OUTER_R * Math.cos(Math.PI / 5)} L ${CX + SIGN_R * Math.sin(Math.PI / 5)} ${CY - SIGN_R * Math.cos(Math.PI / 5)} A ${SIGN_R} ${SIGN_R} 0 0 0 ${CX} ${CY - SIGN_R} Z`}
+          fill="url(#sweepGrad)"
+          opacity="1"
+        />
+      </g>
 
       {/* Inner circle */}
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="#1e1e2e" strokeWidth="0.5" />
@@ -236,6 +276,12 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         const isHovered = hoveredPlanet === planet.name
         const glyph = PLANET_GLYPHS[planet.name]
 
+        const isSun = planet.name === 'Sun'
+        const isMoon = planet.name === 'Moon'
+        const glowFilter = isSun ? 'url(#sunGlow)' : isMoon ? 'url(#moonGlow)' : 'url(#planetGlow)'
+        const glowClass = isSun ? 'chart-sun-glow' : isMoon ? 'chart-moon-glow' : 'chart-planet-glow'
+        const restStroke = isSun ? '#5a4a20' : isMoon ? '#3a4a5a' : '#2a2a3a'
+
         return (
           <g
             key={planet.name}
@@ -248,13 +294,13 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
             <circle
               cx={pos.x}
               cy={pos.y}
-              r={isHovered ? 18 : 14}
+              r={isHovered ? 18 : (isSun || isMoon ? 16 : 14)}
               fill="transparent"
-              filter="url(#planetGlow)"
-              opacity={isHovered ? 0.7 : 0.35}
-              className="chart-planet-glow"
+              filter={glowFilter}
+              opacity={isHovered ? 0.7 : (isSun ? 0.5 : isMoon ? 0.45 : 0.35)}
+              className={glowClass}
               style={{
-                animationDelay: `${idx * 0.8}s`,
+                animationDelay: isSun ? '0s' : isMoon ? '3s' : `${idx * 0.8}s`,
                 transition: 'r 200ms ease, opacity 200ms ease',
               }}
             />
@@ -264,7 +310,7 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
               cy={pos.y}
               r={isHovered ? 16 : 13}
               fill="#0a0a0f"
-              stroke={isHovered ? '#c9a84c' : '#2a2a3a'}
+              stroke={isHovered ? '#c9a84c' : restStroke}
               strokeWidth={isHovered ? 1.5 : 0.7}
               style={{ transition: 'r 200ms ease, stroke 200ms ease, stroke-width 200ms ease' }}
             />

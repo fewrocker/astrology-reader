@@ -117,6 +117,25 @@ body {
   50% { opacity: 0.55; }
 }
 
+/* Ambient: Sun warm radiance (slightly brighter, warm) */
+@keyframes sunRadiance {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+
+/* Ambient: Moon silvery shimmer (misty, ethereal) */
+@keyframes moonShimmer {
+  0%, 100% { opacity: 0.35; }
+  40% { opacity: 0.6; }
+  70% { opacity: 0.42; }
+}
+
+/* Ambient: Sweeping light rotation across the zodiac ring */
+@keyframes ringSweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 /* Apply animations only when user has no motion preference */
 @media (prefers-reduced-motion: no-preference) {
   .chart-svg {
@@ -150,6 +169,20 @@ body {
 
   .chart-planet-glow {
     animation: planetPulse 7s ease-in-out infinite;
+  }
+
+  .chart-sun-glow {
+    animation: sunRadiance 5s ease-in-out infinite;
+  }
+
+  .chart-moon-glow {
+    animation: moonShimmer 6s ease-in-out infinite;
+    animation-delay: 3s;
+  }
+
+  .chart-sweep {
+    transform-origin: 350px 350px;
+    animation: ringSweep 35s linear infinite;
   }
 
   .chart-tooltip {
