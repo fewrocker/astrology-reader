@@ -2,7 +2,7 @@
 
 - [x] city-database
 - [x] multi-step-form
-- [ ] calculation-engine
+- [x] calculation-engine
 - [ ] aspect-calculation
 - [ ] chart-wheel
 - [ ] interpretation-database
