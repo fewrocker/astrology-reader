@@ -286,7 +286,7 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
       {/* modal */}
-      <div className="relative w-full max-w-2xl bg-mystic-bg border border-mystic-gold/30 rounded-xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="relative w-full max-w-3xl bg-mystic-bg border border-mystic-gold/30 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
         {/* header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-mystic-gold/20">
           <div>
@@ -307,14 +307,29 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
         </div>
 
         {/* chat area */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-[200px]">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-[300px]">
           {messages.length === 0 && (
-            <div className="text-center py-8">
-              <p className="text-mystic-muted text-sm">
-                Ask a question about your {mode === 'synastry' ? 'couple compatibility...' : mode === 'transit' ? 'current transits or ' : ''}
-                {mode !== 'synastry' ? 'birth chart...' : ''}
+            <div className="text-center py-10">
+              <div className="discuss-oracle-container mx-auto mb-6">
+                <div className="discuss-orbit-ring">
+                  <div className="discuss-orbit-dot" style={{ animationDelay: '0s' }}>☉</div>
+                  <div className="discuss-orbit-dot" style={{ animationDelay: '-2s' }}>☽</div>
+                  <div className="discuss-orbit-dot" style={{ animationDelay: '-4s' }}>✦</div>
+                </div>
+                <div className="discuss-oracle-core">✧</div>
+              </div>
+              <p className="font-heading text-mystic-gold/80 text-base mb-1">
+                {mode === 'synastry' ? 'The Stars Speak of Two Souls' : mode === 'transit' ? 'The Cosmos Is in Motion' : 'Your Stars Await'}
               </p>
-              <div className="mt-4 flex flex-wrap gap-2 justify-center">
+              <p className="text-mystic-muted text-sm max-w-md mx-auto">
+                {mode === 'synastry'
+                  ? 'Ask about your celestial connection — the planets reveal what draws you together and where you grow.'
+                  : mode === 'transit'
+                    ? 'The heavens shift above you. Ask what the current transits illuminate in your journey.'
+                    : 'Your birth chart holds the map of your soul. Ask anything and let the planets guide.'
+                }
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2 justify-center">
                 {mode === 'synastry' ? (
                   <>
                     <SuggestionChip text="What's our strongest connection?" onClick={setInput} />
@@ -357,8 +372,13 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
 
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-mystic-surface border border-mystic-border rounded-lg px-4 py-3 text-sm text-mystic-muted">
-                <span className="animate-pulse">Reading the stars...</span>
+              <div className="bg-mystic-surface border border-mystic-border rounded-lg px-5 py-4 text-sm text-mystic-muted">
+                <div className="flex items-center gap-3">
+                  <span className="discuss-loading-stars">✦</span>
+                  <span className="discuss-loading-text">
+                    {['Consulting the celestial spheres', 'Aligning the planetary wisdom', 'Channeling the astral light', 'Weaving the starlight'][Math.floor(Date.now() / 4000) % 4]}…
+                  </span>
+                </div>
               </div>
             </div>
           )}

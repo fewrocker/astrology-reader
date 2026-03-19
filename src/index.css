@@ -190,3 +190,98 @@ body {
     animation: signAppear 0.15s ease-out forwards;
   }
 }
+
+/* ---------- Discuss Modal Oracle Animation ---------- */
+
+.discuss-oracle-container {
+  width: 80px;
+  height: 80px;
+  position: relative;
+}
+
+.discuss-orbit-ring {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  border-radius: 50%;
+  animation: discussOrbitSpin 12s linear infinite;
+}
+
+.discuss-orbit-dot {
+  position: absolute;
+  font-size: 12px;
+  line-height: 1;
+  animation: discussOrbitItem 6s linear infinite;
+  color: rgba(212, 175, 55, 0.7);
+  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.3));
+  /* Position dots around the ring */
+  top: 50%;
+  left: 50%;
+}
+
+.discuss-orbit-dot:nth-child(1) { transform: rotate(0deg) translateX(36px) rotate(0deg); }
+.discuss-orbit-dot:nth-child(2) { transform: rotate(120deg) translateX(36px) rotate(-120deg); }
+.discuss-orbit-dot:nth-child(3) { transform: rotate(240deg) translateX(36px) rotate(-240deg); }
+
+.discuss-oracle-core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: rgba(212, 175, 55, 0.6);
+  animation: discussCorePulse 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.25));
+}
+
+@keyframes discussOrbitSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes discussOrbitItem {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes discussCorePulse {
+  0%, 100% { transform: scale(1); opacity: 0.5; filter: drop-shadow(0 0 8px rgba(212, 175, 55, 0.25)); }
+  50% { transform: scale(1.15); opacity: 0.9; filter: drop-shadow(0 0 14px rgba(212, 175, 55, 0.45)); }
+}
+
+/* ---------- Discuss Modal Loading Stars ---------- */
+
+.discuss-loading-stars {
+  display: inline-block;
+  animation: discussStarSpin 2s linear infinite;
+  color: rgba(212, 175, 55, 0.7);
+  font-size: 16px;
+  filter: drop-shadow(0 0 4px rgba(212, 175, 55, 0.3));
+}
+
+.discuss-loading-text {
+  animation: discussTextPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes discussStarSpin {
+  0% { transform: rotate(0deg) scale(1); opacity: 0.6; }
+  50% { transform: rotate(180deg) scale(1.2); opacity: 1; }
+  100% { transform: rotate(360deg) scale(1); opacity: 0.6; }
+}
+
+@keyframes discussTextPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discuss-orbit-ring,
+  .discuss-orbit-dot,
+  .discuss-oracle-core,
+  .discuss-loading-stars,
+  .discuss-loading-text {
+    animation: none !important;
+    opacity: 0.8;
+  }
+}
