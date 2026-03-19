@@ -4,9 +4,9 @@
 Calculate angular relationships (aspects) between all planet pairs and detect aspect patterns.
 
 ## Tasks
-- [ ] Define aspect types and orb constants
-- [ ] Implement aspect detection between two planets (angle difference, orb check)
-- [ ] Calculate all aspects between all planet pairs
-- [ ] Classify applying vs. separating aspects
-- [ ] Detect aspect patterns (Grand Trine, T-Square, Grand Cross, Yod)
-- [ ] Create typed output structures for aspect data
+- [x] Define aspect types and orb constants
+- [x] Implement aspect detection between two planets (angle difference, orb check)
+- [x] Calculate all aspects between all planet pairs
+- [x] Classify applying vs. separating aspects
+- [x] Detect aspect patterns (Grand Trine, T-Square, Grand Cross, Yod)
+- [x] Create typed output structures for aspect data

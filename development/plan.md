@@ -3,7 +3,7 @@
 - [x] city-database
 - [x] multi-step-form
 - [x] calculation-engine
-- [ ] aspect-calculation
+- [x] aspect-calculation
 - [ ] chart-wheel
 - [ ] interpretation-database
 - [ ] reading-display
