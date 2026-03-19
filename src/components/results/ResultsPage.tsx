@@ -26,7 +26,7 @@ export default function ResultsPage() {
       {/* chart wheel */}
       <div className="flex justify-center mb-10">
         <div className="w-full max-w-lg">
-          <ChartWheel chart={chartData} aspects={aspects} />
+          <ChartWheel chartData={chartData} aspects={aspects} />
         </div>
       </div>
 

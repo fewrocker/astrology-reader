@@ -160,51 +160,42 @@ function placidusCusp(
   fraction: number,
   aboveHorizon: boolean
 ): number {
-  // Iterative method for Placidus cusps
-  let ramc = ramcDeg * Astronomy.DEG2RAD
+  // Placidus cusps divide semi-arcs into thirds.
+  // Diurnal semi-arc (above horizon): SA = 90° + AD
+  // Nocturnal semi-arc (below horizon): SA = 90° - AD
+  // We iterate because AD depends on the cusp's ecliptic longitude.
 
-  // Starting RAMC offset for the cusp
-  const offset = aboveHorizon
-    ? fraction * Math.PI / 3  // 60° or 120° for houses 11, 12
-    : Math.PI + fraction * Math.PI / 3 // for houses 2, 3
-
-  let targetRA = normalizeAngle((ramc + offset * Astronomy.RAD2DEG / Astronomy.DEG2RAD * Astronomy.DEG2RAD) * Astronomy.RAD2DEG)
-
-  // Simplify: use equal-arc approximation seeded from RAMC
-  // Then iterate for Placidus correction
-  targetRA = ramcDeg + (aboveHorizon ? fraction * 90 : 180 + fraction * 90)
+  // Initial guess: equal-arc approximation
+  let targetRA = ramcDeg + (aboveHorizon ? fraction * 90 : 180 + fraction * 90)
   targetRA = normalizeAngle(targetRA)
 
-  // Convert RAMC to ecliptic longitude
-  const targetRARad = targetRA * Astronomy.DEG2RAD
-
-  for (let i = 0; i < 20; i++) {
-    const lon = eclipticLongFromRA(targetRARad, oblRad)
+  for (let i = 0; i < 50; i++) {
+    const lon = eclipticLongFromRA(targetRA * Astronomy.DEG2RAD, oblRad)
     const decl = Math.asin(Math.sin(oblRad) * Math.sin(lon * Astronomy.DEG2RAD))
-
-    // Ascensional difference
     const ad = Math.asin(Math.tan(latRad) * Math.tan(decl))
 
     if (!isFinite(ad)) break // polar regions
 
-    const correction = aboveHorizon
-      ? targetRA - (ramcDeg + fraction * (90 + ad * Astronomy.RAD2DEG))
-      : targetRA - (ramcDeg + 180 + fraction * (90 + ad * Astronomy.RAD2DEG))
+    const adDeg = ad * Astronomy.RAD2DEG
+    const newRA = aboveHorizon
+      ? ramcDeg + fraction * (90 + adDeg)
+      : ramcDeg + 180 + fraction * (90 - adDeg)
 
-    if (Math.abs(correction) < 0.01) break
+    let diff = newRA - targetRA
+    if (diff > 180) diff -= 360
+    if (diff < -180) diff += 360
+    if (Math.abs(diff) < 0.001) break
 
-    targetRA -= correction * 0.5
-    targetRA = normalizeAngle(targetRA)
+    targetRA = normalizeAngle(newRA)
   }
 
   return eclipticLongFromRA(targetRA * Astronomy.DEG2RAD, oblRad)
 }
 
 function eclipticLongFromRA(raRad: number, oblRad: number): number {
-  const lon = Math.atan2(
-    Math.sin(raRad) * Math.cos(oblRad) + Math.tan(0) * Math.sin(oblRad),
-    Math.cos(raRad)
-  )
+  // Convert right ascension to ecliptic longitude for a point on the ecliptic (β=0).
+  // From α = atan2(sin(λ)cos(ε), cos(λ)), the inverse is:
+  const lon = Math.atan2(Math.sin(raRad), Math.cos(raRad) * Math.cos(oblRad))
   return normalizeAngle(lon * Astronomy.RAD2DEG)
 }
 
