@@ -4,7 +4,7 @@
 - [x] multi-step-form
 - [x] calculation-engine
 - [x] aspect-calculation
-- [ ] chart-wheel
+- [x] chart-wheel
 - [ ] interpretation-database
 - [ ] reading-display
 - [ ] results-page
