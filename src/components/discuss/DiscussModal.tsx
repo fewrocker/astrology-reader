@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { getDiscussResponse, getStoredApiKey, type ChatMessage } from '../../services/gptInterpretation'
 import type { ChartData } from '../../engine/types'
-import type { Aspect } from '../../engine/aspects'
 import type { FullReading } from '../../data/interpretations'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import type { SynastryData } from '../../engine/synastry'
@@ -16,7 +15,6 @@ interface DiscussModalProps {
 
 function buildBirthChartContext(
   chartData: ChartData,
-  aspects: Aspect[],
   reading: FullReading,
   birthDate: string,
   cityLabel: string,
@@ -24,8 +22,11 @@ function buildBirthChartContext(
   let ctx = `## Birth Chart\nBorn: ${birthDate} — ${cityLabel}\n\n`
 
   ctx += `### Natal Planet Positions\n`
-  for (const p of chartData.planets) {
-    ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}\n`
+  for (const pr of reading.planets) {
+    const p = pr.planet
+    ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}`
+    if (pr.signInterpretation) ctx += ` — ${pr.signInterpretation.brief}`
+    ctx += '\n'
   }
 
   ctx += `\nAscendant: ${chartData.angles.ascendant.degree}°${chartData.angles.ascendant.minute}' ${chartData.angles.ascendant.sign}\n`
@@ -43,23 +44,56 @@ function buildBirthChartContext(
     ctx += `- House ${h.house} (${theme.name}): ${h.degree}°${h.minute}' ${h.sign} | ${theme.theme}${occupantStr}\n`
   }
 
-  ctx += `\n### Natal Aspects\n`
-  for (const a of aspects) {
-    ctx += `- ${a.planet1} ${a.symbol} ${a.planet2} (${a.type}, orb ${a.orb.toFixed(1)}°, ${a.nature})\n`
+  ctx += `\n### Natal Aspects & Interpretations\n`
+  for (const ar of reading.aspects) {
+    const a = ar.aspect
+    ctx += `- ${a.planet1} ${a.symbol} ${a.planet2} (${a.type}, orb ${a.orb.toFixed(1)}°, ${a.nature})`
+    if (ar.interpretation) ctx += `: ${ar.interpretation.brief} — ${ar.interpretation.detail}`
+    ctx += '\n'
+  }
+
+  if (reading.patterns.length > 0) {
+    ctx += `\n### Aspect Patterns\n`
+    for (const pr of reading.patterns) {
+      ctx += `- ${pr.interpretation.symbol} ${pr.pattern.type}: ${pr.pattern.planets.join(', ')}\n`
+      ctx += `  ${pr.interpretation.brief}\n`
+      ctx += `  ${pr.interpretation.detail}\n`
+      if (pr.elementFlavor) ctx += `  ${pr.elementFlavor}\n`
+    }
   }
 
   ctx += `\n### Element Balance\n`
   const el = reading.elements
   ctx += `Fire: ${el.counts.Fire}, Earth: ${el.counts.Earth}, Air: ${el.counts.Air}, Water: ${el.counts.Water}\n`
   ctx += `Dominant: ${el.dominant}${el.lacking ? `, Lacking: ${el.lacking}` : ''}\n`
+  ctx += `${el.interpretation.dominant}\n`
+  if (el.interpretation.lacking) ctx += `${el.interpretation.lacking}\n`
 
   ctx += `\n### Modality Balance\n`
   const mod = reading.modalities
   ctx += `Cardinal: ${mod.counts.Cardinal}, Fixed: ${mod.counts.Fixed}, Mutable: ${mod.counts.Mutable}\n`
   ctx += `Dominant: ${mod.dominant}${mod.lacking ? `, Lacking: ${mod.lacking}` : ''}\n`
+  ctx += `${mod.interpretation.dominant}\n`
+  if (mod.interpretation.lacking) ctx += `${mod.interpretation.lacking}\n`
 
   if (reading.focus) {
     ctx += `\n### Focus Area: ${reading.focus.area}\n${reading.focus.description}\n`
+    if (reading.focus.relevantPlanets.length > 0) {
+      ctx += `Key planets for this area:\n`
+      for (const rp of reading.focus.relevantPlanets) {
+        ctx += `- ${rp.planet.name} in ${rp.planet.sign} (House ${rp.planet.house})`
+        if (rp.signInterpretation) ctx += ` — ${rp.signInterpretation.brief}`
+        ctx += '\n'
+      }
+    }
+    if (reading.focus.relevantAspects.length > 0) {
+      ctx += `Key aspects for this area:\n`
+      for (const ra of reading.focus.relevantAspects) {
+        ctx += `- ${ra.aspect.planet1} ${ra.aspect.symbol} ${ra.aspect.planet2} (${ra.aspect.type})`
+        if (ra.interpretation) ctx += `: ${ra.interpretation.brief}`
+        ctx += '\n'
+      }
+    }
   }
 
   return ctx
@@ -199,7 +233,7 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
 
   if (!open) return null
 
-  const { chartData, aspects, reading, birthData, transitData, transitPeriod, transitInterpretation, partnerBirthData, partnerChartData, synastryData, synastryInterpretation } = state
+  const { chartData, reading, birthData, transitData, transitPeriod, transitInterpretation, partnerBirthData, partnerChartData, synastryData, synastryInterpretation } = state
   if (!chartData || !reading) return null
 
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
@@ -209,7 +243,7 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
     if (mode === 'synastry' && partnerChartData && synastryData) {
       return buildSynastryContext(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, synastryInterpretation)
     }
-    let ctx = buildBirthChartContext(chartData, aspects, reading, birthData.date, cityLabel)
+    let ctx = buildBirthChartContext(chartData, reading, birthData.date, cityLabel)
     if (mode === 'transit' && transitData && transitPeriod) {
       ctx += buildTransitContext(transitData, transitPeriod, transitInterpretation)
     }

@@ -8,7 +8,7 @@ import { FOCUS_AREA_MAPPINGS, ELEMENT_INTERPRETATIONS, MODALITY_INTERPRETATIONS 
 import { PLANET_IN_SIGN } from './planetInSign'
 import { PLANET_IN_HOUSE } from './planetInHouse'
 import { ASPECT_INTERPRETATIONS } from './aspectInterpretations'
-import { PATTERN_INTERPRETATIONS, getPatternElementFlavor, type PatternInterpretation } from './patternInterpretations'
+import { PATTERN_INTERPRETATIONS, getPatternElementFlavor, getTSquareModalityFlavor, type PatternInterpretation } from './patternInterpretations'
 
 // ---------- lookup helpers ----------
 
@@ -166,6 +166,11 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     if (p.type === 'Grand Trine' && planetSigns.length > 0) {
       const element = SIGN_ELEMENTS[planetSigns[0].sign]
       elementFlavor = getPatternElementFlavor(element)
+    }
+    // For T-Squares, determine modality flavor
+    if (p.type === 'T-Square' && planetSigns.length > 0) {
+      const modality = SIGN_MODALITIES[planetSigns[0].sign]
+      elementFlavor = getTSquareModalityFlavor(modality)
     }
     return { pattern: p, interpretation, elementFlavor, planetSigns }
   })

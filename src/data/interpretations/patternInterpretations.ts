@@ -48,3 +48,15 @@ export function getPatternElementFlavor(element: string): string | null {
   }
   return flavors[element] ?? null
 }
+
+/**
+ * Get modality-specific flavor text for T-Squares.
+ */
+export function getTSquareModalityFlavor(modality: string): string | null {
+  const flavors: Record<string, string> = {
+    Cardinal: 'This Cardinal T-Square drives relentless initiative and leadership. You are compelled to start new ventures and take charge, even when the path is unclear.',
+    Fixed: 'This Fixed T-Square builds extraordinary determination and staying power. You hold on through immense pressure, and your persistence forges lasting achievement.',
+    Mutable: 'This Mutable T-Square fosters intellectual restlessness and versatility. You adapt constantly, juggling multiple perspectives and finding creative solutions at every turn.',
+  }
+  return flavors[modality] ?? null
+}

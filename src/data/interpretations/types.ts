@@ -21,32 +21,32 @@ export const FOCUS_AREA_MAPPINGS: Record<FocusArea, FocusAreaMapping> = {
   love: {
     houses: [5, 7, 8],
     planets: ['Venus', 'Mars', 'Moon'],
-    description: 'Love is primarily governed by Venus (romantic attraction), the 7th house (partnerships), 5th house (romance), and 8th house (intimacy).',
+    description: 'Love is primarily governed by Venus (romantic attraction and love language), the 7th house (committed partnerships and marriage), 5th house (romance, dating, and creative passion), and 8th house (deep intimacy and emotional bonding). Your Moon sign shows your emotional needs in love, while Mars reveals how you pursue and express desire. The sign on your 7th house cusp describes the type of partner you attract.',
   },
   career: {
     houses: [2, 6, 10],
-    planets: ['Saturn', 'Jupiter', 'Sun'],
-    description: 'Career is ruled by the Midheaven (10th house), Saturn (ambition/structure), Jupiter (growth/opportunity), and the 6th house (daily work).',
+    planets: ['Saturn', 'Jupiter', 'Sun', 'Mars'],
+    description: 'Career is ruled by the Midheaven (10th house cusp) which describes your public reputation, Saturn (discipline, ambition, and long-term career structure), Jupiter (professional growth and opportunities), and the 6th house (daily work environment and routines). Your Sun sign shapes your core professional identity, while the 10th house ruler\'s placement shows where your career path leads. Mars indicates your drive and competitive edge at work.',
   },
   growth: {
     houses: [1, 9, 12],
-    planets: ['Sun', 'Moon', 'Pluto'],
-    description: 'Personal growth connects to the 1st house (identity), 9th house (philosophy/expansion), 12th house (subconscious), and transformative Pluto.',
+    planets: ['Sun', 'Moon', 'Pluto', 'Jupiter'],
+    description: 'Personal growth connects to the 1st house (self-awareness and identity evolution), 9th house (higher education, philosophy, and expansion of worldview), 12th house (subconscious patterns, spiritual growth, and inner work), and transformative Pluto (deep psychological change). Jupiter shows where you grow most easily, while your Sun-Moon relationship reveals the core tension driving your personal development.',
   },
   health: {
     houses: [1, 6, 8],
-    planets: ['Sun', 'Mars', 'Saturn'],
-    description: 'Health relates to the 1st house (body), 6th house (health habits), Mars (vitality), and Saturn (endurance/limits).',
+    planets: ['Sun', 'Mars', 'Saturn', 'Moon'],
+    description: 'Health relates to the 1st house (physical constitution and vitality), 6th house (health habits, daily routines, and wellness practices), Mars (physical energy, inflammation, and exercise), and Saturn (bones, teeth, chronic conditions, and endurance). Your Moon influences emotional well-being and digestive health, while the Sun represents your core vitality and heart health.',
   },
   finances: {
     houses: [2, 8, 11],
-    planets: ['Venus', 'Jupiter', 'Pluto'],
-    description: 'Finances are linked to the 2nd house (personal resources), 8th house (shared resources), Venus (values), and Jupiter (abundance).',
+    planets: ['Venus', 'Jupiter', 'Pluto', 'Saturn'],
+    description: 'Finances are linked to the 2nd house (earned income, personal resources, and self-worth), 8th house (shared resources, investments, inheritance, and debt), Venus (values and what you attract), and Jupiter (abundance and financial opportunities). Pluto shows potential for financial transformation and power through resources, while Saturn indicates financial discipline and long-term wealth building. The 11th house connects to income from career and group ventures.',
   },
   spirituality: {
     houses: [8, 9, 12],
-    planets: ['Neptune', 'Pluto', 'Moon'],
-    description: 'Spirituality connects to Neptune (transcendence), the 12th house (the unseen), 9th house (higher meaning), and the 8th house (transformation).',
+    planets: ['Neptune', 'Pluto', 'Moon', 'Jupiter'],
+    description: 'Spirituality connects to Neptune (transcendence, mysticism, and divine connection), the 12th house (meditation, solitude, the unconscious, and past-life patterns), 9th house (spiritual philosophy, faith traditions, and the search for meaning), and the 8th house (transformation, death-rebirth cycles, and occult knowledge). Your Moon reveals your instinctive spiritual needs, while Jupiter shows the path to wisdom and faith.',
   },
 }
 
