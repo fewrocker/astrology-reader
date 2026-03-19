@@ -24,20 +24,21 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
 }
 
 /**
- * Get ecliptic longitude for a planet at a given time.
+ * Get geocentric ecliptic longitude for a planet at a given time.
+ * Uses GeoVector (geocentric equatorial J2000) → Ecliptic conversion.
+ * EclipticLongitude() is heliocentric and wrong for natal charts.
  */
 function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
   if (body === Astronomy.Body.Sun) {
-    const sunPos = Astronomy.SunPosition(time)
-    return sunPos.elon
+    return Astronomy.SunPosition(time).elon
   }
 
   if (body === Astronomy.Body.Moon) {
-    const moonPos = Astronomy.EclipticGeoMoon(time)
-    return moonPos.lon
+    return Astronomy.EclipticGeoMoon(time).lon
   }
 
-  return Astronomy.EclipticLongitude(body, time)
+  const geo = Astronomy.GeoVector(body, time, true)
+  return Astronomy.Ecliptic(geo).elon
 }
 
 /**
@@ -89,15 +90,13 @@ function localSiderealTime(time: Astronomy.AstroTime, lngDeg: number): number {
 /**
  * Calculate the Ascendant from LST and latitude.
  */
-function calculateAscendant(lstDeg: number, latDeg: number): number {
+function calculateAscendant(lstDeg: number, latDeg: number, oblDeg: number): number {
   const lstRad = lstDeg * Astronomy.DEG2RAD
   const latRad = latDeg * Astronomy.DEG2RAD
+  const oblRad = oblDeg * Astronomy.DEG2RAD
 
-  // Obliquity of the ecliptic (~23.4°)
-  const oblRad = 23.4393 * Astronomy.DEG2RAD
-
-  const y = -Math.cos(lstRad)
-  const x = Math.sin(lstRad) * Math.cos(oblRad) + Math.tan(latRad) * Math.sin(oblRad)
+  const y = Math.cos(lstRad)
+  const x = -(Math.sin(lstRad) * Math.cos(oblRad) + Math.tan(latRad) * Math.sin(oblRad))
 
   let asc = Math.atan2(y, x) * Astronomy.RAD2DEG
   return normalizeAngle(asc)
@@ -106,9 +105,9 @@ function calculateAscendant(lstDeg: number, latDeg: number): number {
 /**
  * Calculate the Midheaven (MC) from LST.
  */
-function calculateMidheaven(lstDeg: number): number {
+function calculateMidheaven(lstDeg: number, oblDeg: number): number {
   const lstRad = lstDeg * Astronomy.DEG2RAD
-  const oblRad = 23.4393 * Astronomy.DEG2RAD
+  const oblRad = oblDeg * Astronomy.DEG2RAD
 
   let mc = Math.atan2(Math.sin(lstRad), Math.cos(lstRad) * Math.cos(oblRad)) * Astronomy.RAD2DEG
   return normalizeAngle(mc)
@@ -118,7 +117,7 @@ function calculateMidheaven(lstDeg: number): number {
  * Calculate Placidus house cusps.
  * Houses 1 (ASC) and 10 (MC) are exact. Others are interpolated.
  */
-function calculatePlacidusHouses(asc: number, mc: number, latDeg: number): number[] {
+function calculatePlacidusHouses(asc: number, mc: number, latDeg: number, oblDeg: number): number[] {
   const cusps: number[] = new Array(12)
   cusps[0] = asc           // 1st house = ASC
   cusps[9] = mc            // 10th house = MC
@@ -126,7 +125,7 @@ function calculatePlacidusHouses(asc: number, mc: number, latDeg: number): numbe
   cusps[3] = normalizeAngle(mc + 180)   // 4th house = IC
 
   const latRad = latDeg * Astronomy.DEG2RAD
-  const oblRad = 23.4393 * Astronomy.DEG2RAD
+  const oblRad = oblDeg * Astronomy.DEG2RAD
 
   // Placidus intermediate house cusps
   // Houses 11, 12 (between MC and ASC)
@@ -264,15 +263,16 @@ export function calculateChart(
     house: 0,
   })
 
-  // Calculate LST, ASC, MC
+  // Calculate LST, ASC, MC with dynamic obliquity
   const lst = localSiderealTime(time, lng)
-  const ascLon = calculateAscendant(lst, lat)
-  const mcLon = calculateMidheaven(lst)
+  const obliquity = Astronomy.e_tilt(time).mobl
+  const ascLon = calculateAscendant(lst, lat, obliquity)
+  const mcLon = calculateMidheaven(lst, obliquity)
   const dscLon = normalizeAngle(ascLon + 180)
   const icLon = normalizeAngle(mcLon + 180)
 
   // Calculate Placidus house cusps
-  const cuspLongitudes = calculatePlacidusHouses(ascLon, mcLon, lat)
+  const cuspLongitudes = calculatePlacidusHouses(ascLon, mcLon, lat, obliquity)
 
   // Assign houses to planets
   for (const planet of planets) {
