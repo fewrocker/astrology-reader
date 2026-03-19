@@ -1,7 +1,7 @@
 # Development Plan
 
 - [x] city-database
-- [ ] multi-step-form
+- [x] multi-step-form
 - [ ] calculation-engine
 - [ ] aspect-calculation
 - [ ] chart-wheel
