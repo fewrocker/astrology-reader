@@ -4,7 +4,7 @@ import type { PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
-import { ReadingSummary, PlanetSection, AspectSection, BalanceSection, FocusSection } from '../reading/ReadingDisplay'
+import { ReadingSummary, PlanetSection, AspectSection, AspectPatternsSection, BalanceSection, FocusSection } from '../reading/ReadingDisplay'
 import DiscussModal from '../discuss/DiscussModal'
 
 export default function ResultsPage() {
@@ -42,6 +42,7 @@ export default function ResultsPage() {
       {/* detailed sections */}
       <PlanetSection reading={reading} showHouse={!chartData.unknownTime} />
       <AspectSection reading={reading} />
+      <AspectPatternsSection patterns={reading.patterns} />
       <BalanceSection elements={reading.elements} modalities={reading.modalities} />
 
       {/* planet positions table */}

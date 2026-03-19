@@ -234,10 +234,10 @@ Think through an idea deeply without writing any code. This is a **research and 
 
 ### `/implement <PLAN_NAME>`
 
-Execute a previously created plan from `plans/`.
+Execute a previously created plan from `plans/` or `proposals/`.
 
-1. Fuzzy-match `<PLAN_NAME>` against folder names inside `plans/`:
-   - List all directories in `plans/`
+1. Fuzzy-match `<PLAN_NAME>` against folder names inside `plans/` or `proposals/`:
+   - List all directories in `plans/` or `proposals/`
    - Find the best match (case-insensitive, partial match, Levenshtein-tolerant)
    - If no match is found, list available plans and ask the user to clarify
    - If multiple close matches exist, list them and ask the user to pick one

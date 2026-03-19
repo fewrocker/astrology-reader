@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { FullReading, PlanetReading, AspectReading, ElementBalance, ModalityBalance, FocusReading } from '../../data/interpretations'
+import type { FullReading, PlanetReading, AspectReading, ElementBalance, ModalityBalance, FocusReading, PatternReading } from '../../data/interpretations'
 import type { ChartData, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -223,6 +223,76 @@ export function BalanceSection({ elements, modalities }: { elements: ElementBala
           )}
         </div>
       </div>
+    </Section>
+  )
+}
+
+// ---------- aspect patterns section ----------
+
+const PATTERN_COLORS: Record<string, string> = {
+  'Grand Trine': 'border-green-500/30 bg-green-900/10',
+  'T-Square': 'border-red-500/30 bg-red-900/10',
+  'Grand Cross': 'border-red-400/30 bg-red-900/10',
+  'Yod': 'border-mystic-purple/30 bg-mystic-purple/10',
+}
+
+const PATTERN_TITLE_COLORS: Record<string, string> = {
+  'Grand Trine': 'text-green-400',
+  'T-Square': 'text-red-400',
+  'Grand Cross': 'text-red-300',
+  'Yod': 'text-mystic-purple',
+}
+
+function PatternCard({ pr }: { pr: PatternReading }) {
+  const [expanded, setExpanded] = useState(false)
+  const colors = PATTERN_COLORS[pr.pattern.type] ?? 'border-mystic-gold/20 bg-mystic-gold/5'
+  const titleColor = PATTERN_TITLE_COLORS[pr.pattern.type] ?? 'text-mystic-gold'
+
+  return (
+    <div className={`border rounded-lg p-4 mb-3 ${colors}`}>
+      <button onClick={() => setExpanded(!expanded)} className="w-full text-left">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-2xl">{pr.interpretation.symbol}</span>
+          <div className="flex-1">
+            <h4 className={`font-heading text-lg ${titleColor}`}>{pr.pattern.type}</h4>
+            <div className="flex flex-wrap gap-2 mt-1">
+              {pr.planetSigns.map((ps) => (
+                <span key={ps.name} className="text-mystic-text text-sm">
+                  {PLANET_GLYPHS[ps.name as PlanetName] ?? '☊'}{' '}
+                  {ps.name} in {ZODIAC_GLYPHS[ps.sign]} {ps.sign}
+                </span>
+              ))}
+            </div>
+          </div>
+          <span className="text-mystic-muted text-sm">{expanded ? '−' : '+'}</span>
+        </div>
+        <p className="text-mystic-muted text-sm leading-relaxed">{pr.interpretation.brief}</p>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-mystic-gold/10">
+          <p className="text-mystic-text/90 text-sm leading-relaxed">{pr.interpretation.detail}</p>
+          {pr.elementFlavor && (
+            <p className="text-mystic-gold/80 text-sm mt-3 italic leading-relaxed">{pr.elementFlavor}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function AspectPatternsSection({ patterns }: { patterns: PatternReading[] }) {
+  if (patterns.length === 0) return null
+
+  return (
+    <Section title={`Aspect Patterns (${patterns.length})`} defaultOpen>
+      <p className="text-mystic-muted text-sm mb-4">
+        Aspect patterns are rare configurations formed when three or more planets align in specific geometric relationships.
+        They reveal deep themes and powerful dynamics in your chart.
+      </p>
+      {patterns.map((pr, i) => (
+        <PatternCard key={i} pr={pr} />
+      ))}
     </Section>
   )
 }

@@ -1,12 +1,14 @@
 import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData } from '../../engine/types'
 import { SIGN_ELEMENTS, SIGN_MODALITIES } from '../../engine/types'
-import type { Aspect } from '../../engine/aspects'
+import type { Aspect, AspectPattern } from '../../engine/aspects'
+import { detectPatterns } from '../../engine/aspects'
 import type { FocusArea } from '../../context/appState'
 import type { InterpretationEntry } from './types'
 import { FOCUS_AREA_MAPPINGS, ELEMENT_INTERPRETATIONS, MODALITY_INTERPRETATIONS } from './types'
 import { PLANET_IN_SIGN } from './planetInSign'
 import { PLANET_IN_HOUSE } from './planetInHouse'
 import { ASPECT_INTERPRETATIONS } from './aspectInterpretations'
+import { PATTERN_INTERPRETATIONS, getPatternElementFlavor, type PatternInterpretation } from './patternInterpretations'
 
 // ---------- lookup helpers ----------
 
@@ -101,9 +103,17 @@ export interface FocusReading {
   relevantAspects: AspectReading[]
 }
 
+export interface PatternReading {
+  pattern: AspectPattern
+  interpretation: PatternInterpretation
+  elementFlavor: string | null
+  planetSigns: { name: string; sign: ZodiacSign }[]
+}
+
 export interface FullReading {
   planets: PlanetReading[]
   aspects: AspectReading[]
+  patterns: PatternReading[]
   elements: ElementBalance
   modalities: ModalityBalance
   focus: FocusReading | null
@@ -143,5 +153,22 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     }
   }
 
-  return { planets: planetReadings, aspects: aspectReadings, elements, modalities, focus }
+  // Detect and interpret aspect patterns
+  const detectedPatterns = detectPatterns(aspects)
+  const patternReadings: PatternReading[] = detectedPatterns.map((p) => {
+    const interpretation = PATTERN_INTERPRETATIONS[p.type]
+    const planetSigns = p.planets.map((name) => {
+      const planet = chart.planets.find((pl) => pl.name === name)
+      return { name, sign: planet?.sign ?? 'Aries' as ZodiacSign }
+    })
+    // For Grand Trines, determine element flavor
+    let elementFlavor: string | null = null
+    if (p.type === 'Grand Trine' && planetSigns.length > 0) {
+      const element = SIGN_ELEMENTS[planetSigns[0].sign]
+      elementFlavor = getPatternElementFlavor(element)
+    }
+    return { pattern: p, interpretation, elementFlavor, planetSigns }
+  })
+
+  return { planets: planetReadings, aspects: aspectReadings, patterns: patternReadings, elements, modalities, focus }
 }
