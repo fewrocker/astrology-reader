@@ -7,6 +7,8 @@ import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
 
+import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
+
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Reading',
   weekly: 'Weekly Reading',
@@ -112,16 +114,27 @@ function RetrogradeSection({ transitData }: { transitData: TransitData }) {
 
   return (
     <Section title="Retrograde Activity">
-      <div className="space-y-2">
-        {active.map((r, i) => (
-          <div key={i} className="flex items-center gap-3 py-2 border-b border-mystic-gold/5 last:border-0">
-            <span className="text-lg">{PLANET_GLYPHS[r.planet]}</span>
-            <span className="text-mystic-text text-sm font-medium">{r.planet}</span>
-            <span className={`text-xs px-2 py-0.5 rounded ${r.isRetro ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
-              {r.status}
-            </span>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {active.map((r, i) => {
+          const interp = TRANSIT_RETROGRADE[r.planet]
+          return (
+            <div key={i} className="border border-red-500/15 bg-red-900/5 rounded-lg p-4">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-lg">{PLANET_GLYPHS[r.planet]}</span>
+                <span className="text-mystic-text text-sm font-medium">{r.planet}</span>
+                <span className={`text-xs px-2 py-0.5 rounded ${r.isRetro ? 'bg-red-900/30 text-red-400' : 'bg-yellow-900/30 text-yellow-400'}`}>
+                  {r.status}
+                </span>
+              </div>
+              {interp && (
+                <div className="ml-8">
+                  <p className="text-red-400/80 text-xs font-medium mb-1">{interp.brief}</p>
+                  <p className="text-mystic-text/80 text-sm leading-relaxed">{interp.detail}</p>
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </Section>
   )

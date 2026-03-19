@@ -6,6 +6,7 @@ import { formatPosition } from '../../engine/zodiac'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 import { dignityScore } from '../../data/interpretations/dignities'
 import type { MutualReception } from '../../data/interpretations/dignities'
+import type { InterpretationEntry } from '../../data/interpretations/types'
 
 // ---------- shared ----------
 
@@ -121,6 +122,14 @@ function PlanetCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }
                 {pr.dignity.symbol} {pr.dignity.label}
               </div>
               <p className="text-mystic-text/80 leading-relaxed">{pr.dignity.description}</p>
+            </div>
+          )}
+          {pr.retrogradeInterpretation && (
+            <div className="rounded-md p-3 bg-red-900/10">
+              <div className="font-medium text-xs uppercase tracking-wider mb-1 text-red-400">
+                ℞ Retrograde at Birth
+              </div>
+              <p className="text-mystic-text/80 leading-relaxed">{pr.retrogradeInterpretation.detail}</p>
             </div>
           )}
         </div>
@@ -525,6 +534,58 @@ export function PlanetaryStrengthSection({ reading }: { reading: FullReading }) 
           ))}
         </div>
       )}
+    </Section>
+  )
+}
+
+// ---------- retrograde planets section ----------
+
+function RetrogradePlanetCard({ name, glyph, sign, interpretation }: { name: string; glyph: string; sign: string; interpretation: InterpretationEntry }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className="border border-red-500/15 bg-red-900/5 rounded-lg p-4 mb-2">
+      <button onClick={() => setExpanded(!expanded)} className="w-full text-left flex items-start gap-3">
+        <span className="text-xl mt-0.5">{glyph}</span>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-mystic-text font-medium">{name}</span>
+            <span className="text-red-400 text-xs border border-red-500/30 rounded px-1">℞</span>
+            <span className="text-mystic-muted">in</span>
+            <span className="text-mystic-gold">{ZODIAC_GLYPHS[sign as keyof typeof ZODIAC_GLYPHS]} {sign}</span>
+          </div>
+          <p className="text-mystic-muted text-sm mt-1">{interpretation.brief}</p>
+        </div>
+        <span className="text-mystic-muted text-sm">{expanded ? '−' : '+'}</span>
+      </button>
+      {expanded && (
+        <div className="mt-3 ml-9 text-sm">
+          <p className="text-mystic-text/90 leading-relaxed">{interpretation.detail}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function RetrogradeSummarySection({ reading }: { reading: FullReading }) {
+  const retrogradePlanets = reading.planets.filter(pr => pr.retrogradeInterpretation)
+  const { headline, narrative } = reading.retrogradeSummary
+
+  return (
+    <Section title={`℞ Retrograde Planets (${retrogradePlanets.length})`}>
+      <div className="bg-red-900/5 rounded-lg p-4 border border-red-500/15 mb-4">
+        <h3 className="text-red-400 font-heading text-base mb-2">{headline}</h3>
+        <p className="text-mystic-text/80 text-sm leading-relaxed">{narrative}</p>
+      </div>
+      {retrogradePlanets.map(pr => (
+        <RetrogradePlanetCard
+          key={pr.planet.name}
+          name={pr.planet.name}
+          glyph={PLANET_GLYPHS[pr.planet.name as PlanetName] ?? '☊'}
+          sign={pr.planet.sign}
+          interpretation={pr.retrogradeInterpretation!}
+        />
+      ))}
     </Section>
   )
 }

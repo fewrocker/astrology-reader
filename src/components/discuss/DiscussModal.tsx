@@ -84,6 +84,15 @@ function buildBirthChartContext(
     }
   }
 
+  const retrogradePlanets = reading.planets.filter(pr => pr.retrogradeInterpretation)
+  if (retrogradePlanets.length > 0) {
+    ctx += `\n### Natal Retrograde Planets (${retrogradePlanets.length})\n`
+    ctx += `${reading.retrogradeSummary.headline}: ${reading.retrogradeSummary.narrative}\n`
+    for (const pr of retrogradePlanets) {
+      ctx += `- ${pr.planet.name} ℞ in ${pr.planet.sign}: ${pr.retrogradeInterpretation!.brief} — ${pr.retrogradeInterpretation!.detail}\n`
+    }
+  }
+
   if (reading.focus) {
     ctx += `\n### Focus Area: ${reading.focus.area}\n${reading.focus.description}\n`
     if (reading.focus.relevantPlanets.length > 0) {
