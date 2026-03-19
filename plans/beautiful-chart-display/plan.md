@@ -1,5 +1,9 @@
 # Beautiful Chart Display
 
+## Status: Implemented
+
+Implemented via `/implement beautiful-chart-display`. See [enhancements/beautiful-chart-display/result.md](../../enhancements/beautiful-chart-display/result.md) for details.
+
 ## Vision
 
 > Make all birth charts displayed more beautiful and clear to read, a little bigger, and even some small animations that make it alive (but not too much!)
