@@ -1,4 +1,7 @@
 import type { City } from '../data/cityTypes'
+import type { ChartData } from '../engine/types'
+import type { Aspect } from '../engine/aspects'
+import type { FullReading } from '../data/interpretations'
 
 export type FocusArea =
   | 'love'
@@ -31,12 +34,16 @@ export interface AppState {
   view: AppView
   formStep: number
   birthData: BirthData
+  chartData: ChartData | null
+  aspects: Aspect[]
+  reading: FullReading | null
 }
 
 export type AppAction =
   | { type: 'SET_STEP'; step: number }
   | { type: 'UPDATE_BIRTH_DATA'; data: Partial<BirthData> }
   | { type: 'SET_VIEW'; view: AppView }
+  | { type: 'SET_RESULTS'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'RESET' }
 
 export const initialBirthData: BirthData = {
@@ -51,6 +58,9 @@ export const initialState: AppState = {
   view: 'form',
   formStep: 0,
   birthData: { ...initialBirthData },
+  chartData: null,
+  aspects: [],
+  reading: null,
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -61,6 +71,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, birthData: { ...state.birthData, ...action.data } }
     case 'SET_VIEW':
       return { ...state, view: action.view }
+    case 'SET_RESULTS':
+      return { ...state, chartData: action.chartData, aspects: action.aspects, reading: action.reading, view: 'results' }
     case 'RESET':
       return { ...initialState }
     default:
