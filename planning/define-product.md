@@ -117,6 +117,13 @@ Structured presentation of the reading:
 - Chart comparison (synastry)
 - Transit overlay
 
+### Implemented Enhancements
+- **F11: Transit Readings (Daily / Weekly / Monthly)** — Calculate current planetary transits against natal chart. Select daily (Moon/fast planets), weekly (Sun/Mercury/Venus/Mars), or monthly (all planets including slow movers). GPT-powered personalized interpretation. Includes transit aspects, sign ingresses, retrograde tracking, and current positions table.
+- **F12: GPT Interpretation Layer** — OpenAI API integration (gpt-4o-mini) for generating flowing, personalized transit reading paragraphs from chart data.
+- **F13: Discuss with GPT** — A "Discuss ✦" button on both birth chart and transit results pages opens a modal chat interface. Users can ask questions about their chart and receive personalized GPT answers with full astrological context (natal positions, houses, aspects, elements, modalities, transits). Supports multi-turn conversation with suggestion chips.
+- **F14: Results Caching** — Birth chart results (chartData, aspects, reading) and transit results (transitData, transitInterpretation, transitPeriod) are cached in localStorage and persist across browser sessions. Cleared on "Enter New Birth Data".
+- **F15: Couple Synastry Analysis** — Full compatibility analysis between two people. Enter partner's birth data (date, time, city) from cached landing or results page. Calculates cross-chart aspects, house overlays (planets in partner's houses), composite (midpoint) chart, and compatibility scoring (romantic, emotional, communication, growth, challenge). GPT-powered couple interpretation. Includes couple transit readings (daily/weekly/monthly) against the composite chart. "Discuss ✦" chat available with full synastry context. Partner data and synastry results cached in localStorage.
+
 ## Execution Order
 
 1. Project setup and architecture

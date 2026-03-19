@@ -1,0 +1,370 @@
+import { useState, useRef, useEffect } from 'react'
+import { useApp } from '../../context/AppContext'
+import { getDiscussResponse, getStoredApiKey, type ChatMessage } from '../../services/gptInterpretation'
+import type { ChartData } from '../../engine/types'
+import type { Aspect } from '../../engine/aspects'
+import type { FullReading } from '../../data/interpretations'
+import type { TransitData, TransitPeriod } from '../../engine/transits'
+import type { SynastryData } from '../../engine/synastry'
+
+interface DiscussModalProps {
+  open: boolean
+  onClose: () => void
+  mode: 'birth' | 'transit' | 'synastry'
+}
+
+function buildBirthChartContext(
+  chartData: ChartData,
+  aspects: Aspect[],
+  reading: FullReading,
+  birthDate: string,
+  cityLabel: string,
+): string {
+  let ctx = `## Birth Chart\nBorn: ${birthDate} — ${cityLabel}\n\n`
+
+  ctx += `### Natal Planet Positions\n`
+  for (const p of chartData.planets) {
+    ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  ctx += `\nAscendant: ${chartData.angles.ascendant.degree}°${chartData.angles.ascendant.minute}' ${chartData.angles.ascendant.sign}\n`
+  ctx += `Midheaven: ${chartData.angles.midheaven.degree}°${chartData.angles.midheaven.minute}' ${chartData.angles.midheaven.sign}\n`
+  ctx += `Descendant: ${chartData.angles.descendant.degree}°${chartData.angles.descendant.minute}' ${chartData.angles.descendant.sign}\n`
+  ctx += `IC: ${chartData.angles.imumCoeli.degree}°${chartData.angles.imumCoeli.minute}' ${chartData.angles.imumCoeli.sign}\n`
+
+  ctx += `\n### Houses\n`
+  for (const h of chartData.houses) {
+    ctx += `- House ${h.house}: ${h.degree}°${h.minute}' ${h.sign}\n`
+  }
+
+  ctx += `\n### Natal Aspects\n`
+  for (const a of aspects) {
+    ctx += `- ${a.planet1} ${a.symbol} ${a.planet2} (${a.type}, orb ${a.orb.toFixed(1)}°, ${a.nature})\n`
+  }
+
+  ctx += `\n### Element Balance\n`
+  const el = reading.elements
+  ctx += `Fire: ${el.counts.Fire}, Earth: ${el.counts.Earth}, Air: ${el.counts.Air}, Water: ${el.counts.Water}\n`
+  ctx += `Dominant: ${el.dominant}${el.lacking ? `, Lacking: ${el.lacking}` : ''}\n`
+
+  ctx += `\n### Modality Balance\n`
+  const mod = reading.modalities
+  ctx += `Cardinal: ${mod.counts.Cardinal}, Fixed: ${mod.counts.Fixed}, Mutable: ${mod.counts.Mutable}\n`
+  ctx += `Dominant: ${mod.dominant}${mod.lacking ? `, Lacking: ${mod.lacking}` : ''}\n`
+
+  if (reading.focus) {
+    ctx += `\n### Focus Area: ${reading.focus.area}\n${reading.focus.description}\n`
+  }
+
+  return ctx
+}
+
+function buildTransitContext(
+  transitData: TransitData,
+  transitPeriod: TransitPeriod,
+  transitInterpretation: string | null,
+): string {
+  let ctx = `\n## Current Transit Reading (${transitPeriod})\n`
+  ctx += `Period: ${transitData.dateRange.start} to ${transitData.dateRange.end}\n\n`
+
+  ctx += `### Current Planet Positions\n`
+  for (const p of transitData.currentPlanets) {
+    if (p.name === 'NorthNode') continue
+    ctx += `- Transit ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  ctx += `\n### Transit Aspects to Natal\n`
+  if (transitData.transitAspects.length === 0) {
+    ctx += `No major transit aspects within orb.\n`
+  } else {
+    for (const a of transitData.transitAspects) {
+      ctx += `- Transit ${a.transitPlanet} ${a.symbol} Natal ${a.natalPlanet} (${a.type}, orb ${a.orb}°, ${a.applying ? 'applying' : 'separating'}, ${a.nature})\n`
+    }
+  }
+
+  const ingresses = transitData.ingresses.filter(i => i.planet !== 'Moon')
+  if (ingresses.length > 0) {
+    ctx += `\n### Sign Changes\n`
+    for (const ing of ingresses) {
+      ctx += `- ${ing.planet} enters ${ing.toSign} around ${ing.approximateDate}\n`
+    }
+  }
+
+  const retros = transitData.retrogrades.filter(r => r.isRetro || r.status.includes('Stationing'))
+  if (retros.length > 0) {
+    ctx += `\n### Retrograde Activity\n`
+    for (const r of retros) {
+      ctx += `- ${r.planet}: ${r.status}\n`
+    }
+  }
+
+  if (transitInterpretation) {
+    ctx += `\n### Previous Transit Interpretation\n${transitInterpretation}\n`
+  }
+
+  return ctx
+}
+
+function buildSynastryContext(
+  chart1: ChartData,
+  chart2: ChartData,
+  synastryData: SynastryData,
+  person1Date: string,
+  person2Date: string,
+  person1City: string,
+  person2City: string,
+  synastryInterpretation: string | null,
+): string {
+  let ctx = `## Couple Synastry Analysis\n\n`
+
+  ctx += `### Person 1\nBorn: ${person1Date} — ${person1City}\n`
+  for (const p of chart1.planets) {
+    ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart1.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  ctx += `\n### Person 2\nBorn: ${person2Date} — ${person2City}\n`
+  for (const p of chart2.planets) {
+    ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart2.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  ctx += `\n### Synastry Aspects (Cross-Chart)\n`
+  for (const a of synastryData.synastryAspects) {
+    ctx += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
+  }
+
+  if (synastryData.houseOverlay.person1InPerson2Houses.length > 0) {
+    ctx += `\n### House Overlays\n`
+    ctx += `P1 planets in P2 houses:\n`
+    for (const h of synastryData.houseOverlay.person1InPerson2Houses) {
+      ctx += `- ${h.planet} → P2 House ${h.house}\n`
+    }
+    ctx += `P2 planets in P1 houses:\n`
+    for (const h of synastryData.houseOverlay.person2InPerson1Houses) {
+      ctx += `- ${h.planet} → P1 House ${h.house}\n`
+    }
+  }
+
+  ctx += `\n### Composite Chart\n`
+  for (const p of synastryData.compositeChart.planets) {
+    ctx += `- Composite ${p.name}: ${p.degree}°${p.minute}' ${p.sign}\n`
+  }
+
+  ctx += `\n### Compatibility\n`
+  ctx += `Elements: ${synastryData.compatibility.elementCompatibility}\n`
+  ctx += `Modalities: ${synastryData.compatibility.modalityCompatibility}\n`
+  ctx += `Harmonious: ${synastryData.compatibility.harmoniousCount}, Challenging: ${synastryData.compatibility.challengingCount}\n`
+  ctx += `Key themes: ${synastryData.compatibility.keyThemes.join('; ')}\n`
+
+  if (synastryInterpretation) {
+    ctx += `\n### Previous Synastry Interpretation\n${synastryInterpretation}\n`
+  }
+
+  return ctx
+}
+
+export default function DiscussModal({ open, onClose, mode }: DiscussModalProps) {
+  const { state } = useApp()
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 100)
+    }
+  }, [open])
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  const { chartData, aspects, reading, birthData, transitData, transitPeriod, transitInterpretation, partnerBirthData, partnerChartData, synastryData, synastryInterpretation } = state
+  if (!chartData || !reading) return null
+
+  const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const partnerCityLabel = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+
+  const buildContext = (): string => {
+    if (mode === 'synastry' && partnerChartData && synastryData) {
+      return buildSynastryContext(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, synastryInterpretation)
+    }
+    let ctx = buildBirthChartContext(chartData, aspects, reading, birthData.date, cityLabel)
+    if (mode === 'transit' && transitData && transitPeriod) {
+      ctx += buildTransitContext(transitData, transitPeriod, transitInterpretation)
+    }
+    return ctx
+  }
+
+  const handleSend = async () => {
+    const trimmed = input.trim()
+    if (!trimmed || loading) return
+
+    const userMsg: ChatMessage = { role: 'user', content: trimmed }
+    const newMessages = [...messages, userMsg]
+    setMessages(newMessages)
+    setInput('')
+    setError(null)
+    setLoading(true)
+
+    try {
+      const apiKey = getStoredApiKey()
+      const context = buildContext()
+      const reply = await getDiscussResponse(context, newMessages, apiKey)
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+
+      {/* modal */}
+      <div className="relative w-full max-w-2xl bg-mystic-bg border border-mystic-gold/30 rounded-xl shadow-2xl flex flex-col max-h-[85vh]">
+        {/* header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-mystic-gold/20">
+          <div>
+            <h3 className="font-heading text-xl text-mystic-gold">
+              Discuss Your {mode === 'synastry' ? 'Compatibility' : mode === 'transit' ? 'Transit Reading' : 'Birth Chart'}
+            </h3>
+            <p className="text-mystic-muted text-xs mt-0.5">
+              Ask anything about your {mode === 'synastry' ? 'couple synastry and compatibility' : mode === 'transit' ? 'transits and natal chart' : 'natal chart and placements'}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-mystic-muted hover:text-mystic-text transition-colors text-2xl leading-none p-1"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* chat area */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-[200px]">
+          {messages.length === 0 && (
+            <div className="text-center py-8">
+              <p className="text-mystic-muted text-sm">
+                Ask a question about your {mode === 'synastry' ? 'couple compatibility...' : mode === 'transit' ? 'current transits or ' : ''}
+                {mode !== 'synastry' ? 'birth chart...' : ''}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                {mode === 'synastry' ? (
+                  <>
+                    <SuggestionChip text="What's our strongest connection?" onClick={setInput} />
+                    <SuggestionChip text="How can we communicate better?" onClick={setInput} />
+                    <SuggestionChip text="What challenges should we work on?" onClick={setInput} />
+                    <SuggestionChip text="Tell me about our romantic chemistry" onClick={setInput} />
+                  </>
+                ) : mode === 'birth' ? (
+                  <>
+                    <SuggestionChip text="What does my Sun-Moon combination mean?" onClick={setInput} />
+                    <SuggestionChip text="Tell me about my career potential" onClick={setInput} />
+                    <SuggestionChip text="What are my strongest placements?" onClick={setInput} />
+                  </>
+                ) : (
+                  <>
+                    <SuggestionChip text="What should I focus on right now?" onClick={setInput} />
+                    <SuggestionChip text="How do today's transits affect my love life?" onClick={setInput} />
+                    <SuggestionChip text="Any challenges I should watch out for?" onClick={setInput} />
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-mystic-gold/15 border border-mystic-gold/25 text-mystic-text'
+                    : 'bg-mystic-surface border border-mystic-border text-mystic-text/90'
+                }`}
+              >
+                {msg.content.split('\n').map((line, j) => (
+                  <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-mystic-surface border border-mystic-border rounded-lg px-4 py-3 text-sm text-mystic-muted">
+                <span className="animate-pulse">Reading the stars...</span>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* input area */}
+        <div className="px-6 py-4 border-t border-mystic-gold/20">
+          <div className="flex gap-2">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your chart..."
+              rows={1}
+              className="flex-1 px-4 py-2.5 bg-mystic-surface border border-mystic-border rounded-lg text-mystic-text text-sm resize-none focus:border-mystic-gold/50 focus:outline-none placeholder:text-mystic-muted/50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || loading}
+              className="px-5 py-2.5 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SuggestionChip({ text, onClick }: { text: string; onClick: (text: string) => void }) {
+  return (
+    <button
+      onClick={() => onClick(text)}
+      className="px-3 py-1.5 bg-mystic-gold/5 border border-mystic-gold/15 rounded-full text-xs text-mystic-muted hover:text-mystic-gold hover:border-mystic-gold/30 transition-colors"
+    >
+      {text}
+    </button>
+  )
+}

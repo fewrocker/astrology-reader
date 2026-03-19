@@ -1,0 +1,370 @@
+import * as Astronomy from 'astronomy-engine'
+import { longitudeToZodiac, normalizeAngle } from './zodiac'
+import type { PlanetPosition, PlanetName, ChartData } from './types'
+import { PLANET_NAMES } from './types'
+import type { AspectType } from './aspects'
+import { ASPECT_DEFINITIONS } from './aspects'
+
+export type TransitPeriod = 'daily' | 'weekly' | 'monthly'
+
+export interface TransitPosition extends PlanetPosition {
+  /** Daily motion in degrees (positive = direct, negative = retrograde) */
+  dailyMotion: number
+}
+
+export interface TransitAspect {
+  transitPlanet: PlanetName | 'NorthNode'
+  natalPlanet: PlanetName | 'NorthNode'
+  type: AspectType
+  orb: number
+  exactAngle: number
+  applying: boolean
+  nature: 'harmonious' | 'challenging' | 'neutral'
+  symbol: string
+}
+
+export interface SignIngress {
+  planet: PlanetName
+  fromSign: string
+  toSign: string
+  approximateDate: string
+}
+
+export interface TransitData {
+  period: TransitPeriod
+  dateRange: { start: string; end: string }
+  currentPlanets: TransitPosition[]
+  transitAspects: TransitAspect[]
+  ingresses: SignIngress[]
+  retrogrades: { planet: PlanetName; isRetro: boolean; status: string }[]
+}
+
+/** Map planet names to astronomy-engine Body enum */
+const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
+  Sun: Astronomy.Body.Sun,
+  Moon: Astronomy.Body.Moon,
+  Mercury: Astronomy.Body.Mercury,
+  Venus: Astronomy.Body.Venus,
+  Mars: Astronomy.Body.Mars,
+  Jupiter: Astronomy.Body.Jupiter,
+  Saturn: Astronomy.Body.Saturn,
+  Uranus: Astronomy.Body.Uranus,
+  Neptune: Astronomy.Body.Neptune,
+  Pluto: Astronomy.Body.Pluto,
+}
+
+function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
+  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
+  const geo = Astronomy.GeoVector(body, time, true)
+  return Astronomy.Ecliptic(geo).elon
+}
+
+function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
+  const T = time.tt / 36525
+  const omega = 125.0445479 - 1934.1362891 * T + 0.0020754 * T * T + T * T * T / 467441 - T * T * T * T / 60616000
+  return normalizeAngle(omega)
+}
+
+function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  const lon1 = getPlanetLongitude(body, time)
+  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const lon2 = getPlanetLongitude(body, timePlus)
+  let diff = lon2 - lon1
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
+}
+
+/**
+ * Calculate current planetary positions for transit reading.
+ */
+function calculateCurrentPositions(date: Date): TransitPosition[] {
+  const time = Astronomy.MakeTime(date)
+  const positions: TransitPosition[] = []
+
+  for (const name of PLANET_NAMES) {
+    const body = BODY_MAP[name]
+    const lon = getPlanetLongitude(body, time)
+    const zodiac = longitudeToZodiac(lon)
+    const motion = getDailyMotion(body, time)
+
+    positions.push({
+      ...zodiac,
+      name,
+      retrograde: motion < 0,
+      house: 0,
+      dailyMotion: motion,
+    })
+  }
+
+  // North Node
+  const nodeLon = getMeanNodeLongitude(time)
+  const nodeZodiac = longitudeToZodiac(nodeLon)
+  positions.push({
+    ...nodeZodiac,
+    name: 'NorthNode',
+    retrograde: true,
+    house: 0,
+    dailyMotion: -0.053,
+  })
+
+  return positions
+}
+
+/**
+ * Calculate aspects between transit planets and natal planets.
+ * Uses tighter orbs for transits than natal aspects.
+ */
+function calculateTransitAspects(
+  transitPlanets: TransitPosition[],
+  natalPlanets: PlanetPosition[],
+  period: TransitPeriod
+): TransitAspect[] {
+  // Tighter orbs for transits — scale by period relevance
+  const orbScale = period === 'daily' ? 0.3 : period === 'weekly' ? 0.5 : 0.7
+
+  const aspects: TransitAspect[] = []
+
+  for (const tp of transitPlanets) {
+    for (const np of natalPlanets) {
+      const rawAngle = Math.abs(tp.longitude - np.longitude)
+      const angle = rawAngle > 180 ? 360 - rawAngle : rawAngle
+
+      for (const def of ASPECT_DEFINITIONS) {
+        const orb = Math.abs(angle - def.angle)
+        const maxOrb = def.orb * orbScale
+
+        if (orb <= maxOrb) {
+          // Determine if applying (transit planet moving toward exact aspect)
+          const applying = tp.dailyMotion > 0
+            ? (angle > def.angle ? false : true)
+            : (angle > def.angle ? true : false)
+
+          aspects.push({
+            transitPlanet: tp.name,
+            natalPlanet: np.name,
+            type: def.name,
+            orb: Math.round(orb * 100) / 100,
+            exactAngle: def.angle,
+            applying,
+            nature: def.nature,
+            symbol: def.symbol,
+          })
+          break // only strongest aspect between this pair
+        }
+      }
+    }
+  }
+
+  // Sort by orb tightness
+  aspects.sort((a, b) => a.orb - b.orb)
+  return aspects
+}
+
+/**
+ * Detect sign ingresses (planet entering new sign) within a date range.
+ */
+function detectIngresses(startDate: Date, endDate: Date): SignIngress[] {
+  const ingresses: SignIngress[] = []
+  const dayMs = 86400000
+
+  for (const name of PLANET_NAMES) {
+    // Skip Moon for weekly/monthly (too many sign changes)
+    const body = BODY_MAP[name]
+    let prevTime = Astronomy.MakeTime(startDate)
+    let prevLon = getPlanetLongitude(body, prevTime)
+    let prevSign = longitudeToZodiac(prevLon).sign
+
+    // Check each day in range
+    const days = Math.ceil((endDate.getTime() - startDate.getTime()) / dayMs)
+    // For Moon, check every 6 hours
+    const step = name === 'Moon' ? dayMs / 4 : dayMs
+
+    for (let d = 1; d <= days * (name === 'Moon' ? 4 : 1); d++) {
+      const checkDate = new Date(startDate.getTime() + d * step)
+      if (checkDate > endDate) break
+
+      const checkTime = Astronomy.MakeTime(checkDate)
+      const lon = getPlanetLongitude(body, checkTime)
+      const sign = longitudeToZodiac(lon).sign
+
+      if (sign !== prevSign) {
+        ingresses.push({
+          planet: name,
+          fromSign: prevSign,
+          toSign: sign,
+          approximateDate: checkDate.toISOString().split('T')[0],
+        })
+        prevSign = sign
+      }
+    }
+  }
+
+  return ingresses
+}
+
+/**
+ * Get retrograde status for all planets at a given date.
+ */
+function getRetrogradeStatus(date: Date): { planet: PlanetName; isRetro: boolean; status: string }[] {
+  const time = Astronomy.MakeTime(date)
+  const statuses: { planet: PlanetName; isRetro: boolean; status: string }[] = []
+
+  for (const name of PLANET_NAMES) {
+    if (name === 'Sun' || name === 'Moon') continue
+    const body = BODY_MAP[name]
+    const motion = getDailyMotion(body, time)
+    const isRetro = motion < 0
+
+    // Check if recently stationed (very slow motion)
+    const isStationing = Math.abs(motion) < 0.02
+    let status = isRetro ? 'Retrograde' : 'Direct'
+    if (isStationing) status = isRetro ? 'Stationing retrograde' : 'Stationing direct'
+
+    statuses.push({ planet: name, isRetro, status })
+  }
+
+  return statuses
+}
+
+/**
+ * Get date range for a transit period.
+ */
+function getDateRange(period: TransitPeriod): { start: Date; end: Date; startStr: string; endStr: string } {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let end: Date
+
+  switch (period) {
+    case 'daily':
+      end = new Date(start.getTime() + 86400000)
+      break
+    case 'weekly':
+      end = new Date(start.getTime() + 7 * 86400000)
+      break
+    case 'monthly':
+      end = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate())
+      break
+  }
+
+  const fmt = (d: Date) => d.toISOString().split('T')[0]
+  return { start, end, startStr: fmt(start), endStr: fmt(end) }
+}
+
+/**
+ * Build a text summary of the transit chart positions for GPT interpretation.
+ */
+export function buildTransitPrompt(
+  natalChart: ChartData,
+  transitData: TransitData,
+  birthDate: string,
+  period: TransitPeriod,
+): string {
+  const periodLabel = period === 'daily' ? 'today' : period === 'weekly' ? 'this week' : 'this month'
+
+  let prompt = `You are an expert astrologer providing a ${period} transit reading.\n\n`
+  prompt += `## Birth Chart (Natal)\n`
+  prompt += `Birth date: ${birthDate}\n`
+
+  // Natal positions
+  prompt += `\nNatal planet positions:\n`
+  for (const p of natalChart.planets) {
+    prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  prompt += `\nNatal Ascendant: ${natalChart.angles.ascendant.degree}°${natalChart.angles.ascendant.minute}' ${natalChart.angles.ascendant.sign}\n`
+  prompt += `Natal Midheaven: ${natalChart.angles.midheaven.degree}°${natalChart.angles.midheaven.minute}' ${natalChart.angles.midheaven.sign}\n`
+
+  // Current transits
+  prompt += `\n## Current Transit Positions (${transitData.dateRange.start})\n`
+  for (const p of transitData.currentPlanets) {
+    if (p.name === 'NorthNode') continue
+    prompt += `- Transit ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  // Transit aspects to natal
+  prompt += `\n## Transit Aspects to Natal Chart\n`
+  if (transitData.transitAspects.length === 0) {
+    prompt += `No major transit aspects within orb ${periodLabel}.\n`
+  } else {
+    for (const a of transitData.transitAspects) {
+      prompt += `- Transit ${a.transitPlanet} ${a.symbol} Natal ${a.natalPlanet} (${a.type}, orb ${a.orb}°, ${a.applying ? 'applying' : 'separating'}, ${a.nature})\n`
+    }
+  }
+
+  // Sign ingresses
+  if (transitData.ingresses.length > 0) {
+    prompt += `\n## Sign Changes ${periodLabel}\n`
+    for (const ing of transitData.ingresses) {
+      prompt += `- ${ing.planet} moves from ${ing.fromSign} to ${ing.toSign} around ${ing.approximateDate}\n`
+    }
+  }
+
+  // Retrogrades
+  const retros = transitData.retrogrades.filter(r => r.isRetro || r.status.includes('Stationing'))
+  if (retros.length > 0) {
+    prompt += `\n## Retrograde Activity\n`
+    for (const r of retros) {
+      prompt += `- ${r.planet}: ${r.status}\n`
+    }
+  }
+
+  prompt += `\n## Instructions\n`
+  prompt += `Based on the transit aspects to the natal chart, provide a personalized ${period} reading for ${periodLabel}.\n\n`
+
+  if (period === 'daily') {
+    prompt += `Focus on:\n`
+    prompt += `- Overall energy and mood for the day\n`
+    prompt += `- The Moon's current transit and its effect\n`
+    prompt += `- Any exact or very tight aspects (orb < 1°) that are most impactful today\n`
+    prompt += `- Practical advice for navigating the day\n`
+    prompt += `- Keep it concise but meaningful (3-4 paragraphs)\n`
+  } else if (period === 'weekly') {
+    prompt += `Focus on:\n`
+    prompt += `- Key themes and energies for the week\n`
+    prompt += `- Important days when exact aspects perfect\n`
+    prompt += `- Mercury and Venus transits affecting communication and relationships\n`
+    prompt += `- Any planetary sign changes during the week\n`
+    prompt += `- Practical guidance for the week ahead (4-5 paragraphs)\n`
+  } else {
+    prompt += `Focus on:\n`
+    prompt += `- Major themes and life areas activated this month\n`
+    prompt += `- Slow planet (Jupiter, Saturn, Uranus, Neptune, Pluto) transits — these are the most significant\n`
+    prompt += `- Any retrogrades and their impact\n`
+    prompt += `- Key dates and turning points during the month\n`
+    prompt += `- Growth opportunities and challenges to be aware of\n`
+    prompt += `- Comprehensive guidance (5-6 paragraphs)\n`
+  }
+
+  prompt += `\nFormat your response as a warm, insightful, personal reading. Use second person ("you"). `
+  prompt += `Do not use headers or bullet points — write flowing paragraphs. `
+  prompt += `Be specific about which planets and aspects you're interpreting. `
+  prompt += `End with an encouraging, empowering note.`
+
+  return prompt
+}
+
+/**
+ * Main function: calculate transit data for a given period.
+ */
+export function calculateTransits(
+  natalChart: ChartData,
+  period: TransitPeriod
+): TransitData {
+  const { start, end, startStr, endStr } = getDateRange(period)
+
+  const currentPlanets = calculateCurrentPositions(start)
+  const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period)
+  const ingresses = detectIngresses(start, end)
+  const retrogrades = getRetrogradeStatus(start)
+
+  return {
+    period,
+    dateRange: { start: startStr, end: endStr },
+    currentPlanets,
+    transitAspects,
+    ingresses,
+    retrogrades,
+  }
+}

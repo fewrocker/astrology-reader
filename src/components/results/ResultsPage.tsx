@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import { ReadingSummary, PlanetSection, AspectSection, BalanceSection, FocusSection } from '../reading/ReadingDisplay'
+import DiscussModal from '../discuss/DiscussModal'
 
 export default function ResultsPage() {
   const { state, dispatch } = useApp()
   const { chartData, aspects, reading, birthData } = state
+  const [discussOpen, setDiscussOpen] = useState(false)
 
   if (!chartData || !reading) return null
 
@@ -110,7 +113,25 @@ export default function ResultsPage() {
       </div>
 
       {/* generate new reading */}
-      <div className="text-center mb-12">
+      <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center">
+        <button
+          onClick={() => setDiscussOpen(true)}
+          className="px-8 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
+        >
+          Discuss ✦
+        </button>
+        <button
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'transit-select' })}
+          className="px-8 py-3 bg-mystic-purple/10 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/20 transition-colors"
+        >
+          Daily / Weekly / Monthly ☽
+        </button>
+        <button
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'partner-form' })}
+          className="px-8 py-3 bg-pink-900/10 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/20 transition-colors"
+        >
+          Couple Synastry ♡
+        </button>
         <button
           onClick={() => dispatch({ type: 'RESET' })}
           className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
@@ -118,6 +139,8 @@ export default function ResultsPage() {
           Generate New Reading
         </button>
       </div>
+
+      <DiscussModal open={discussOpen} onClose={() => setDiscussOpen(false)} mode="birth" />
     </div>
   )
 }

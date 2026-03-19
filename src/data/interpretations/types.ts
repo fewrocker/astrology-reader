@@ -1,6 +1,6 @@
-import type { PlanetName, ZodiacSign, Element, Modality } from '../engine/types'
-import type { AspectType } from '../engine/aspects'
-import type { FocusArea } from '../context/appState'
+import type { PlanetName, ZodiacSign, Element, Modality } from '../../engine/types'
+import type { AspectType } from '../../engine/aspects'
+import type { FocusArea } from '../../context/appState'
 
 export interface InterpretationEntry {
   brief: string
