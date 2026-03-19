@@ -25,6 +25,7 @@ function buildBirthChartContext(
   for (const pr of reading.planets) {
     const p = pr.planet
     ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}`
+    if (pr.dignity) ctx += ` [${pr.dignity.label}]`
     if (pr.signInterpretation) ctx += ` — ${pr.signInterpretation.brief}`
     ctx += '\n'
   }
@@ -75,6 +76,13 @@ function buildBirthChartContext(
   ctx += `Dominant: ${mod.dominant}${mod.lacking ? `, Lacking: ${mod.lacking}` : ''}\n`
   ctx += `${mod.interpretation.dominant}\n`
   if (mod.interpretation.lacking) ctx += `${mod.interpretation.lacking}\n`
+
+  if (reading.mutualReceptions.length > 0) {
+    ctx += `\n### Mutual Receptions\n`
+    for (const mr of reading.mutualReceptions) {
+      ctx += `- ${mr.planet1} in ${mr.sign1} ⇄ ${mr.planet2} in ${mr.sign2}: ${mr.interpretation}\n`
+    }
+  }
 
   if (reading.focus) {
     ctx += `\n### Focus Area: ${reading.focus.area}\n${reading.focus.description}\n`

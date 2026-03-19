@@ -4,6 +4,8 @@ import type { ChartData, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
+import { dignityScore } from '../../data/interpretations/dignities'
+import type { MutualReception } from '../../data/interpretations/dignities'
 
 // ---------- shared ----------
 
@@ -85,6 +87,11 @@ function PlanetCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-mystic-text font-medium">{pr.planet.name}</span>
             {pr.planet.retrograde && <span className="text-mystic-muted text-xs border border-mystic-muted/30 rounded px-1">Rx</span>}
+            {pr.dignity && (
+              <span className={`text-xs font-medium border rounded px-1.5 py-0.5 ${pr.dignity.color} ${pr.dignity.bgColor} border-current/20`}>
+                {pr.dignity.symbol} {pr.dignity.label}
+              </span>
+            )}
             <span className="text-mystic-muted">in</span>
             <span className="text-mystic-gold">{ZODIAC_GLYPHS[pr.planet.sign]} {pr.planet.sign}</span>
             {showHouse && <span className="text-mystic-muted text-sm">· House {pr.planet.house}</span>}
@@ -106,6 +113,14 @@ function PlanetCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }
             <div>
               <div className="text-mystic-gold/80 font-medium text-xs uppercase tracking-wider mb-1">{pr.planet.name} in House {pr.planet.house}</div>
               <p className="text-mystic-text/90 leading-relaxed">{pr.houseInterpretation.detail}</p>
+            </div>
+          )}
+          {pr.dignity && (
+            <div className={`rounded-md p-3 ${pr.dignity.bgColor}`}>
+              <div className={`font-medium text-xs uppercase tracking-wider mb-1 ${pr.dignity.color}`}>
+                {pr.dignity.symbol} {pr.dignity.label}
+              </div>
+              <p className="text-mystic-text/80 leading-relaxed">{pr.dignity.description}</p>
             </div>
           )}
         </div>
@@ -407,6 +422,109 @@ export function HousesOverview({ chart }: { chart: ChartData }) {
           planets={planetsByHouse[h.house]}
         />
       ))}
+    </Section>
+  )
+}
+
+// ---------- planetary strength section ----------
+
+function StrengthBar({ planet, score, dignity }: { planet: PlanetReading; score: number; dignity: PlanetReading['dignity'] }) {
+  const name = planet.planet.name as PlanetName
+  const glyph = PLANET_GLYPHS[name] ?? '☊'
+  // Map score (-4 to +5) to visual width (0-100%), centered at ~44%
+  const pct = Math.round(((score + 4) / 9) * 100)
+  const barColor = score > 0 ? 'bg-yellow-400/70' : score < 0 ? 'bg-red-400/50' : 'bg-gray-500/40'
+  const labelColor = dignity ? dignity.color : 'text-mystic-muted'
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between text-sm mb-1">
+        <div className="flex items-center gap-2">
+          <span className="text-base">{glyph}</span>
+          <span className="text-mystic-text">{planet.planet.name}</span>
+          <span className="text-mystic-muted text-xs">in {ZODIAC_GLYPHS[planet.planet.sign]} {planet.planet.sign}</span>
+        </div>
+        <span className={`text-xs font-medium ${labelColor}`}>
+          {dignity ? `${dignity.symbol} ${dignity.label}` : 'Peregrine'}
+        </span>
+      </div>
+      <div className="h-2 bg-mystic-gold/10 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function MutualReceptionCard({ mr }: { mr: MutualReception }) {
+  const g1 = PLANET_GLYPHS[mr.planet1] ?? '☊'
+  const g2 = PLANET_GLYPHS[mr.planet2] ?? '☊'
+
+  return (
+    <div className="border border-mystic-purple/20 bg-mystic-purple/5 rounded-lg p-4 mb-3">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-lg">{g1}</span>
+        <span className="text-mystic-purple text-sm">⇄</span>
+        <span className="text-lg">{g2}</span>
+        <span className="text-mystic-purple font-heading text-sm ml-1">Mutual Reception</span>
+      </div>
+      <div className="text-mystic-muted text-xs mb-2">
+        {mr.planet1} in {ZODIAC_GLYPHS[mr.sign1]} {mr.sign1} · {mr.planet2} in {ZODIAC_GLYPHS[mr.sign2]} {mr.sign2}
+      </div>
+      <p className="text-mystic-text/80 text-sm leading-relaxed">{mr.interpretation}</p>
+    </div>
+  )
+}
+
+export function PlanetaryStrengthSection({ reading }: { reading: FullReading }) {
+  const scoredPlanets = reading.planets
+    .filter(pr => pr.planet.name !== 'NorthNode')
+    .map(pr => ({
+      pr,
+      score: dignityScore(pr.planet.name as PlanetName, pr.planet.sign),
+    }))
+    .sort((a, b) => b.score - a.score)
+
+  const dignified = scoredPlanets.filter(sp => sp.score > 0)
+  const debilitated = scoredPlanets.filter(sp => sp.score < 0)
+
+  // Build narrative
+  let narrative = ''
+  if (dignified.length > 0) {
+    const names = dignified.map(sp => sp.pr.planet.name).join(', ')
+    narrative += `Your strongest placements are ${names} — these planets operate with natural ease and power in your chart.`
+  }
+  if (debilitated.length > 0) {
+    const names = debilitated.map(sp => sp.pr.planet.name).join(', ')
+    narrative += `${narrative ? ' ' : ''}${names} ${debilitated.length === 1 ? 'faces' : 'face'} more challenge — ${debilitated.length === 1 ? 'its' : 'their'} expression requires conscious effort and growth.`
+  }
+  if (!narrative) {
+    narrative = 'All your planets are peregrine — none are in signs of special dignity or debility. Your chart expresses a balanced, unaccented energy across all planets.'
+  }
+
+  return (
+    <Section title="Planetary Strength">
+      <p className="text-mystic-muted text-sm mb-4">
+        Essential dignities reveal how comfortable each planet is in its zodiac sign. A planet in its domicile or exaltation operates with natural strength,
+        while one in detriment or fall must work harder to express its energy.
+      </p>
+
+      {scoredPlanets.map(({ pr, score }) => (
+        <StrengthBar key={pr.planet.name} planet={pr} score={score} dignity={pr.dignity} />
+      ))}
+
+      <p className="text-mystic-text/80 text-sm mt-4 leading-relaxed italic">{narrative}</p>
+
+      {reading.mutualReceptions.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-mystic-gold text-sm font-heading mb-3">Mutual Receptions</h3>
+          <p className="text-mystic-muted text-sm mb-3">
+            A mutual reception occurs when two planets each occupy the other's home sign, creating a powerful cooperative exchange.
+          </p>
+          {reading.mutualReceptions.map((mr, i) => (
+            <MutualReceptionCard key={i} mr={mr} />
+          ))}
+        </div>
+      )}
     </Section>
   )
 }

@@ -9,6 +9,7 @@ import { PLANET_IN_SIGN } from './planetInSign'
 import { PLANET_IN_HOUSE } from './planetInHouse'
 import { ASPECT_INTERPRETATIONS } from './aspectInterpretations'
 import { PATTERN_INTERPRETATIONS, getPatternElementFlavor, getTSquareModalityFlavor, type PatternInterpretation } from './patternInterpretations'
+import { getDignity, detectMutualReceptions, type DignityInfo, type MutualReception } from './dignities'
 
 // ---------- lookup helpers ----------
 
@@ -89,6 +90,7 @@ export interface PlanetReading {
   planet: PlanetPosition
   signInterpretation: InterpretationEntry | null
   houseInterpretation: InterpretationEntry | null
+  dignity: DignityInfo | null
 }
 
 export interface AspectReading {
@@ -117,6 +119,7 @@ export interface FullReading {
   elements: ElementBalance
   modalities: ModalityBalance
   focus: FocusReading | null
+  mutualReceptions: MutualReception[]
 }
 
 export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?: FocusArea): FullReading {
@@ -124,6 +127,7 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     planet: p,
     signInterpretation: getPlanetInSignInterpretation(p.name, p.sign),
     houseInterpretation: chart.unknownTime ? null : getPlanetInHouseInterpretation(p.name, p.house),
+    dignity: p.name !== 'NorthNode' ? getDignity(p.name as PlanetName, p.sign) : null,
   }))
 
   const aspectReadings: AspectReading[] = aspects.map((a) => ({
@@ -175,5 +179,7 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     return { pattern: p, interpretation, elementFlavor, planetSigns }
   })
 
-  return { planets: planetReadings, aspects: aspectReadings, patterns: patternReadings, elements, modalities, focus }
+  const mutualReceptions = detectMutualReceptions(chart.planets)
+
+  return { planets: planetReadings, aspects: aspectReadings, patterns: patternReadings, elements, modalities, focus, mutualReceptions }
 }
