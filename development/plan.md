@@ -5,7 +5,7 @@
 - [x] calculation-engine
 - [x] aspect-calculation
 - [x] chart-wheel
-- [ ] interpretation-database
+- [x] interpretation-database
 - [ ] reading-display
 - [ ] results-page
 - [ ] ui-polish
