@@ -6,6 +6,6 @@
 - [x] aspect-calculation
 - [x] chart-wheel
 - [x] interpretation-database
-- [ ] reading-display
+- [x] reading-display
 - [ ] results-page
 - [ ] ui-polish
