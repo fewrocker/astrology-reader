@@ -1,6 +1,6 @@
 # Development Plan
 
-- [ ] city-database
+- [x] city-database
 - [ ] multi-step-form
 - [ ] calculation-engine
 - [ ] aspect-calculation
