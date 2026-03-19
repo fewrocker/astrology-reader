@@ -193,6 +193,44 @@ body {
 
 /* ---------- Discuss Modal Oracle Animation ---------- */
 
+/* ===== Sky Today Decorative Chart ===== */
+
+.sky-today-chart {
+  opacity: 0;
+  animation: skyChartReveal 1.5s ease-out 0.3s forwards;
+}
+
+.sky-chart-glow {
+  filter: drop-shadow(0 0 40px rgba(201, 168, 76, 0.08)) drop-shadow(0 0 80px rgba(124, 92, 191, 0.05));
+}
+
+.sky-today-chart .chart-svg {
+  opacity: 0.85;
+}
+
+.sky-today-chart .chart-planet {
+  pointer-events: none;
+}
+
+@keyframes skyChartReveal {
+  0% { opacity: 0; transform: scale(0.92) rotate(-3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* Slow ambient rotation for the decorative chart */
+@media (prefers-reduced-motion: no-preference) {
+  .sky-today-chart .chart-sweep {
+    animation: ringSweep 45s linear infinite;
+  }
+}
+
+/* ===== Radial gradient utility ===== */
+.bg-gradient-radial {
+  background: radial-gradient(circle, var(--tw-gradient-stops));
+}
+
+/* ---------- Discuss Modal Oracle Animation ---------- */
+
 .discuss-oracle-container {
   width: 80px;
   height: 80px;
