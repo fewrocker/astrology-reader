@@ -350,16 +350,10 @@ export default function SynastryPage() {
           Couple Transits ☽
         </button>
         <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'results' })}
-          className="px-6 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
+          onClick={() => dispatch({ type: 'RESET' })}
+          className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
         >
-          My Birth Chart
-        </button>
-        <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'partner-form' })}
-          className="px-6 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
-        >
-          Change Partner Data
+          Back to Menu
         </button>
       </div>
 

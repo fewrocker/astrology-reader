@@ -40,5 +40,8 @@ export function searchCities(cities: City[], query: string, limit = 10): City[] 
 }
 
 export function formatCity(city: City): string {
+  if (city.region && !/^\d+$/.test(city.region)) {
+    return `${city.name}, ${city.region}, ${city.country}`
+  }
   return `${city.name}, ${city.country}`
 }

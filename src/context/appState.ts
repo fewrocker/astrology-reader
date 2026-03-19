@@ -72,6 +72,7 @@ export type AppAction =
   | { type: 'SET_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
   | { type: 'SET_TRANSIT_ERROR'; error: string }
   | { type: 'UPDATE_PARTNER_DATA'; data: Partial<BirthData> }
+  | { type: 'CACHE_NATAL_CHART'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'SET_SYNASTRY_RESULTS'; partnerChartData: ChartData; partnerAspects: Aspect[]; synastryData: SynastryData; interpretation: string }
   | { type: 'SET_SYNASTRY_ERROR'; error: string }
   | { type: 'START_SYNASTRY_TRANSIT'; period: TransitPeriod }
@@ -278,6 +279,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, view: 'transit-results', transitData: action.transitData, transitInterpretation: action.interpretation, transitLoading: false }
     case 'SET_TRANSIT_ERROR':
       return { ...state, transitError: action.error, transitLoading: false, view: 'transit-select' }
+    case 'CACHE_NATAL_CHART':
+      return { ...state, chartData: action.chartData, aspects: action.aspects, reading: action.reading }
     case 'UPDATE_PARTNER_DATA':
       return { ...state, partnerBirthData: { ...state.partnerBirthData, ...action.data } }
     case 'SET_SYNASTRY_RESULTS':

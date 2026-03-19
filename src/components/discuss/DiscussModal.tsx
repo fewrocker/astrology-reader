@@ -6,6 +6,7 @@ import type { Aspect } from '../../engine/aspects'
 import type { FullReading } from '../../data/interpretations'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import type { SynastryData } from '../../engine/synastry'
+import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 
 interface DiscussModalProps {
   open: boolean
@@ -32,9 +33,14 @@ function buildBirthChartContext(
   ctx += `Descendant: ${chartData.angles.descendant.degree}°${chartData.angles.descendant.minute}' ${chartData.angles.descendant.sign}\n`
   ctx += `IC: ${chartData.angles.imumCoeli.degree}°${chartData.angles.imumCoeli.minute}' ${chartData.angles.imumCoeli.sign}\n`
 
-  ctx += `\n### Houses\n`
+  ctx += `\n### Houses Overview\n`
   for (const h of chartData.houses) {
-    ctx += `- House ${h.house}: ${h.degree}°${h.minute}' ${h.sign}\n`
+    const theme = HOUSE_THEMES[h.house - 1]
+    const occupants = chartData.planets.filter(p => p.house === h.house)
+    const occupantStr = occupants.length > 0
+      ? ` — Planets: ${occupants.map(p => p.name).join(', ')}`
+      : ' — Empty (look to ruler placement)'
+    ctx += `- House ${h.house} (${theme.name}): ${h.degree}°${h.minute}' ${h.sign} | ${theme.theme}${occupantStr}\n`
   }
 
   ctx += `\n### Natal Aspects\n`

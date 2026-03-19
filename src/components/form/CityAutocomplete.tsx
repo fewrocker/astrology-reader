@@ -114,7 +114,7 @@ export default function CityAutocomplete({ value, onChange }: CityAutocompletePr
             >
               <span className="font-medium">{city.name}</span>
               <span className="text-mystic-muted text-sm ml-2">
-                {city.region ? `${city.region}, ` : ''}{city.country}
+                {city.region && !/^\d+$/.test(city.region) ? `${city.region}, ` : ''}{city.country}
               </span>
             </li>
           ))}

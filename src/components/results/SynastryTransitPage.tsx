@@ -171,12 +171,6 @@ export default function SynastryTransitPage() {
         >
           View Compatibility
         </button>
-        <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'results' })}
-          className="px-6 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
-        >
-          My Birth Chart
-        </button>
       </div>
 
       <DiscussModal open={discussOpen} onClose={() => setDiscussOpen(false)} mode="synastry" />

@@ -3,6 +3,7 @@ import type { FullReading, PlanetReading, AspectReading, ElementBalance, Modalit
 import type { ChartData, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
+import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 
 // ---------- shared ----------
 
@@ -332,6 +333,80 @@ export function FocusSection({ focus }: { focus: FocusReading }) {
           ))}
         </div>
       )}
+    </Section>
+  )
+}
+
+// ---------- houses overview section ----------
+
+function HouseCard({ houseNum, cuspSign, planets }: { houseNum: number; cuspSign: string; planets: { name: string; glyph: string }[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const theme = HOUSE_THEMES[houseNum - 1]
+  const signGlyph = ZODIAC_GLYPHS[cuspSign as keyof typeof ZODIAC_GLYPHS] ?? ''
+
+  return (
+    <div className="border border-mystic-gold/10 rounded-lg p-4 mb-2">
+      <button onClick={() => setExpanded(!expanded)} className="w-full text-left flex items-start gap-3">
+        <span className="text-xl font-heading text-mystic-gold/70 w-8 text-center mt-0.5">{houseNum}</span>
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-mystic-text font-medium">{theme.name}</span>
+            <span className="text-mystic-muted">·</span>
+            <span className="text-mystic-gold">{signGlyph} {cuspSign}</span>
+          </div>
+          <p className="text-mystic-muted text-xs mt-0.5">{theme.theme}</p>
+          {planets.length > 0 && (
+            <div className="flex gap-2 mt-1.5">
+              {planets.map(p => (
+                <span key={p.name} className="text-mystic-text text-xs bg-mystic-gold/10 border border-mystic-gold/15 rounded px-1.5 py-0.5">
+                  {p.glyph} {p.name}
+                </span>
+              ))}
+            </div>
+          )}
+          {planets.length === 0 && (
+            <p className="text-mystic-muted/60 text-xs mt-1 italic">
+              Ruled by {theme.naturalRuler} — look to its placement for this house's influence
+            </p>
+          )}
+        </div>
+        <span className="text-mystic-muted text-sm">{expanded ? '−' : '+'}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 ml-11 text-sm">
+          <p className="text-mystic-text/90 leading-relaxed">{theme.brief}</p>
+          <div className="mt-2 text-mystic-muted text-xs">
+            <span className="text-mystic-gold/60">Natural ruler:</span> {PLANET_GLYPHS[theme.naturalRuler]} {theme.naturalRuler} · {ZODIAC_GLYPHS[theme.naturalSign]} {theme.naturalSign}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function HousesOverview({ chart }: { chart: ChartData }) {
+  // Map planets to their houses
+  const planetsByHouse: Record<number, { name: string; glyph: string }[]> = {}
+  for (let i = 1; i <= 12; i++) planetsByHouse[i] = []
+  for (const p of chart.planets) {
+    const glyph = PLANET_GLYPHS[p.name as PlanetName] ?? '☊'
+    planetsByHouse[p.house]?.push({ name: p.name, glyph })
+  }
+
+  return (
+    <Section title="Houses Overview">
+      <p className="text-mystic-muted text-sm mb-4">
+        The twelve houses represent different areas of life. The sign on each house cusp colors how you experience that domain.
+      </p>
+      {chart.houses.map(h => (
+        <HouseCard
+          key={h.house}
+          houseNum={h.house}
+          cuspSign={h.sign}
+          planets={planetsByHouse[h.house]}
+        />
+      ))}
     </Section>
   )
 }

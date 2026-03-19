@@ -24,11 +24,9 @@ function CachedDataLanding() {
     return `${m}/${day}/${y}`
   }
 
-  const formatTime12 = (t: string) => {
+  const formatTime24 = (t: string) => {
     const [h, m] = t.split(':').map(Number)
-    const period = h >= 12 ? 'PM' : 'AM'
-    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-    return `${h12}:${String(m).padStart(2, '0')} ${period}`
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
   return (
@@ -42,7 +40,7 @@ function CachedDataLanding() {
           </p>
           <p className="text-mystic-text">
             <span className="text-mystic-purple">Time:</span>{' '}
-            {birthData.unknownTime ? 'Unknown (solar noon)' : formatTime12(birthData.time)}
+            {birthData.unknownTime ? 'Unknown (solar noon)' : formatTime24(birthData.time)}
           </p>
           <p className="text-mystic-text">
             <span className="text-mystic-purple">Place:</span> {cityLabel}
@@ -379,7 +377,7 @@ function AppContent() {
           chart1 = calculateChart(birthData.date, birthData.time, birthData.city!.lat, birthData.city!.lng, birthData.city!.tz, birthData.unknownTime)
           aspects1 = calculateAspects(chart1.planets)
           const reading = assembleReading(chart1, aspects1, birthData.focusAreas[0])
-          dispatch({ type: 'SET_RESULTS', chartData: chart1, aspects: aspects1, reading })
+          dispatch({ type: 'CACHE_NATAL_CHART', chartData: chart1, aspects: aspects1, reading })
         }
 
         // Calculate person 2 natal chart

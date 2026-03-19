@@ -2,13 +2,11 @@ import { useApp } from '../../context/AppContext'
 import StepDate from './StepDate'
 import StepTime from './StepTime'
 import StepPlace from './StepPlace'
-import StepFocus from './StepFocus'
 
 const STEPS = [
   { label: 'Date', component: StepDate },
   { label: 'Time', component: StepTime },
   { label: 'Place', component: StepPlace },
-  { label: 'Focus', component: StepFocus },
 ]
 
 export default function FormWizard() {
@@ -21,7 +19,6 @@ export default function FormWizard() {
       case 0: return !!birthData.date
       case 1: return true // time always has default
       case 2: return !!birthData.city
-      case 3: return true // focus is optional
       default: return false
     }
   }

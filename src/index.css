@@ -117,17 +117,17 @@ body {
   50% { opacity: 0.55; }
 }
 
-/* Ambient: Sun warm radiance (warm, visible corona) */
+/* Ambient: Sun warm radiance */
 @keyframes sunRadiance {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.85; }
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
 }
 
-/* Ambient: Moon silvery shimmer (ethereal, noticeable) */
+/* Ambient: Moon silvery shimmer */
 @keyframes moonShimmer {
-  0%, 100% { opacity: 0.4; }
-  40% { opacity: 0.75; }
-  70% { opacity: 0.5; }
+  0%, 100% { opacity: 0.3; }
+  40% { opacity: 0.6; }
+  70% { opacity: 0.35; }
 }
 
 /* Ambient: Sweeping light rotation across the zodiac ring */
@@ -182,7 +182,7 @@ body {
 
   .chart-sweep {
     transform-origin: 350px 350px;
-    animation: ringSweep 35s linear infinite;
+    animation: ringSweep 30s linear infinite;
   }
 
   .chart-tooltip {
