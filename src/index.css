@@ -83,3 +83,77 @@ body {
   .no-print { display: none !important; }
   * { box-shadow: none !important; }
 }
+
+/* ===== Chart Wheel Animations ===== */
+
+/* Entrance: overall chart fade in */
+@keyframes chartFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Entrance: sign segments fade in */
+@keyframes signAppear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Entrance: planets scale in */
+@keyframes planetAppear {
+  0% { opacity: 0; transform: scale(0.3); }
+  70% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Entrance: aspect lines draw themselves */
+@keyframes aspectDraw {
+  from { stroke-dashoffset: var(--line-len, 400); opacity: 0; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+
+/* Ambient: planet glow pulse (very subtle) */
+@keyframes planetPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.55; }
+}
+
+/* Apply animations only when user has no motion preference */
+@media (prefers-reduced-motion: no-preference) {
+  .chart-svg {
+    animation: chartFadeIn 0.6s ease-out both;
+  }
+
+  .chart-sign-group {
+    opacity: 0;
+    animation: signAppear 0.4s ease-out forwards;
+    animation-delay: 0.15s;
+  }
+
+  .chart-houses {
+    opacity: 0;
+    animation: signAppear 0.4s ease-out forwards;
+    animation-delay: 0.25s;
+  }
+
+  .chart-planet {
+    transform-origin: center;
+    transform-box: fill-box;
+    opacity: 0;
+    animation: planetAppear 0.4s ease-out forwards;
+  }
+
+  .chart-aspect-line {
+    animation: aspectDraw 0.6s ease-out forwards;
+    animation-delay: 0.8s;
+    stroke-dashoffset: var(--line-len, 400);
+  }
+
+  .chart-planet-glow {
+    animation: planetPulse 7s ease-in-out infinite;
+  }
+
+  .chart-tooltip {
+    opacity: 0;
+    animation: signAppear 0.15s ease-out forwards;
+  }
+}

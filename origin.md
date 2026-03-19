@@ -208,19 +208,20 @@ Analyze the project and propose high-impact improvements.
 8. Create `proposals/index.md` listing all proposals sorted by impact-to-effort ratio
 9. The `/enhance` command can reference a proposal: `/enhance proposal:<proposal-name>` to implement it
 
-### `/plan <USER_PROMPT>`
+### `/envision <USER_PROMPT>`
 
-Think through an idea deeply without writing any code. This is a **research and design** command — it produces a comprehensive plan that can later be implemented via `/implement`.
+Explore an idea in depth — discuss the vision, research the domain, and produce a comprehensive plan that can later be executed via `/implement`. This is a **thinking and design** command — no code is written.
 
-1. Treat everything after `/plan` as the idea to plan
+1. Treat everything after `/envision` as the vision to explore
 2. Read `planning/define-product.md` to understand the current product and tech stack
 3. Read `state.md` and scan the project structure to understand what exists today
-4. **Research phase** — before writing the plan:
-   - If the idea involves a domain you're not expert in (e.g., astrology, finance, music theory), research best practices, common patterns, and standard approaches first
+4. **Vision & research phase** — think broadly before narrowing down:
+   - Understand the intent behind the idea — what problem does it solve, what experience does it create?
+   - If the idea touches a domain you're not expert in (e.g., astrology, finance, music theory), research best practices, common patterns, and standard approaches first
    - Identify existing code, components, and patterns that are relevant
    - Consider at least 2 different approaches and evaluate trade-offs
-5. **Design phase** — write a thorough plan to `plans/<plan-name>/plan.md` including:
-   - `## Idea` — the user's prompt verbatim
+5. **Design phase** — distill the vision into a concrete plan, written to `plans/<plan-name>/plan.md`:
+   - `## Vision` — the user's prompt verbatim and a brief narrative of what the end result looks and feels like
    - `## Research` — domain research findings, best practices discovered, reference patterns
    - `## Current State` — what exists today that's relevant (with file paths)
    - `## Approach` — the chosen approach with justification; mention alternatives considered and why they were rejected
@@ -230,7 +231,7 @@ Think through an idea deeply without writing any code. This is a **research and 
    - `## Implementation Checklist` — ordered, actionable tasks with enough detail that `/implement` can execute them without ambiguity
 6. The plan should be detailed enough that someone unfamiliar with the codebase could understand what to build and why
 7. Do NOT write any application code — only the plan document
-8. Output a brief summary to the user of the key decisions made
+8. Output a brief summary to the user of the key vision decisions made
 
 ### `/implement <PLAN_NAME>`
 
@@ -242,7 +243,7 @@ Execute a previously created plan from `plans/` or `proposals/`.
    - If no match is found, list available plans and ask the user to clarify
    - If multiple close matches exist, list them and ask the user to pick one
 2. Read the matched `plans/<matched-name>/plan.md` to load the full plan
-3. Verify the plan has an `## Implementation Checklist` section — if missing, warn the user and suggest running `/plan` first
+3. Verify the plan has an `## Implementation Checklist` section — if missing, warn the user and suggest running `/envision` first
 4. Create `enhancements/<matched-name>/plan.md` with the content from the plans folder, adding a header note: `> Imported from plans/<matched-name>/plan.md`
 5. Execute the plan as a standard `/enhance` workflow:
    - **Implementation**: Execute each task in the checklist, implement → verify → mark done

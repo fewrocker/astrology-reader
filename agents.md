@@ -13,7 +13,7 @@ Current commands:
 /question
 /reflect
 /propose
-/plan
+/envision
 /implement
 
 To find the list of recognized commands, read the `## Commands` section in `origin.md` — each `### /command` heading is a valid command.

@@ -1,6 +1,6 @@
-import type { ChartData } from '../../engine/types'
+import type { ChartData, ZodiacSign } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS } from '../../engine/types'
 import { useState } from 'react'
 
 interface ChartWheelProps {
@@ -8,18 +8,16 @@ interface ChartWheelProps {
   aspects: Aspect[]
 }
 
-const SIZE = 600
+const SIZE = 700
 const CX = SIZE / 2
 const CY = SIZE / 2
-const OUTER_R = SIZE / 2 - 10
-const SIGN_R = OUTER_R - 35
-const INNER_R = SIGN_R - 60
-const PLANET_R = INNER_R + 30
-const ASPECT_R = INNER_R - 15
+const OUTER_R = SIZE / 2 - 12
+const SIGN_R = OUTER_R - 40
+const INNER_R = SIGN_R - 70
+const PLANET_R = INNER_R + 35
+const ASPECT_R = INNER_R - 18
 
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
-  // In Western astrology charts, ASC is at the left (9 o'clock)
-  // and ecliptic degrees increase clockwise around the wheel
   const rad = (180 + angleDeg) * (Math.PI / 180)
   return {
     x: cx + r * Math.cos(rad),
@@ -35,22 +33,77 @@ function getAspectColor(nature: string): string {
   }
 }
 
+const ELEMENT_COLORS: Record<string, string> = {
+  Fire: 'rgba(180,80,50,0.07)',
+  Earth: 'rgba(80,140,60,0.07)',
+  Air: 'rgba(160,150,200,0.07)',
+  Water: 'rgba(60,100,170,0.07)',
+}
+
 export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
   const [hoveredPlanet, setHoveredPlanet] = useState<string | null>(null)
   const ascLon = chartData.angles.ascendant.longitude
 
-  // All positions are offset by ASC so ASC appears on the left
   const offset = (lon: number) => lon - ascLon
+
+  // Compute filtered aspects for rendering
+  const filteredAspects = aspects.filter(a =>
+    ['conjunction', 'sextile', 'square', 'trine', 'opposition'].includes(a.type)
+  )
 
   return (
     <svg
       viewBox={`0 0 ${SIZE} ${SIZE}`}
-      className="w-full max-w-[600px] mx-auto"
+      className="w-full mx-auto chart-svg"
       role="img"
       aria-label="Natal birth chart wheel"
     >
+      <defs>
+        {/* Radial gradient for chart background */}
+        <radialGradient id="chartBg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#10101a" />
+          <stop offset="100%" stopColor="#0a0a0f" />
+        </radialGradient>
+
+        {/* Planet glow filter */}
+        <filter id="planetGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+
+        {/* Gold glow for angular labels */}
+        <filter id="goldGlow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+          <feFlood floodColor="#c9a84c" floodOpacity="0.4" result="color" />
+          <feComposite in="color" in2="blur" operator="in" result="glow" />
+          <feMerge>
+            <feMergeNode in="glow" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
       {/* Background */}
-      <circle cx={CX} cy={CY} r={OUTER_R} fill="#0a0a0f" stroke="#1e1e2e" strokeWidth="1" />
+      <circle cx={CX} cy={CY} r={OUTER_R} fill="url(#chartBg)" stroke="#1e1e2e" strokeWidth="1" className="chart-outer-ring" />
+
+      {/* Degree tick marks on outer ring */}
+      {Array.from({ length: 360 }, (_, deg) => {
+        const angle = offset(deg)
+        const isMajor = deg % 10 === 0
+        const outerTick = polarToXY(CX, CY, OUTER_R, angle)
+        const innerTick = polarToXY(CX, CY, OUTER_R - (isMajor ? 5 : 2.5), angle)
+        return (
+          <line
+            key={`tick-${deg}`}
+            x1={outerTick.x}
+            y1={outerTick.y}
+            x2={innerTick.x}
+            y2={innerTick.y}
+            stroke={isMajor ? '#2a2a3a' : '#1a1a28'}
+            strokeWidth={isMajor ? 0.6 : 0.3}
+          />
+        )
+      })}
 
       {/* Zodiac sign segments */}
       {ZODIAC_SIGNS.map((sign, i) => {
@@ -63,11 +116,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         const p4 = polarToXY(CX, CY, SIGN_R, startAngle)
         const glyphPos = polarToXY(CX, CY, (OUTER_R + SIGN_R) / 2, midAngle)
 
-        // Alternating subtle fills for sign segments
-        const fills = ['#12121a', '#0e0e16']
-        const fill = fills[i % 2]
+        const element = SIGN_ELEMENTS[sign as ZodiacSign]
+        const elementColor = ELEMENT_COLORS[element] || 'transparent'
 
-        // Use arc path for the segment
         const largeArc = 0
         const d = [
           `M ${p4.x} ${p4.y}`,
@@ -78,15 +129,15 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         ].join(' ')
 
         return (
-          <g key={sign}>
-            <path d={d} fill={fill} stroke="#1e1e2e" strokeWidth="0.5" />
+          <g key={sign} className="chart-sign-group">
+            <path d={d} fill={elementColor} stroke="#1e1e2e" strokeWidth="0.5" />
             <text
               x={glyphPos.x}
               y={glyphPos.y}
               textAnchor="middle"
               dominantBaseline="central"
-              fill="#8a8694"
-              fontSize="16"
+              fill="#a8a4b4"
+              fontSize="18"
               fontFamily="serif"
             >
               {ZODIAC_GLYPHS[sign]}
@@ -99,48 +150,48 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="#1e1e2e" strokeWidth="0.5" />
 
       {/* House cusps */}
-      {chartData.houses.map((house, i) => {
-        const angle = offset(house.longitude)
-        const outerPoint = polarToXY(CX, CY, SIGN_R, angle)
-        const innerPoint = polarToXY(CX, CY, INNER_R, angle)
+      <g className="chart-houses">
+        {chartData.houses.map((house, i) => {
+          const angle = offset(house.longitude)
+          const outerPoint = polarToXY(CX, CY, SIGN_R, angle)
+          const innerPoint = polarToXY(CX, CY, INNER_R, angle)
 
-        // House number at the midpoint between this cusp and next
-        const nextLon = chartData.houses[(i + 1) % 12].longitude
-        let midLon = house.longitude + ((nextLon - house.longitude + 360) % 360) / 2
-        if (midLon > 360) midLon -= 360
-        const midAngle = offset(midLon)
-        const numPos = polarToXY(CX, CY, INNER_R + 18, midAngle)
+          const nextLon = chartData.houses[(i + 1) % 12].longitude
+          let midLon = house.longitude + ((nextLon - house.longitude + 360) % 360) / 2
+          if (midLon > 360) midLon -= 360
+          const midAngle = offset(midLon)
+          const numPos = polarToXY(CX, CY, INNER_R + 20, midAngle)
 
-        const isAngular = [1, 4, 7, 10].includes(house.house)
+          const isAngular = [1, 4, 7, 10].includes(house.house)
 
-        return (
-          <g key={`house-${house.house}`}>
-            <line
-              x1={outerPoint.x}
-              y1={outerPoint.y}
-              x2={innerPoint.x}
-              y2={innerPoint.y}
-              stroke={isAngular ? '#c9a84c44' : '#1e1e2e'}
-              strokeWidth={isAngular ? 1 : 0.5}
-            />
-            <text
-              x={numPos.x}
-              y={numPos.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fill="#5a5666"
-              fontSize="10"
-            >
-              {house.house}
-            </text>
-          </g>
-        )
-      })}
+          return (
+            <g key={`house-${house.house}`}>
+              <line
+                x1={outerPoint.x}
+                y1={outerPoint.y}
+                x2={innerPoint.x}
+                y2={innerPoint.y}
+                stroke={isAngular ? '#c9a84c66' : '#1e1e2e'}
+                strokeWidth={isAngular ? 1.5 : 0.5}
+              />
+              <text
+                x={numPos.x}
+                y={numPos.y}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#5a5666"
+                fontSize="11"
+              >
+                {house.house}
+              </text>
+            </g>
+          )
+        })}
+      </g>
 
       {/* Aspect lines */}
-      {aspects
-        .filter(a => ['conjunction', 'sextile', 'square', 'trine', 'opposition'].includes(a.type))
-        .map((aspect, i) => {
+      <g className="chart-aspects-group">
+        {filteredAspects.map((aspect, i) => {
           const p1 = chartData.planets.find(p => p.name === aspect.planet1)
           const p2 = chartData.planets.find(p => p.name === aspect.planet2)
           if (!p1 || !p2) return null
@@ -148,11 +199,22 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
           const pos1 = polarToXY(CX, CY, ASPECT_R, offset(p1.longitude))
           const pos2 = polarToXY(CX, CY, ASPECT_R, offset(p2.longitude))
           const color = getAspectColor(aspect.nature)
-          const opacity = Math.max(0.15, 1 - aspect.orb / 8)
+          const baseOpacity = Math.max(0.15, 1 - aspect.orb / 8)
+
+          // Dim non-connected aspects when a planet is hovered
+          const isConnected = !hoveredPlanet ||
+            aspect.planet1 === hoveredPlanet ||
+            aspect.planet2 === hoveredPlanet
+          const opacity = hoveredPlanet
+            ? (isConnected ? Math.min(baseOpacity + 0.2, 0.9) : 0.04)
+            : baseOpacity
+
+          const len = Math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
 
           return (
             <line
               key={`aspect-${i}`}
+              className="chart-aspect-line"
               x1={pos1.x}
               y1={pos1.y}
               x2={pos2.x}
@@ -160,12 +222,16 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
               stroke={color}
               strokeWidth={aspect.orb < 2 ? 1.5 : 0.8}
               opacity={opacity}
+              strokeDasharray={len}
+              strokeDashoffset="0"
+              style={{ '--line-len': len, transition: 'opacity 300ms ease' } as React.CSSProperties}
             />
           )
         })}
+      </g>
 
       {/* Planets */}
-      {chartData.planets.map(planet => {
+      {chartData.planets.map((planet, idx) => {
         const pos = polarToXY(CX, CY, PLANET_R, offset(planet.longitude))
         const isHovered = hoveredPlanet === planet.name
         const glyph = PLANET_GLYPHS[planet.name]
@@ -175,16 +241,32 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
             key={planet.name}
             onMouseEnter={() => setHoveredPlanet(planet.name)}
             onMouseLeave={() => setHoveredPlanet(null)}
-            className="cursor-pointer"
+            className="chart-planet cursor-pointer"
+            style={{ animationDelay: `${0.5 + idx * 0.07}s` }}
           >
+            {/* Glow circle behind planet */}
+            <circle
+              cx={pos.x}
+              cy={pos.y}
+              r={isHovered ? 18 : 14}
+              fill="transparent"
+              filter="url(#planetGlow)"
+              opacity={isHovered ? 0.7 : 0.35}
+              className="chart-planet-glow"
+              style={{
+                animationDelay: `${idx * 0.8}s`,
+                transition: 'r 200ms ease, opacity 200ms ease',
+              }}
+            />
             {/* Background circle for readability */}
             <circle
               cx={pos.x}
               cy={pos.y}
-              r={isHovered ? 14 : 11}
+              r={isHovered ? 16 : 13}
               fill="#0a0a0f"
-              stroke={isHovered ? '#c9a84c' : '#1e1e2e'}
-              strokeWidth={isHovered ? 1.5 : 0.5}
+              stroke={isHovered ? '#c9a84c' : '#2a2a3a'}
+              strokeWidth={isHovered ? 1.5 : 0.7}
+              style={{ transition: 'r 200ms ease, stroke 200ms ease, stroke-width 200ms ease' }}
             />
             <text
               x={pos.x}
@@ -192,15 +274,16 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
               textAnchor="middle"
               dominantBaseline="central"
               fill={isHovered ? '#c9a84c' : '#e8e6e3'}
-              fontSize={isHovered ? 14 : 12}
+              fontSize={isHovered ? 16 : 14}
               fontFamily="serif"
+              style={{ transition: 'fill 200ms ease, font-size 200ms ease' }}
             >
               {glyph}
             </text>
             {planet.retrograde && planet.name !== 'NorthNode' && (
               <text
-                x={pos.x + 10}
-                y={pos.y - 8}
+                x={pos.x + 12}
+                y={pos.y - 10}
                 fill="#b54a4a"
                 fontSize="8"
                 fontFamily="sans-serif"
@@ -217,23 +300,24 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         const planet = chartData.planets.find(p => p.name === hoveredPlanet)
         if (!planet) return null
         return (
-          <g>
+          <g className="chart-tooltip">
             <rect
-              x={CX - 75}
-              y={CY - 25}
-              width={150}
-              height={50}
-              rx={6}
+              x={CX - 85}
+              y={CY - 28}
+              width={170}
+              height={56}
+              rx={8}
               fill="#12121a"
               stroke="#c9a84c"
               strokeWidth={1}
-              opacity={0.95}
+              opacity={0.96}
+              filter="url(#goldGlow)"
             />
-            <text x={CX} y={CY - 8} textAnchor="middle" fill="#c9a84c" fontSize="12" fontWeight="600">
+            <text x={CX} y={CY - 8} textAnchor="middle" fill="#c9a84c" fontSize="13" fontWeight="600" fontFamily="'Playfair Display', serif">
               {planet.name === 'NorthNode' ? 'North Node' : planet.name}
               {planet.retrograde && planet.name !== 'NorthNode' ? ' ℞' : ''}
             </text>
-            <text x={CX} y={CY + 10} textAnchor="middle" fill="#e8e6e3" fontSize="11">
+            <text x={CX} y={CY + 12} textAnchor="middle" fill="#e8e6e3" fontSize="11" fontFamily="'Inter', sans-serif">
               {planet.degree}° {planet.sign} {planet.minute}' — House {planet.house}
             </text>
           </g>
@@ -247,7 +331,7 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
         { label: 'MC', pos: chartData.angles.midheaven },
         { label: 'IC', pos: chartData.angles.imumCoeli },
       ].map(({ label, pos }) => {
-        const point = polarToXY(CX, CY, OUTER_R + 2, offset(pos.longitude))
+        const point = polarToXY(CX, CY, OUTER_R + 4, offset(pos.longitude))
         return (
           <text
             key={label}
@@ -256,8 +340,9 @@ export default function ChartWheel({ chartData, aspects }: ChartWheelProps) {
             textAnchor="middle"
             dominantBaseline="central"
             fill="#c9a84c"
-            fontSize="9"
+            fontSize="11"
             fontWeight="600"
+            filter="url(#goldGlow)"
           >
             {label}
           </text>

@@ -233,7 +233,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
   return (
     <Section title={title}>
       <div className="flex justify-center mb-4">
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <ChartWheel chartData={chartData} aspects={aspects} />
         </div>
       </div>

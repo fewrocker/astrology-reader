@@ -198,7 +198,7 @@ export default function TransitReadingPage() {
 
       {/* natal chart wheel for reference */}
       <div className="flex justify-center mb-10">
-        <div className="w-full max-w-lg">
+        <div className="w-full max-w-2xl">
           <ChartWheel chartData={chartData} aspects={aspects} />
           <p className="text-center text-mystic-muted text-xs mt-2">Your natal chart</p>
         </div>
