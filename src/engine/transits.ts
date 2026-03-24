@@ -1,9 +1,10 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData } from './types'
+import type { PlanetPosition, PlanetName, ChartData, HouseCusp } from './types'
 import { PLANET_NAMES } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
+import { getHouseForLongitude } from './astronomy'
 
 export type TransitPeriod = 'daily' | 'weekly' | 'monthly'
 
@@ -79,7 +80,7 @@ function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number
 /**
  * Calculate current planetary positions for transit reading.
  */
-function calculateCurrentPositions(date: Date): TransitPosition[] {
+export function calculateCurrentPositions(date: Date): TransitPosition[] {
   const time = Astronomy.MakeTime(date)
   const positions: TransitPosition[] = []
 
@@ -116,7 +117,7 @@ function calculateCurrentPositions(date: Date): TransitPosition[] {
  * Calculate aspects between transit planets and natal planets.
  * Uses tighter orbs for transits than natal aspects.
  */
-function calculateTransitAspects(
+export function calculateTransitAspects(
   transitPlanets: TransitPosition[],
   natalPlanets: PlanetPosition[],
   period: TransitPeriod
@@ -207,7 +208,7 @@ function detectIngresses(startDate: Date, endDate: Date): SignIngress[] {
 /**
  * Get retrograde status for all planets at a given date.
  */
-function getRetrogradeStatus(date: Date): { planet: PlanetName; isRetro: boolean; status: string }[] {
+export function getRetrogradeStatus(date: Date): { planet: PlanetName; isRetro: boolean; status: string }[] {
   const time = Astronomy.MakeTime(date)
   const statuses: { planet: PlanetName; isRetro: boolean; status: string }[] = []
 
@@ -230,26 +231,52 @@ function getRetrogradeStatus(date: Date): { planet: PlanetName; isRetro: boolean
 
 /**
  * Get date range for a transit period.
+ * @param targetMonth optional "YYYY-MM" string to target a specific month (only used when period is 'monthly')
  */
-function getDateRange(period: TransitPeriod): { start: Date; end: Date; startStr: string; endStr: string } {
+function getDateRange(period: TransitPeriod, targetMonth?: string): { start: Date; end: Date; startStr: string; endStr: string } {
   const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let start: Date
   let end: Date
 
-  switch (period) {
-    case 'daily':
-      end = new Date(start.getTime() + 86400000)
-      break
-    case 'weekly':
-      end = new Date(start.getTime() + 7 * 86400000)
-      break
-    case 'monthly':
-      end = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate())
-      break
+  if (period === 'monthly' && targetMonth) {
+    const [y, m] = targetMonth.split('-').map(Number)
+    start = new Date(y, m - 1, 1)
+    end = new Date(y, m, 1)
+  } else {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    switch (period) {
+      case 'daily':
+        end = new Date(start.getTime() + 86400000)
+        break
+      case 'weekly':
+        end = new Date(start.getTime() + 7 * 86400000)
+        break
+      case 'monthly':
+        end = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate())
+        break
+    }
   }
 
   const fmt = (d: Date) => d.toISOString().split('T')[0]
   return { start, end, startStr: fmt(start), endStr: fmt(end) }
+}
+
+/**
+ * Assign natal house positions to transit planets using natal house cusps.
+ */
+export function assignTransitHouses(
+  transitPlanets: TransitPosition[],
+  natalHouses: HouseCusp[]
+): TransitPosition[] {
+  const cusps = natalHouses
+    .slice()
+    .sort((a, b) => a.house - b.house)
+    .map(h => h.longitude)
+
+  return transitPlanets.map(tp => ({
+    ...tp,
+    house: getHouseForLongitude(tp.longitude, cusps),
+  }))
 }
 
 /**
@@ -260,10 +287,22 @@ export function buildTransitPrompt(
   transitData: TransitData,
   birthDate: string,
   period: TransitPeriod,
+  targetMonth?: string,
 ): string {
-  const periodLabel = period === 'daily' ? 'today' : period === 'weekly' ? 'this week' : 'this month'
+  let periodLabel: string
+  if (period === 'daily') {
+    periodLabel = 'today'
+  } else if (period === 'weekly') {
+    periodLabel = 'this week'
+  } else if (targetMonth) {
+    const [y, m] = targetMonth.split('-').map(Number)
+    const monthName = new Date(y, m - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    periodLabel = monthName
+  } else {
+    periodLabel = 'this month'
+  }
 
-  let prompt = `You are an expert astrologer providing a ${period} transit reading.\n\n`
+  let prompt = `You are an expert astrologer providing a factual, direct ${period} transit reading. State what the transits show plainly — both favorable and difficult — without sugar-coating or generic encouragement.\n\n`
   prompt += `## Birth Chart (Natal)\n`
   prompt += `Birth date: ${birthDate}\n`
 
@@ -337,22 +376,25 @@ export function buildTransitPrompt(
     prompt += `- Comprehensive guidance (5-6 paragraphs)\n`
   }
 
-  prompt += `\nFormat your response as a warm, insightful, personal reading. Use second person ("you"). `
+  prompt += `\nFormat your response as a direct, factual, honest reading. Use second person ("you"). `
   prompt += `Do not use headers or bullet points — write flowing paragraphs. `
   prompt += `Be specific about which planets and aspects you're interpreting. `
-  prompt += `End with an encouraging, empowering note.`
+  prompt += `State favorable transits clearly and state difficult transits without softening — name real challenges and what they demand. `
+  prompt += `Do not end with generic encouragement or positivity. Close with the most relevant factual takeaway for the period.`
 
   return prompt
 }
 
 /**
  * Main function: calculate transit data for a given period.
+ * @param targetMonth optional "YYYY-MM" for a specific future month
  */
 export function calculateTransits(
   natalChart: ChartData,
-  period: TransitPeriod
+  period: TransitPeriod,
+  targetMonth?: string,
 ): TransitData {
-  const { start, end, startStr, endStr } = getDateRange(period)
+  const { start, end, startStr, endStr } = getDateRange(period, targetMonth)
 
   const currentPlanets = calculateCurrentPositions(start)
   const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period)

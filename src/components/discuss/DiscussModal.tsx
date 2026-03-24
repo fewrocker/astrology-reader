@@ -10,7 +10,7 @@ import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 interface DiscussModalProps {
   open: boolean
   onClose: () => void
-  mode: 'birth' | 'transit' | 'synastry'
+  mode: 'birth' | 'transit' | 'synastry' | 'synastry-transit'
 }
 
 function buildBirthChartContext(
@@ -53,7 +53,7 @@ function buildBirthChartContext(
     ctx += '\n'
   }
 
-  if (reading.patterns.length > 0) {
+  if (reading.patterns?.length > 0) {
     ctx += `\n### Aspect Patterns\n`
     for (const pr of reading.patterns) {
       ctx += `- ${pr.interpretation.symbol} ${pr.pattern.type}: ${pr.pattern.planets.join(', ')}\n`
@@ -77,7 +77,7 @@ function buildBirthChartContext(
   ctx += `${mod.interpretation.dominant}\n`
   if (mod.interpretation.lacking) ctx += `${mod.interpretation.lacking}\n`
 
-  if (reading.mutualReceptions.length > 0) {
+  if (reading.mutualReceptions?.length > 0) {
     ctx += `\n### Mutual Receptions\n`
     for (const mr of reading.mutualReceptions) {
       ctx += `- ${mr.planet1} in ${mr.sign1} ⇄ ${mr.planet2} in ${mr.sign2}: ${mr.interpretation}\n`
@@ -85,7 +85,7 @@ function buildBirthChartContext(
   }
 
   const retrogradePlanets = reading.planets.filter(pr => pr.retrogradeInterpretation)
-  if (retrogradePlanets.length > 0) {
+  if (retrogradePlanets.length > 0 && reading.retrogradeSummary) {
     ctx += `\n### Natal Retrograde Planets (${retrogradePlanets.length})\n`
     ctx += `${reading.retrogradeSummary.headline}: ${reading.retrogradeSummary.narrative}\n`
     for (const pr of retrogradePlanets) {
@@ -95,7 +95,7 @@ function buildBirthChartContext(
 
   if (reading.focus) {
     ctx += `\n### Focus Area: ${reading.focus.area}\n${reading.focus.description}\n`
-    if (reading.focus.relevantPlanets.length > 0) {
+    if (reading.focus.relevantPlanets?.length > 0) {
       ctx += `Key planets for this area:\n`
       for (const rp of reading.focus.relevantPlanets) {
         ctx += `- ${rp.planet.name} in ${rp.planet.sign} (House ${rp.planet.house})`
@@ -103,7 +103,7 @@ function buildBirthChartContext(
         ctx += '\n'
       }
     }
-    if (reading.focus.relevantAspects.length > 0) {
+    if (reading.focus.relevantAspects?.length > 0) {
       ctx += `Key aspects for this area:\n`
       for (const ra of reading.focus.relevantAspects) {
         ctx += `- ${ra.aspect.planet1} ${ra.aspect.symbol} ${ra.aspect.planet2} (${ra.aspect.type})`
@@ -189,7 +189,7 @@ function buildSynastryContext(
     ctx += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
   }
 
-  if (synastryData.houseOverlay.person1InPerson2Houses.length > 0) {
+  if (synastryData.houseOverlay?.person1InPerson2Houses?.length > 0) {
     ctx += `\n### House Overlays\n`
     ctx += `P1 planets in P2 houses:\n`
     for (const h of synastryData.houseOverlay.person1InPerson2Houses) {
@@ -215,6 +215,59 @@ function buildSynastryContext(
   if (synastryInterpretation) {
     ctx += `\n### Previous Synastry Interpretation\n${synastryInterpretation}\n`
   }
+
+  return ctx
+}
+
+function buildSynastryTransitContext(
+  synastryData: SynastryData,
+  transitData: TransitData,
+  transitPeriod: TransitPeriod,
+  transitInterpretation: string | null,
+  person1Date: string,
+  person2Date: string,
+  person1City: string,
+  person2City: string,
+): string {
+  let ctx = `## Couple Transit Reading (${transitPeriod})\n`
+  ctx += `Period: ${transitData.dateRange.start} to ${transitData.dateRange.end}\n`
+  ctx += `Person 1: ${person1Date} — ${person1City}\n`
+  ctx += `Person 2: ${person2Date} — ${person2City}\n\n`
+
+  ctx += `### Composite Chart\n`
+  for (const p of synastryData.compositeChart.planets) {
+    ctx += `- Composite ${p.name}: ${p.degree}°${p.minute}' ${p.sign}\n`
+  }
+
+  ctx += `\n### Key Synastry Aspects\n`
+  for (const a of synastryData.synastryAspects.slice(0, 15)) {
+    ctx += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
+  }
+
+  ctx += `\n### Current Transit Planet Positions\n`
+  for (const p of transitData.currentPlanets) {
+    if (p.name === 'NorthNode') continue
+    ctx += `- Transit ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
+  }
+
+  ctx += `\n### Transit Aspects to Composite Chart\n`
+  if (transitData.transitAspects.length === 0) {
+    ctx += `No major transit aspects to composite within orb.\n`
+  } else {
+    for (const a of transitData.transitAspects) {
+      ctx += `- Transit ${a.transitPlanet} ${a.symbol} Composite ${a.natalPlanet} (${a.type}, orb ${a.orb}°, ${a.applying ? 'applying' : 'separating'}, ${a.nature})\n`
+    }
+  }
+
+  if (transitInterpretation) {
+    ctx += `\n### Transit Interpretation for This Period\n${transitInterpretation}\n`
+  }
+
+  ctx += `\n### Compatibility Summary\n`
+  ctx += `Elements: ${synastryData.compatibility.elementCompatibility}\n`
+  ctx += `Modalities: ${synastryData.compatibility.modalityCompatibility}\n`
+  ctx += `Harmonious: ${synastryData.compatibility.harmoniousCount}, Challenging: ${synastryData.compatibility.challengingCount}\n`
+  ctx += `Key themes: ${synastryData.compatibility.keyThemes.join('; ')}\n`
 
   return ctx
 }
@@ -250,13 +303,16 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
 
   if (!open) return null
 
-  const { chartData, reading, birthData, transitData, transitPeriod, transitInterpretation, partnerBirthData, partnerChartData, synastryData, synastryInterpretation } = state
+  const { chartData, reading, birthData, transitData, transitPeriod, transitInterpretation, partnerBirthData, partnerChartData, synastryData, synastryInterpretation, synastryTransitData, synastryTransitPeriod, synastryTransitInterpretation } = state
   if (!chartData || !reading) return null
 
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
   const partnerCityLabel = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
   const buildContext = (): string => {
+    if (mode === 'synastry-transit' && synastryData && synastryTransitData && synastryTransitPeriod) {
+      return buildSynastryTransitContext(synastryData, synastryTransitData, synastryTransitPeriod, synastryTransitInterpretation, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel)
+    }
     if (mode === 'synastry' && partnerChartData && synastryData) {
       return buildSynastryContext(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, synastryInterpretation)
     }
@@ -308,10 +364,10 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
         <div className="flex items-center justify-between px-6 py-4 border-b border-mystic-gold/20">
           <div>
             <h3 className="font-heading text-xl text-mystic-gold">
-              Discuss Your {mode === 'synastry' ? 'Compatibility' : mode === 'transit' ? 'Transit Reading' : 'Birth Chart'}
+              Discuss Your {mode === 'synastry-transit' ? 'Couple Transits' : mode === 'synastry' ? 'Compatibility' : mode === 'transit' ? 'Transit Reading' : 'Birth Chart'}
             </h3>
             <p className="text-mystic-muted text-xs mt-0.5">
-              Ask anything about your {mode === 'synastry' ? 'couple synastry and compatibility' : mode === 'transit' ? 'transits and natal chart' : 'natal chart and placements'}
+              Ask anything about your {mode === 'synastry-transit' ? 'couple transit reading for this period' : mode === 'synastry' ? 'couple synastry and compatibility' : mode === 'transit' ? 'transits and natal chart' : 'natal chart and placements'}
             </p>
           </div>
           <button
@@ -336,10 +392,12 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
                 <div className="discuss-oracle-core">✧</div>
               </div>
               <p className="font-heading text-mystic-gold/80 text-base mb-1">
-                {mode === 'synastry' ? 'The Stars Speak of Two Souls' : mode === 'transit' ? 'The Cosmos Is in Motion' : 'Your Stars Await'}
+                {mode === 'synastry-transit' ? 'The Heavens Move Between You' : mode === 'synastry' ? 'The Stars Speak of Two Souls' : mode === 'transit' ? 'The Cosmos Is in Motion' : 'Your Stars Await'}
               </p>
               <p className="text-mystic-muted text-sm max-w-md mx-auto">
-                {mode === 'synastry'
+                {mode === 'synastry-transit'
+                  ? 'Ask how current transits are shaping your relationship during this period.'
+                  : mode === 'synastry'
                   ? 'Ask about your celestial connection — the planets reveal what draws you together and where you grow.'
                   : mode === 'transit'
                     ? 'The heavens shift above you. Ask what the current transits illuminate in your journey.'
@@ -347,7 +405,14 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
                 }
               </p>
               <div className="mt-6 flex flex-wrap gap-2 justify-center">
-                {mode === 'synastry' ? (
+                {mode === 'synastry-transit' ? (
+                  <>
+                    <SuggestionChip text="What should we focus on this period?" onClick={setInput} />
+                    <SuggestionChip text="Any relationship challenges ahead?" onClick={setInput} />
+                    <SuggestionChip text="How do these transits affect our communication?" onClick={setInput} />
+                    <SuggestionChip text="What's the best energy for us right now?" onClick={setInput} />
+                  </>
+                ) : mode === 'synastry' ? (
                   <>
                     <SuggestionChip text="What's our strongest connection?" onClick={setInput} />
                     <SuggestionChip text="How can we communicate better?" onClick={setInput} />

@@ -3,10 +3,10 @@
 ## Current Position
 - Phase: DEVELOPMENT
 - Step: Enhancement complete
-- Status: retrograde-interpretations enhancement implemented
+- Status: transit-timeline enhancement implemented
 
 ## Last Action
-Implemented retrograde-interpretations: natal retrograde interpretation data for 8 planets, transit retrograde context, Retrograde Planets summary section in birth chart reading, retrograde interpretation in expanded planet cards, redesigned transit retrograde activity with interpretive text, GPT discuss context integration.
+Implemented transit-timeline: Transit Timeline & Aspect Calendar with tabbed reading/timeline view, binary-search aspect perfection dates, sign ingresses, retrograde stations, lunar phases, Moon sign changes, Power Day highlights, event filtering, enriched interpretations.
 
 ## Next Action
 None — enhancement complete, ready for user testing.
@@ -26,3 +26,6 @@ None
 - ENHANCEMENTS: expand-interpretations (expanded aspects, pattern flavors, enriched focus areas, GPT discuss context)
 - ENHANCEMENTS: planetary-dignities (dignities data, badges, strength section, mutual receptions, GPT context)
 - ENHANCEMENTS: retrograde-interpretations (natal retro interpretations, summary section, transit retro context, GPT discuss integration)
+- ENHANCEMENTS: interactive-chart-tooltips (800×800 chart, rich planet/aspect/house tooltips with interpretations)
+- ENHANCEMENTS: transit-bi-wheel (bi-wheel chart overlay, transit planet ring, dashed aspect lines, transit tooltips, house assignments)
+- ENHANCEMENTS: transit-timeline (timeline tab, aspect perfection dates, ingresses, stations, lunar phases, Moon signs, Power Days, event filtering)

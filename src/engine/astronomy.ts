@@ -201,7 +201,7 @@ function eclipticLongFromRA(raRad: number, oblRad: number): number {
 /**
  * Determine which house a planet is in based on house cusps.
  */
-function getHouseForLongitude(longitude: number, cusps: number[]): number {
+export function getHouseForLongitude(longitude: number, cusps: number[]): number {
   for (let i = 0; i < 12; i++) {
     const nextI = (i + 1) % 12
     const start = cusps[i]

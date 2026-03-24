@@ -22,7 +22,40 @@ The user's original prompt must be preserved verbatim in `plan.md` under a `## U
 At any time, execution starts with:
 
 > follow origin.md
+---
 
+## Folder Structure
+
+The workspace is organized into two parallel top-level folders:
+
+```
+aios/          ← project documentation, plans, state, and all AIOS artifacts
+  origin.md
+  plan.md
+  state.md
+  planning/
+  setup/
+  development/
+  review/
+  enhancements/
+  plans/
+  proposals/
+  bug_fixes/
+  steering/
+  reflections/
+  documentation.md
+
+app/           ← actual project source code and configuration
+  (framework files, src/, package.json, etc.)
+```
+
+**Rules:**
+- All AIOS documents (plans, state, checklists, roadmaps, reviews, etc.) live inside `aios/`.
+- All application source code, configs, and dependencies live inside `app/`.
+- During **Project Initialization**, create both `aios/` and `app/` folders before anything else.
+- When running build commands, installing dependencies, or starting the app, execute them from inside `app/`.
+- All file references in AIOS documents (e.g., `plan.md`, `state.md`, `development/roadmap.md`) are relative to `aios/`.
+- When AIOS documents reference application code files, use paths relative to `app/` and prefix them clearly (e.g., `app/src/index.ts`).
 ---
 
 ## Commands
@@ -35,10 +68,11 @@ Start a new project from scratch.
 
 1. Treat everything after `/birth` as the user's project idea
 2. Verify the workspace is empty (only `origin.md` and `.github/` should exist). If other project files exist, warn the user and ask for confirmation before overwriting.
-3. Execute the full lifecycle starting from **Project Initialization**:
-   - Save the raw prompt to `plan.md` under `## User Prompt`
+3. Create the top-level folder structure: `aios/` for project documentation and `app/` for application source code (see **Folder Structure** section)
+4. Execute the full lifecycle starting from **Project Initialization**:
+   - Save the raw prompt to `aios/plan.md` under `## User Prompt`
    - Proceed through PLANNING → SETUP → DEVELOPMENT → REVIEW
-4. Follow all rules, gate checks, and verification steps defined in this file
+5. Follow all rules, gate checks, and verification steps defined in this file
 
 ### `/continue`
 
@@ -56,13 +90,15 @@ Add or improve a feature in the existing project.
 
 This is a **mini-lifecycle** scoped to a single enhancement:
 
+**Enhancement folders are numbered sequentially** in the order they are created, using the format `<NNN>-<enhancement-name>` where NNN is a zero-padded three-digit number (001, 002, 003, ...). To determine the next number, list existing folders in `enhancements/` and increment the highest number.
+
 **1. Analysis** (do NOT write code yet)
    - Read the user's prompt to understand the desired change
    - Read `planning/define-product.md` to understand the original product scope
    - Identify all files related to the feature (search the codebase)
    - Read every related file and summarize what is currently implemented
    - Identify the gap between current state and the user's request
-   - Write the analysis to `enhancements/<enhancement-name>/plan.md` including:
+   - Write the analysis to `enhancements/<NNN>-<enhancement-name>/plan.md` including:
      - What exists today (with file paths)
      - What the user wants
      - What needs to change (specific files and modifications)
@@ -77,8 +113,24 @@ This is a **mini-lifecycle** scoped to a single enhancement:
    - Run the app and verify the enhancement works
    - Run the build and confirm zero errors
    - **Re-test ALL existing features from `planning/define-product.md`** to confirm no regressions
-   - Document results in `enhancements/<enhancement-name>/result.md` including regression test results
+   - Document results in `enhancements/<NNN>-<enhancement-name>/result.md` using the **Regression Tests Template** below
    - Update `planning/define-product.md` feature list if a new feature was added
+
+**Regression Tests Template** for `result.md`:
+
+```md
+## Enhancement Result
+[Summary of what was implemented and verified]
+
+## Regression Tests
+| # | Feature (from define-product.md) | Status | Notes |
+|---|----------------------------------|--------|-------|
+| 1 | [feature name]                   | ✅ Pass / ❌ Fail | [details] |
+| 2 | ...                              |        |       |
+
+## Regressions Found
+["None" or description of regressions and how they were resolved]
+```
 
 **4. Documentation Sync**
    - Update `documentation.md` to reflect any changed or added features
@@ -96,7 +148,7 @@ Update feature documentation based on recent changes.
    - Which features were affected?
    - What was added, modified, or removed?
 6. Update `documentation.md` to reflect the current state of all affected features
-7. If an enhancement caused the changes, also update `enhancements/<name>/result.md`
+7. If an enhancement caused the changes, also update `enhancements/<NNN>-<name>/result.md`
 8. Update `state.md` → `## Last Documented Commit` with the current HEAD commit hash
 9. Output a summary of what documentation was updated
 
@@ -180,33 +232,37 @@ Generate a reflection on how well the project followed the origin.md framework, 
    - Were verification rules followed?
    - Were features scoped correctly to `planning/define-product.md`?
 6. Identify what was followed, what was skipped, and what broke
-7. Propose specific improvements to origin.md based on what was learned
+7. Propose specific improvements to origin.md based on what was learned with the objective of giving better software results.
 8. Write the reflection to `reflections/<date-or-name>.md`
 
-### `/propose`
+### `/propose [GUIDANCE]`
 
 Analyze the project and propose high-impact improvements.
+
+Optionally, the user may provide guidance text after `/propose`. This guidance steers the direction, focus, or constraints of the proposals generated (e.g., `/propose focus on mobile experience and offline support`). If guidance is provided, weight the analysis and proposals toward the user's stated direction.
 
 1. Read `planning/define-product.md` for the full feature list
 2. Read `documentation.md` to understand current implementation
 3. Read `review/known-issues.md` and `review/test-results.md` if they exist
 4. Read `planning/define-product.md` → `## Proposed Features` if it exists
-5. Analyze the project holistically and propose ideas across these categories:
+5. If guidance was provided, interpret it as the lens through which to evaluate and prioritize proposals
+6. Analyze the project holistically and propose ideas across these categories:
    - **New features** that would have the greatest user impact
    - **Performance improvements** based on current architecture
    - **UI/UX enhancements** that improve usability
    - **Technical debt** that should be addressed
-6. For each proposal, evaluate:
+7. For each proposal, evaluate:
    - Impact (high/medium/low)
    - Effort (high/medium/low)
    - Dependencies on existing features
-7. Write proposals to `proposals/<proposal-name>.md` with:
+8. Write proposals to `proposals/<proposal-name>.md` with:
+   - User guidance (if provided, quoted verbatim)
    - Problem or opportunity description
    - Proposed solution (concise)
    - Impact and effort assessment
    - Implementation summary (key files and changes)
-8. Create `proposals/index.md` listing all proposals sorted by impact-to-effort ratio
-9. The `/enhance` command can reference a proposal: `/enhance proposal:<proposal-name>` to implement it
+9. Create `proposals/index.md` listing all proposals sorted by impact-to-effort ratio
+10. The `/enhance` command can reference a proposal: `/enhance proposal:<proposal-name>` to implement it
 
 ### `/envision <USER_PROMPT>`
 
@@ -233,24 +289,50 @@ Explore an idea in depth — discuss the vision, research the domain, and produc
 7. Do NOT write any application code — only the plan document
 8. Output a brief summary to the user of the key vision decisions made
 
-### `/implement <PLAN_NAME>`
+### `/implement <PLAN_NAME> [EXTRA_INSTRUCTIONS]`
 
 Execute a previously created plan from `plans/` or `proposals/`.
+
+The first token(s) after `/implement` are used to fuzzy-match a plan or proposal name. Any remaining text after the matched name is treated as **extra instructions** that supplement the plan during implementation (e.g., `/implement auth-system use JWT with refresh tokens and store in httpOnly cookies`).
 
 1. Fuzzy-match `<PLAN_NAME>` against folder names inside `plans/` or `proposals/`:
    - List all directories in `plans/` or `proposals/`
    - Find the best match (case-insensitive, partial match, Levenshtein-tolerant)
    - If no match is found, list available plans and ask the user to clarify
    - If multiple close matches exist, list them and ask the user to pick one
+   - Once matched, treat any remaining text after the matched name as extra instructions
 2. Read the matched `plans/<matched-name>/plan.md` to load the full plan
 3. Verify the plan has an `## Implementation Checklist` section — if missing, warn the user and suggest running `/envision` first
-4. Create `enhancements/<matched-name>/plan.md` with the content from the plans folder, adding a header note: `> Imported from plans/<matched-name>/plan.md`
-5. Execute the plan as a standard `/enhance` workflow:
-   - **Implementation**: Execute each task in the checklist, implement → verify → mark done
-   - **Verification**: Run the app, run the build, confirm zero errors, re-test existing features for regressions
-   - **Documentation**: Write `enhancements/<matched-name>/result.md`, update `planning/define-product.md` if a new feature was added, update `documentation.md`
-6. Update `state.md` throughout
-7. On completion, add a `## Status: Implemented` section to the original `plans/<matched-name>/plan.md` with a link to the enhancement results
+4. Create `enhancements/<NNN>-<matched-name>/plan.md` with the content from the plans folder, adding a header note: `> Imported from plans/<matched-name>/plan.md`
+5. If extra instructions were provided, append them to `enhancements/<NNN>-<matched-name>/plan.md` under a `## Extra Instructions` section (quoted verbatim). These instructions must be considered throughout implementation — they may refine approach, add constraints, or specify preferences.
+6. Execute the plan as a standard `/enhance` workflow:
+   - **Implementation**: Execute each task in the checklist, applying extra instructions where relevant. Implement → verify → mark done
+   - **Verification**: Run the app, run the build, confirm zero errors, re-test existing features for regressions using the **Regression Tests Template**
+   - **Documentation**: Write `enhancements/<NNN>-<matched-name>/result.md`, update `planning/define-product.md` if a new feature was added, update `documentation.md`
+7. Update `state.md` throughout
+8. On completion, add a `## Status: Implemented` section to the original `plans/<matched-name>/plan.md` with a link to the enhancement results (`enhancements/<NNN>-<matched-name>/`)
+
+### `/deploy`
+
+Generate a deployment plan tailored to the project's stack and put it live.
+
+1. Read `setup/tech-stack.md` to understand the technology stack
+2. Read `planning/define-product.md` to understand what the product does
+3. Read `state.md` to confirm the project is in a deployable state (DEVELOPMENT or REVIEW complete)
+4. Analyze the stack and determine the **simplest production deployment path**:
+   - Static frontend → Vercel, Netlify, or Cloudflare Pages
+   - Node.js backend → Railway, Render, or Fly.io
+   - Full-stack monolith → Railway or Render
+   - Database needed → provider's managed DB or Supabase/Neon
+   - Choose the option with the least configuration and fastest time-to-live
+5. Write a step-by-step deployment guide to `setup/deploy.md` including:
+   - `## Prerequisites` — accounts to create, CLI tools to install, environment variables to set
+   - `## Build` — exact commands to produce a production build
+   - `## Deploy Steps` — numbered, copy-paste-ready commands to deploy (e.g., `npx vercel --prod`, `railway up`, `fly deploy`)
+   - `## Environment Variables` — every env var the app needs in production, with descriptions (never include actual secrets)
+   - `## Domain & DNS` (optional) — how to connect a custom domain if desired
+   - `## Post-Deploy Verification` — how to confirm the deployment is working (URLs to check, health endpoints, smoke tests)
+   - `## Rollback` — how to revert to a previous version if something breaks
 
 ---
 
@@ -273,6 +355,7 @@ Follow the operational guidelines in origin.md thorougly.
 11. **Always prefer the simplest working solution over complex or speculative implementations.** No overengineering, no hallucinated architecture, no unnecessary abstractions.
 12. **Before executing a task, verify all its dependencies are complete.** If dependencies are missing, complete them first or update the plan to reflect the correct order.
 13. **During DEVELOPMENT, do NOT introduce new features not present in `planning/define-product.md`.** If a new feature is discovered as necessary, add it to a `## Proposed Features` section in `planning/define-product.md` — do NOT implement it. It can be implemented later via `/enhance` or `/propose`.
+14. **Before executing any task, perform a Pre-Implementation Check** (see Pre-Implementation Check section below). If the check fails, STOP and refine the step's plan before continuing.
 
 ---
 
@@ -280,19 +363,20 @@ Follow the operational guidelines in origin.md thorougly.
 
 If `plan.md` does not exist:
 
-1. Create `plan.md`
-2. Copy the user's original prompt **verbatim** into a `## User Prompt` section at the top of `plan.md` (before any analysis or expansion). This raw prompt is preserved forever as the source of truth for the user's intent.
-3. Create `state.md` with `## Current Position` set to `Phase: PLANNING, Status: in-progress`
-4. Expand the initial user prompt into a full project definition. Repeat the Great Core Rule on the plan.
-5. Define the main phases as per the Standard Phases below.
+1. Create the `aios/` and `app/` top-level folders (see **Folder Structure** section)
+2. Create `aios/plan.md`
+3. Copy the user's original prompt **verbatim** into a `## User Prompt` section at the top of `plan.md` (before any analysis or expansion). This raw prompt is preserved forever as the source of truth for the user's intent.
+4. Create `aios/state.md` with `## Current Position` set to `Phase: PLANNING, Status: in-progress`
+5. Expand the initial user prompt into a full project definition. Repeat the Great Core Rule on the plan.
+6. Define the main phases as per the Standard Phases below.
 
 * PLANNING
 * SETUP
 * DEVELOPMENT
 * REVIEW
 
-6. For each phase, when you start executing the step:
-   * create a folder for that step
+7. For each phase, when you start executing the step:
+   * create a folder for that step inside `aios/`
    * create a `plan.md` with the description and checklist
    * update `state.md` to reflect the current position
 
@@ -322,15 +406,39 @@ If `plan.md` does not exist:
   The **features list is mandatory** and will be used later.
   **Output:** `planning/define-product.md`
 
+* Step: Define design guidelines
+  Create a clear UI/UX direction for the product.
+
+  This defines the product's "taste" and must guide all UI decisions.
+
+  Include:
+  - Design principles (e.g., minimal, fast, playful, dense, etc.)
+  - Target user behavior (how users should feel and interact)
+  - Layout patterns (dashboard, single-page, multi-step flows, etc.)
+  - Interaction patterns (modals, inline editing, navigation style)
+  - Complexity guidelines (simple vs powerful vs flexible)
+  - Visual tone (colors, spacing, density, typography style)
+
+  Also include:
+  - Examples of similar products with strong UX
+  - What to emulate vs what to avoid
+
+  **Output:** `planning/design-guidelines.md`
+
 **GATE CHECK — PLANNING:**
 Before proceeding to SETUP:
 1. Run: `find planning/ -name "*.md" | sort` and confirm the output matches:
+   - `planning/design-guidelines.md`
    - `planning/expand-idea.md`
    - `planning/research.md`
    - `planning/define-product.md`
 2. **Content verification:** Open `planning/define-product.md` and confirm it contains a clearly numbered feature list (e.g., `F1`, `F2`, or `1.`, `2.`). If the feature list is missing or vague, STOP and rewrite it before proceeding.
-3. Verify each planning doc has substantive content (not just headers or stubs).
-4. **State check:** Verify `state.md` exists and `## Current Position` shows `Phase: PLANNING, Status: complete`.
+3. Verify `planning/design-guidelines.md` exists and includes:
+   - design principles
+   - UX patterns
+   - examples or references
+4. Verify each planning doc has substantive content (not just headers or stubs).
+5. **State check:** Verify `state.md` exists and `## Current Position` shows `Phase: PLANNING, Status: complete`.
 
 If any file is missing or fails content verification, STOP and fix it. Do NOT proceed to SETUP until all checks pass.
 
@@ -447,17 +555,6 @@ Do NOT start the next step until the current one is fully complete.
 
 ---
 
-#### Integration Coherence Check
-
-After completing each development step:
-
-1. Verify the step integrates correctly with all previously completed steps
-2. Check for conflicts in architecture, APIs, data models, or shared state
-3. If a conflict is found, resolve it before moving to the next step
-4. Document any integration notes in the step's `plan.md` under `## Integration Notes`
-
----
-
 #### Feature Documentation
 
 Maintain a single `documentation.md` file at the project root. After completing each development step:
@@ -569,6 +666,21 @@ When resuming work (e.g., after /continue command):
 2. Find the first incomplete phase or step
 3. **Read the previous phase/step's outputs and verify they exist** (show your work rule)
 4. Navigate to the current step
+
+### Pre-Implementation Check
+
+Before executing any task, write a brief `## Pre-Implementation Check` in the step's `plan.md` covering:
+
+1. **Alignment** — Re-read `aios/plan.md` → `## User Prompt` and `planning/define-product.md` → feature list. Confirm:
+   - The task directly contributes to a defined feature
+   - No new feature is being introduced
+   - The implementation aligns with the original user intent
+2. **UX** (if the task involves UI) — Read `planning/design-guidelines.md` and note:
+   - Which patterns and principles apply
+   - Is this the simplest interface a new user would understand in 5 seconds?
+3. **Integration** — Check that the task won't conflict with previously completed steps in architecture, APIs, data models, or shared state. Note any integration considerations.
+
+If any check fails or alignment is unclear, STOP and refine the step plan before proceeding.
 
 If the step folder does not exist:
 

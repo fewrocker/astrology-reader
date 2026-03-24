@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
+import { assignTransitHouses } from '../../engine/transits'
+import { buildTransitTimeline } from '../../engine/transitTimeline'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
+import TransitTimeline from '../reading/TransitTimeline'
+import AdvanceTab from '../reading/AdvanceTab'
 import DiscussModal from '../discuss/DiscussModal'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
@@ -178,6 +182,20 @@ export default function TransitReadingPage() {
   const { state, dispatch } = useApp()
   const { chartData, aspects, transitData, transitInterpretation, transitPeriod, birthData } = state
   const [discussOpen, setDiscussOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<'reading' | 'timeline' | 'advance'>('reading')
+
+  const housedTransitPlanets = useMemo(
+    () => chartData && transitData ? assignTransitHouses(transitData.currentPlanets, chartData.houses) : [],
+    [transitData?.currentPlanets, chartData?.houses]
+  )
+
+  const timelineDays = useMemo(
+    () => {
+      if (!chartData || !transitPeriod) return []
+      return buildTransitTimeline(chartData, transitPeriod, state.transitTargetMonth ?? undefined)
+    },
+    [chartData, transitPeriod, state.transitTargetMonth]
+  )
 
   if (!chartData || !transitData || !transitPeriod) return null
 
@@ -209,30 +227,101 @@ export default function TransitReadingPage() {
         </p>
       </div>
 
-      {/* natal chart wheel for reference */}
-      <div className="flex justify-center mb-10">
-        <div className="w-full max-w-2xl">
-          <ChartWheel chartData={chartData} aspects={aspects} />
-          <p className="text-center text-mystic-muted text-xs mt-2">Your natal chart</p>
+      {/* natal chart wheel with transit overlay (hidden on Advance tab which has its own) */}
+      {activeTab !== 'advance' && (
+        <div className="flex justify-center mb-6">
+          <div className="w-full max-w-2xl">
+            <ChartWheel
+              chartData={chartData}
+              aspects={aspects}
+              transitPlanets={housedTransitPlanets}
+              transitAspects={transitData.transitAspects}
+            />
+            <p className="text-center text-mystic-muted text-xs mt-2">Your natal chart with current transits</p>
+          </div>
+        </div>
+      )}
+
+      {/* Tab toggle: Reading / Timeline */}
+      <div className="flex justify-center mb-8">
+        <div className="inline-flex bg-mystic-surface/50 border border-mystic-border rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab('reading')}
+            className={`px-5 py-2 text-sm font-heading rounded-md transition-colors ${
+              activeTab === 'reading'
+                ? 'bg-mystic-gold/20 text-mystic-gold border border-mystic-gold/30'
+                : 'text-mystic-muted hover:text-mystic-text border border-transparent'
+            }`}
+          >
+            ✦ Reading
+          </button>
+          <button
+            onClick={() => setActiveTab('timeline')}
+            className={`px-5 py-2 text-sm font-heading rounded-md transition-colors ${
+              activeTab === 'timeline'
+                ? 'bg-mystic-purple/20 text-mystic-purple border border-mystic-purple/30'
+                : 'text-mystic-muted hover:text-mystic-text border border-transparent'
+            }`}
+          >
+            ◆ Timeline
+          </button>
+          <button
+            onClick={() => setActiveTab('advance')}
+            className={`px-5 py-2 text-sm font-heading rounded-md transition-colors ${
+              activeTab === 'advance'
+                ? 'bg-mystic-blue/20 text-mystic-blue border border-mystic-blue/30'
+                : 'text-mystic-muted hover:text-mystic-text border border-transparent'
+            }`}
+          >
+            ◆ Advance
+          </button>
         </div>
       </div>
 
-      {/* GPT interpretation */}
-      {transitInterpretation && (
-        <TransitInterpretation text={transitInterpretation} />
+      {/* Reading tab content */}
+      {activeTab === 'reading' && (
+        <>
+          {/* GPT interpretation */}
+          {transitInterpretation && (
+            <TransitInterpretation text={transitInterpretation} />
+          )}
+
+          {/* transit aspects to natal */}
+          <TransitAspectsSection transitData={transitData} />
+
+          {/* sign changes */}
+          <IngressesSection transitData={transitData} />
+
+          {/* retrograde activity */}
+          <RetrogradeSection transitData={transitData} />
+
+          {/* current planet positions */}
+          <CurrentPlanetsTable transitData={transitData} />
+        </>
       )}
 
-      {/* transit aspects to natal */}
-      <TransitAspectsSection transitData={transitData} />
+      {/* Timeline tab content */}
+      {activeTab === 'timeline' && (
+        <div className="mb-8">
+          <h2 className="font-heading text-2xl text-mystic-purple mb-4">◆ Transit Timeline</h2>
+          <p className="text-mystic-muted text-sm mb-6">
+            Key astrological events for your {transitPeriod} period — when each transit perfects, planets change signs, and lunar phases occur.
+          </p>
+          <TransitTimeline days={timelineDays} />
+        </div>
+      )}
 
-      {/* sign changes */}
-      <IngressesSection transitData={transitData} />
-
-      {/* retrograde activity */}
-      <RetrogradeSection transitData={transitData} />
-
-      {/* current planet positions */}
-      <CurrentPlanetsTable transitData={transitData} />
+      {/* Advance tab content */}
+      {activeTab === 'advance' && (
+        <div className="mb-8">
+          <AdvanceTab
+            chartData={chartData}
+            aspects={aspects}
+            period={transitPeriod}
+            baseDate={new Date(transitData.dateRange.start + 'T12:00:00')}
+          />
+        </div>
+      )}
 
       {/* navigation buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8 mb-12">

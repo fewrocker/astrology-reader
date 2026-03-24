@@ -58,6 +58,8 @@ export interface AppState {
   synastryTransitData: TransitData | null
   synastryTransitInterpretation: string | null
   synastryError: string | null
+  transitTargetMonth: string | null
+  synastryTransitTargetMonth: string | null
 }
 
 export type AppAction =
@@ -67,7 +69,7 @@ export type AppAction =
   | { type: 'SET_RESULTS'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'RESET' }
   | { type: 'CLEAR_CACHE' }
-  | { type: 'START_TRANSIT'; period: TransitPeriod }
+  | { type: 'START_TRANSIT'; period: TransitPeriod; targetMonth?: string }
   | { type: 'PENDING_TRANSIT' }
   | { type: 'SET_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
   | { type: 'SET_TRANSIT_ERROR'; error: string }
@@ -75,7 +77,7 @@ export type AppAction =
   | { type: 'CACHE_NATAL_CHART'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'SET_SYNASTRY_RESULTS'; partnerChartData: ChartData; partnerAspects: Aspect[]; synastryData: SynastryData; interpretation: string }
   | { type: 'SET_SYNASTRY_ERROR'; error: string }
-  | { type: 'START_SYNASTRY_TRANSIT'; period: TransitPeriod }
+  | { type: 'START_SYNASTRY_TRANSIT'; period: TransitPeriod; targetMonth?: string }
   | { type: 'SET_SYNASTRY_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
   | { type: 'SET_SYNASTRY_TRANSIT_ERROR'; error: string }
 
@@ -251,6 +253,8 @@ function buildInitialState(): AppState {
     synastryTransitData: null,
     synastryTransitInterpretation: null,
     synastryError: null,
+    transitTargetMonth: null,
+    synastryTransitTargetMonth: null,
   }
 }
 
@@ -272,7 +276,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       clearBirthDataCache()
       return { ...initialState, birthData: { ...initialBirthData } }
     case 'START_TRANSIT':
-      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitData: null, transitInterpretation: null, transitError: null, transitLoading: true }
+      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null, transitLoading: true }
     case 'PENDING_TRANSIT':
       return { ...state, pendingTransit: true }
     case 'SET_TRANSIT_RESULTS':
@@ -288,7 +292,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'SET_SYNASTRY_ERROR':
       return { ...state, synastryError: action.error, view: 'partner-form' }
     case 'START_SYNASTRY_TRANSIT':
-      return { ...state, view: 'synastry-transit-loading', synastryTransitPeriod: action.period, synastryTransitData: null, synastryTransitInterpretation: null, synastryError: null }
+      return { ...state, view: 'synastry-transit-loading', synastryTransitPeriod: action.period, synastryTransitTargetMonth: action.targetMonth ?? null, synastryTransitData: null, synastryTransitInterpretation: null, synastryError: null }
     case 'SET_SYNASTRY_TRANSIT_RESULTS':
       return { ...state, view: 'synastry-transit-results', synastryTransitData: action.transitData, synastryTransitInterpretation: action.interpretation }
     case 'SET_SYNASTRY_TRANSIT_ERROR':

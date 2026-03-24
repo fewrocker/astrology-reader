@@ -448,7 +448,7 @@ export function buildSynastryPrompt(
   person1Date: string,
   person2Date: string,
 ): string {
-  let prompt = `You are an expert astrologer providing a detailed synastry (couple compatibility) reading.\n\n`
+  let prompt = `You are an expert astrologer providing a factual, direct synastry (couple compatibility) reading. State what the charts show plainly — both the genuine strengths and the real difficulties — without sugar-coating.\n\n`
 
   // Person 1
   prompt += `## Person 1 Birth Chart\nBorn: ${person1Date}\n`
@@ -514,8 +514,9 @@ export function buildSynastryPrompt(
   prompt += `6. House overlay insights — what each person activates in the other\n`
   prompt += `7. Composite chart — the nature of the relationship as its own entity\n`
   prompt += `8. Key strengths and areas for conscious work\n\n`
-  prompt += `Write 6-8 flowing paragraphs. Be warm, specific, and reference actual placements. `
-  prompt += `Use "Person 1" and "Person 2" as labels. End with encouraging guidance.`
+  prompt += `Write 6-8 flowing paragraphs. Be direct, specific, and reference actual placements. `
+  prompt += `State what works well between them and what will be genuinely difficult — do not minimize tensions or over-romanticize strengths. `
+  prompt += `Use "Person 1" and "Person 2" as labels. Close with the most important factual dynamic to be aware of, not generic encouragement.`
 
   return prompt
 }
@@ -530,10 +531,21 @@ export function buildCoupleTransitPrompt(
   period: import('./transits').TransitPeriod,
   person1Date: string,
   person2Date: string,
+  targetMonth?: string,
 ): string {
-  const periodLabel = period === 'daily' ? 'today' : period === 'weekly' ? 'this week' : 'this month'
+  let periodLabel: string
+  if (period === 'daily') {
+    periodLabel = 'today'
+  } else if (period === 'weekly') {
+    periodLabel = 'this week'
+  } else if (targetMonth) {
+    const [y, m] = targetMonth.split('-').map(Number)
+    periodLabel = new Date(y, m - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  } else {
+    periodLabel = 'this month'
+  }
 
-  let prompt = `You are an expert astrologer providing a ${period} couple transit reading.\n\n`
+  let prompt = `You are an expert astrologer providing a factual, direct ${period} couple transit reading. State what the transits show plainly — both favorable and challenging — without softening.\n\n`
 
   // Brief chart summary
   prompt += `## Person 1 (born ${person1Date})\n`
@@ -580,7 +592,7 @@ export function buildCoupleTransitPrompt(
   prompt += `Consider transits to the composite chart as affecting the relationship dynamic.\n`
   prompt += `Cover: relationship energy, communication, romance, and any challenges or growth opportunities.\n`
   prompt += `Write 4-6 flowing paragraphs. Be specific about placements. Use "Person 1" and "Person 2".\n`
-  prompt += `End with practical advice for the couple.`
+  prompt += `State favorable transits plainly and state difficult ones without softening. Do not end with generic encouragement — close with the most important factual takeaway for the relationship during this period.`
 
   return prompt
 }

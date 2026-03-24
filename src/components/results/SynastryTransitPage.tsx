@@ -173,7 +173,7 @@ export default function SynastryTransitPage() {
         </button>
       </div>
 
-      <DiscussModal open={discussOpen} onClose={() => setDiscussOpen(false)} mode="synastry" />
+      <DiscussModal open={discussOpen} onClose={() => setDiscussOpen(false)} mode="synastry-transit" />
     </div>
   )
 }

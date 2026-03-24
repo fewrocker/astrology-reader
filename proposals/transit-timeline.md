@@ -31,3 +31,7 @@ Currently, the user sees a snapshot — a moment frozen in time. A timeline or c
 - New component: `src/components/reading/TransitTimeline.tsx` — scrollable timeline UI with event cards
 - New file: `src/data/interpretations/transitEvents.ts` — brief interpretations for sign ingresses, stations, and perfecting aspects
 - Modify: `src/components/results/TransitReadingPage.tsx` — add timeline tab alongside existing narrative view
+
+## Status: Implemented
+
+Implemented via `/implement transit-timeline`. See `enhancements/transit-timeline/result.md` for full details.

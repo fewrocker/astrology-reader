@@ -113,6 +113,9 @@ function TransitSelectScreen() {
   const { state, dispatch } = useApp()
   const [apiKey, setApiKey] = useState(getStoredApiKey())
   const [showKeyInput, setShowKeyInput] = useState(!apiKey)
+  const now = new Date()
+  const [selMonth, setSelMonth] = useState(String(now.getMonth() + 1))
+  const [selYear, setSelYear] = useState(String(now.getFullYear()))
   const { birthData } = state
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
 
@@ -120,6 +123,19 @@ function TransitSelectScreen() {
     if (apiKey) storeApiKey(apiKey)
     dispatch({ type: 'START_TRANSIT', period })
   }
+
+  const handleCustomMonth = () => {
+    if (!apiKey) return
+    storeApiKey(apiKey)
+    const targetMonth = `${selYear}-${selMonth.padStart(2, '0')}`
+    dispatch({ type: 'START_TRANSIT', period: 'monthly', targetMonth })
+  }
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ]
+  const years = Array.from({ length: 6 }, (_, i) => String(now.getFullYear() + i))
 
   const periods: { id: TransitPeriod; label: string; icon: string; description: string }[] = [
     { id: 'daily', label: 'Today', icon: '☀', description: 'Moon transits, daily energy & mood. Quick guidance for navigating your day.' },
@@ -157,6 +173,39 @@ function TransitSelectScreen() {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Custom month picker */}
+        <div className="mb-6 border-t border-mystic-border pt-4">
+          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Or pick any month</p>
+          <div className="flex gap-2">
+            <select
+              value={selMonth}
+              onChange={e => setSelMonth(e.target.value)}
+              className="flex-1 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none appearance-none cursor-pointer"
+            >
+              {months.map((m, i) => (
+                <option key={m} value={String(i + 1)}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={selYear}
+              onChange={e => setSelYear(e.target.value)}
+              className="w-24 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none appearance-none cursor-pointer"
+            >
+              {years.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleCustomMonth}
+              disabled={!apiKey}
+              className="px-5 py-2.5 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 hover:border-mystic-gold/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+            >
+              Read ☽
+            </button>
+          </div>
         </div>
 
         {/* API key input */}
@@ -207,6 +256,9 @@ function SynastryTransitSelectScreen() {
   const { state, dispatch } = useApp()
   const [apiKey, setApiKey] = useState(getStoredApiKey())
   const [showKeyInput, setShowKeyInput] = useState(!apiKey)
+  const now = new Date()
+  const [selMonth, setSelMonth] = useState(String(now.getMonth() + 1))
+  const [selYear, setSelYear] = useState(String(now.getFullYear()))
   const { birthData, partnerBirthData } = state
   const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
   const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
@@ -215,6 +267,19 @@ function SynastryTransitSelectScreen() {
     if (apiKey) storeApiKey(apiKey)
     dispatch({ type: 'START_SYNASTRY_TRANSIT', period })
   }
+
+  const handleCustomMonth = () => {
+    if (!apiKey) return
+    storeApiKey(apiKey)
+    const targetMonth = `${selYear}-${selMonth.padStart(2, '0')}`
+    dispatch({ type: 'START_SYNASTRY_TRANSIT', period: 'monthly', targetMonth })
+  }
+
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ]
+  const years = Array.from({ length: 6 }, (_, i) => String(now.getFullYear() + i))
 
   const periods: { id: TransitPeriod; label: string; icon: string; description: string }[] = [
     { id: 'daily', label: 'Today', icon: '☀', description: 'How today\'s transits affect your relationship dynamic.' },
@@ -256,6 +321,39 @@ function SynastryTransitSelectScreen() {
               </div>
             </button>
           ))}
+        </div>
+
+        {/* Custom month picker */}
+        <div className="mb-6 border-t border-mystic-border pt-4">
+          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Or pick any month</p>
+          <div className="flex gap-2">
+            <select
+              value={selMonth}
+              onChange={e => setSelMonth(e.target.value)}
+              className="flex-1 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-pink-500/50 focus:outline-none appearance-none cursor-pointer"
+            >
+              {months.map((m, i) => (
+                <option key={m} value={String(i + 1)}>{m}</option>
+              ))}
+            </select>
+            <select
+              value={selYear}
+              onChange={e => setSelYear(e.target.value)}
+              className="w-24 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-pink-500/50 focus:outline-none appearance-none cursor-pointer"
+            >
+              {years.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleCustomMonth}
+              disabled={!apiKey}
+              className="px-5 py-2.5 bg-pink-900/10 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/20 hover:border-pink-500/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+            >
+              Read ☽
+            </button>
+          </div>
         </div>
 
         {/* API key */}
@@ -359,10 +457,10 @@ function AppContent() {
         if (!chart) throw new Error('Unable to calculate natal chart')
 
         // Calculate transits
-        const transitData = calculateTransits(chart, state.transitPeriod!)
+        const transitData = calculateTransits(chart, state.transitPeriod!, state.transitTargetMonth ?? undefined)
 
         // Get GPT interpretation
-        const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!)
+        const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         const apiKey = getStoredApiKey()
         const interpretation = await getGptInterpretation(prompt, apiKey)
 
@@ -449,10 +547,10 @@ function AppContent() {
           angles: synastryData.compositeChart.angles as import('./engine/types').ChartAngles,
           unknownTime: true,
         }
-        const transitData = calculateTransits(compositeChartData, state.synastryTransitPeriod!)
+        const transitData = calculateTransits(compositeChartData, state.synastryTransitPeriod!, state.synastryTransitTargetMonth ?? undefined)
 
         // Get GPT interpretation
-        const prompt = buildCoupleTransitPrompt(chartData, partnerChartData, synastryData, transitData, state.synastryTransitPeriod!, birthData.date, partnerBirthData.date)
+        const prompt = buildCoupleTransitPrompt(chartData, partnerChartData, synastryData, transitData, state.synastryTransitPeriod!, birthData.date, partnerBirthData.date, state.synastryTransitTargetMonth ?? undefined)
         const apiKey = getStoredApiKey()
         const interpretation = await getGptInterpretation(prompt, apiKey)
 
