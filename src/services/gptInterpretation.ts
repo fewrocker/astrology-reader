@@ -1,6 +1,6 @@
 const API_KEY_STORAGE = 'astral-chart-openai-key'
 const API_URL = 'https://api.openai.com/v1/chat/completions'
-const DEFAULT_KEY = 'REDACTED'
+const DEFAULT_KEY = ''
 
 export function getStoredApiKey(): string {
   try {
