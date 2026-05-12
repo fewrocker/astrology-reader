@@ -80,3 +80,17 @@ Key files to modify:
 - If `chartData` is null: capture Moon data only (no natal chart needed), skip transits — fail open
 - Wrap all sky context computation in try/catch — if it throws, save the entry with `skyContext: undefined` rather than blocking the save
 - Never modify existing entry structure — only append `skyContext` as a new optional field
+
+---
+
+## Outcome
+
+**Status:** done — commit `e542898` on branch `sprint-0004-task-0002-feat-dream-sky-context`
+
+**Delivered:**
+- `src/engine/astronomy.ts` — added `getMoonSignAndPhase(date)` using `EclipticGeoMoon` + `SunPosition` to derive sign and 8-phase label from Moon–Sun elongation
+- `src/engine/transits.ts` — added `getTopActiveTransits(chartData, maxCount, maxOrbDegrees)` returning tightest daily transit aspects at the current moment
+- `src/services/gptInterpretation.ts` — extended `getDreamInterpretation` with optional `skyContext` parameter; sky context appended to the prompt as "Sky Context at Time of Recording" section when present
+- `src/components/dream/DreamModal.tsx` — added `SkyContext` interface and `PLANET_GLYPHS` map; `DreamSession` gains optional `skyContext`; on interpret: sky context computed in a try/catch (fail-open) and stored with the session; chat display shows a subtle footer row on the first assistant message when `skyContext` is present, formatted as `☽ {sign} · {phase} · {planet glyph} {aspect glyph} {natal planet glyph}`; session restoration and reset both handle `skyContext` correctly
+
+**Build:** zero TypeScript errors, clean Vite production build.

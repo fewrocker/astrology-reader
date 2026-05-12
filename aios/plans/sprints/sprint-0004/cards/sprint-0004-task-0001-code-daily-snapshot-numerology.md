@@ -63,3 +63,16 @@ Key files to modify:
 - No new files needed
 
 Effort: ~30 lines. No architectural changes. Should be implemented after `feat-personal-year-month-day-numerology` since it depends on that function.
+
+---
+
+## Outcome
+
+**Status:** Done — commit `299d482` on branch `sprint-0004-task-0001-code-daily-snapshot-numerology`.
+
+**What was implemented:**
+- Added `calculatePersonalDay(birthDate)` locally in `DailySnapshotCard.tsx` using `reduceToSingleDigit` imported from `src/engine/numerology.ts`. Formula: universalDay = reduce(year-digit-sum + month + day), personalDay = reduce(birthMonth + birthDay + universalDay). Master numbers 11/22/33 preserved.
+- Added `personalDayArchetype(n)` mapping 1–9, 11, 22, 33 to named archetypes (The Pioneer → The Healer).
+- `DailySnapshotCard` now accepts `birthDate?: string` prop; computes and displays one subtle line `Personal Day N · Archetype` in `text-mystic-gold/70 text-xs` between the pill row and the main GPT reading. If `birthDate` is absent the card renders exactly as before.
+- `App.tsx` — both `<DailySnapshotCard>` invocations (mobile + desktop) now pass `birthData.date`.
+- Build: zero TypeScript errors, clean `vite build`.
