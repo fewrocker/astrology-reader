@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
+import PeriodSelectPanel, { type PeriodOption } from './components/form/PeriodSelectPanel'
 import ResultsPage from './components/results/ResultsPage'
 import TransitReadingPage from './components/results/TransitReadingPage'
 import SynastryPage from './components/results/SynastryPage'
@@ -13,9 +14,9 @@ import DreamModal from './components/dream/DreamModal'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
-import { calculateTransits, buildTransitPrompt, type TransitPeriod } from './engine/transits'
+import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
-import { getGptInterpretation, getStoredApiKey, storeApiKey } from './services/gptInterpretation'
+import { getGptInterpretation, getStoredApiKey } from './services/gptInterpretation'
 
 function CachedDataLanding() {
   const { state, dispatch } = useApp()
@@ -161,289 +162,68 @@ function CachedDataLanding() {
 
 function TransitSelectScreen() {
   const { state, dispatch } = useApp()
-  const [apiKey, setApiKey] = useState(getStoredApiKey())
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey)
-  const now = new Date()
-  const [selMonth, setSelMonth] = useState(String(now.getMonth() + 1))
-  const [selYear, setSelYear] = useState(String(now.getFullYear()))
   const { birthData } = state
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
 
-  const handleSelect = (period: TransitPeriod) => {
-    if (apiKey) storeApiKey(apiKey)
-    dispatch({ type: 'START_TRANSIT', period })
-  }
-
-  const handleCustomMonth = () => {
-    if (!apiKey) return
-    storeApiKey(apiKey)
-    const targetMonth = `${selYear}-${selMonth.padStart(2, '0')}`
-    dispatch({ type: 'START_TRANSIT', period: 'monthly', targetMonth })
-  }
-
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ]
-  const years = Array.from({ length: 6 }, (_, i) => String(now.getFullYear() + i))
-
-  const periods: { id: TransitPeriod; label: string; icon: string; description: string }[] = [
+  const periods: PeriodOption[] = [
     { id: 'daily', label: 'Today', icon: '☀', description: 'Moon transits, daily energy & mood. Quick guidance for navigating your day.' },
     { id: 'weekly', label: 'This Week', icon: '✦', description: 'Sun, Mercury & Venus transits. Key themes, communication, and relationship energy.' },
     { id: 'monthly', label: 'This Month', icon: '☽', description: 'Slow planet transits, retrogrades & major shifts. Deep guidance for growth.' },
   ]
 
   return (
-    <div className="w-full max-w-lg mx-auto text-center">
-      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 mb-6">
-        <p className="text-mystic-muted text-xs uppercase tracking-widest mb-2">Transit Reading for</p>
-        <h2 className="font-heading text-2xl text-mystic-gold mb-1">{cityLabel}</h2>
-        <p className="text-mystic-muted text-sm mb-6">Born {birthData.date}</p>
-
-        <p className="text-mystic-text/80 text-sm mb-6 leading-relaxed">
-          Transit readings show how the current planetary positions interact with your natal chart,
-          revealing the energies and themes active in your life right now.
-        </p>
-
-        <div className="space-y-3 mb-6">
-          {periods.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelect(p.id)}
-              disabled={!apiKey}
-              className="w-full text-left px-5 py-4 bg-mystic-gold/5 border border-mystic-gold/20 rounded-lg hover:bg-mystic-gold/10 hover:border-mystic-gold/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed group"
-            >
-              <div className="flex items-start gap-3">
-                <span className="text-2xl mt-0.5">{p.icon}</span>
-                <div>
-                  <span className="font-heading text-lg text-mystic-gold group-hover:text-mystic-gold/90">{p.label}</span>
-                  <p className="text-mystic-muted text-xs mt-1">{p.description}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Custom month picker */}
-        <div className="mb-6 border-t border-mystic-border pt-4">
-          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Or pick any month</p>
-          <div className="flex gap-2">
-            <select
-              value={selMonth}
-              onChange={e => setSelMonth(e.target.value)}
-              className="flex-1 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none appearance-none cursor-pointer"
-            >
-              {months.map((m, i) => (
-                <option key={m} value={String(i + 1)}>{m}</option>
-              ))}
-            </select>
-            <select
-              value={selYear}
-              onChange={e => setSelYear(e.target.value)}
-              className="w-24 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none appearance-none cursor-pointer"
-            >
-              {years.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleCustomMonth}
-              disabled={!apiKey}
-              className="px-5 py-2.5 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 hover:border-mystic-gold/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-            >
-              Read ☽
-            </button>
-          </div>
-        </div>
-
-        {/* API key input */}
-        <div className="border-t border-mystic-border pt-4">
-          {showKeyInput ? (
-            <div className="space-y-2">
-              <label className="text-mystic-muted text-xs uppercase tracking-wider block text-left">OpenAI API Key</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full px-4 py-2 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none"
-              />
-              <p className="text-mystic-muted text-xs text-left">Required for AI-powered interpretation. Key is stored locally in your browser.</p>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowKeyInput(true)}
-              className="text-mystic-muted text-xs hover:text-mystic-text transition-colors"
-            >
-              Change API Key
-            </button>
-          )}
-        </div>
-
-        {state.transitError && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-            {state.transitError}
-          </div>
-        )}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={() => dispatch({ type: 'SET_VIEW', view: state.reading ? 'results' : 'form' })}
-            className="flex-1 px-4 py-2 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors text-sm"
-          >
-            ← Back
-          </button>
-        </div>
-      </div>
-    </div>
+    <PeriodSelectPanel
+      title="Transit Reading for"
+      subtitle={
+        <>
+          <h2 className="font-heading text-2xl text-mystic-gold mb-1">{cityLabel}</h2>
+          <p className="text-mystic-muted text-sm mb-6">Born {birthData.date}</p>
+        </>
+      }
+      description="Transit readings show how the current planetary positions interact with your natal chart, revealing the energies and themes active in your life right now."
+      periods={periods}
+      onSelect={period => dispatch({ type: 'START_TRANSIT', period })}
+      onCustomMonth={month => dispatch({ type: 'START_TRANSIT', period: 'monthly', targetMonth: month })}
+      onBack={() => dispatch({ type: 'SET_VIEW', view: state.reading ? 'results' : 'form' })}
+      error={state.transitError}
+      accentColor="gold"
+    />
   )
 }
 
 function SynastryTransitSelectScreen() {
   const { state, dispatch } = useApp()
-  const [apiKey, setApiKey] = useState(getStoredApiKey())
-  const [showKeyInput, setShowKeyInput] = useState(!apiKey)
-  const now = new Date()
-  const [selMonth, setSelMonth] = useState(String(now.getMonth() + 1))
-  const [selYear, setSelYear] = useState(String(now.getFullYear()))
   const { birthData, partnerBirthData } = state
   const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
   const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
-  const handleSelect = (period: TransitPeriod) => {
-    if (apiKey) storeApiKey(apiKey)
-    dispatch({ type: 'START_SYNASTRY_TRANSIT', period })
-  }
-
-  const handleCustomMonth = () => {
-    if (!apiKey) return
-    storeApiKey(apiKey)
-    const targetMonth = `${selYear}-${selMonth.padStart(2, '0')}`
-    dispatch({ type: 'START_SYNASTRY_TRANSIT', period: 'monthly', targetMonth })
-  }
-
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ]
-  const years = Array.from({ length: 6 }, (_, i) => String(now.getFullYear() + i))
-
-  const periods: { id: TransitPeriod; label: string; icon: string; description: string }[] = [
-    { id: 'daily', label: 'Today', icon: '☀', description: 'How today\'s transits affect your relationship dynamic.' },
+  const periods: PeriodOption[] = [
+    { id: 'daily', label: 'Today', icon: '☀', description: "How today's transits affect your relationship dynamic." },
     { id: 'weekly', label: 'This Week', icon: '✦', description: 'Key relationship themes and energies for the week ahead.' },
     { id: 'monthly', label: 'This Month', icon: '☽', description: 'Major shifts and growth opportunities for your relationship.' },
   ]
 
   return (
-    <div className="w-full max-w-lg mx-auto text-center">
-      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 mb-6">
-        <div className="inline-block px-3 py-1 rounded-full bg-pink-900/30 border border-pink-500/30 text-pink-400 text-xs uppercase tracking-widest mb-3">
-          Couple Transits
-        </div>
-        <h2 className="font-heading text-2xl text-mystic-gold mb-1">Relationship Transit Reading</h2>
-        <div className="text-mystic-muted text-xs mt-1 mb-6 space-y-0.5">
-          <p>Person 1: {birthData.date} — {person1Label}</p>
-          <p>Person 2: {partnerBirthData.date} — {person2Label}</p>
-        </div>
-
-        <p className="text-mystic-text/80 text-sm mb-6 leading-relaxed">
-          See how current planetary transits are affecting your relationship by checking the composite chart.
-        </p>
-
-        <div className="space-y-3 mb-6">
-          {periods.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => handleSelect(p.id)}
-              disabled={!apiKey}
-              className="w-full text-left px-5 py-4 bg-pink-900/5 border border-pink-500/20 rounded-lg hover:bg-pink-900/10 hover:border-pink-500/40 transition-colors disabled:opacity-40 disabled:cursor-not-allowed group"
-            >
-              <div className="flex items-start gap-3">
-                <span className="text-2xl mt-0.5">{p.icon}</span>
-                <div>
-                  <span className="font-heading text-lg text-pink-400 group-hover:text-pink-300">{p.label}</span>
-                  <p className="text-mystic-muted text-xs mt-1">{p.description}</p>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-
-        {/* Custom month picker */}
-        <div className="mb-6 border-t border-mystic-border pt-4">
-          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Or pick any month</p>
-          <div className="flex gap-2">
-            <select
-              value={selMonth}
-              onChange={e => setSelMonth(e.target.value)}
-              className="flex-1 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-pink-500/50 focus:outline-none appearance-none cursor-pointer"
-            >
-              {months.map((m, i) => (
-                <option key={m} value={String(i + 1)}>{m}</option>
-              ))}
-            </select>
-            <select
-              value={selYear}
-              onChange={e => setSelYear(e.target.value)}
-              className="w-24 px-3 py-2.5 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-pink-500/50 focus:outline-none appearance-none cursor-pointer"
-            >
-              {years.map(y => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleCustomMonth}
-              disabled={!apiKey}
-              className="px-5 py-2.5 bg-pink-900/10 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/20 hover:border-pink-500/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-            >
-              Read ☽
-            </button>
+    <PeriodSelectPanel
+      title="Couple Transits"
+      subtitle={
+        <>
+          <h2 className="font-heading text-2xl text-mystic-gold mb-1">Relationship Transit Reading</h2>
+          <div className="text-mystic-muted text-xs mt-1 mb-6 space-y-0.5">
+            <p>Person 1: {birthData.date} — {person1Label}</p>
+            <p>Person 2: {partnerBirthData.date} — {person2Label}</p>
           </div>
-        </div>
-
-        {/* API key */}
-        <div className="border-t border-mystic-border pt-4">
-          {showKeyInput ? (
-            <div className="space-y-2">
-              <label className="text-mystic-muted text-xs uppercase tracking-wider block text-left">OpenAI API Key</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full px-4 py-2 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none"
-              />
-              <p className="text-mystic-muted text-xs text-left">Required for AI-powered interpretation.</p>
-            </div>
-          ) : (
-            <button onClick={() => setShowKeyInput(true)} className="text-mystic-muted text-xs hover:text-mystic-text transition-colors">
-              Change API Key
-            </button>
-          )}
-        </div>
-
-        {state.synastryError && (
-          <div className="mt-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-            {state.synastryError}
-          </div>
-        )}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            type="button"
-            onClick={() => dispatch({ type: 'SET_VIEW', view: 'synastry-results' })}
-            className="flex-1 px-4 py-2 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors text-sm"
-          >
-            ← Back to Compatibility
-          </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+      description="See how current planetary transits are affecting your relationship by checking the composite chart."
+      periods={periods}
+      onSelect={period => dispatch({ type: 'START_SYNASTRY_TRANSIT', period })}
+      onCustomMonth={month => dispatch({ type: 'START_SYNASTRY_TRANSIT', period: 'monthly', targetMonth: month })}
+      onBack={() => dispatch({ type: 'SET_VIEW', view: 'synastry-results' })}
+      error={state.synastryError}
+      accentColor="pink"
+      backLabel="← Back to Compatibility"
+    />
   )
 }
 
