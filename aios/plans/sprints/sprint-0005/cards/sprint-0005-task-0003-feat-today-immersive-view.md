@@ -68,12 +68,28 @@ The Today page shows:
 
 ## Acceptance Criteria
 
-- [ ] "Today ✦" button visible on the cached landing menu
-- [ ] Today page renders with date header, personal day number + archetype, moon phase, top 3 transits, energy rating
-- [ ] Personal day number is the largest visual element on the page (large Playfair Display font, gold color)
-- [ ] GPT synthesis appears after a short delay if API key is set; page is fully useful without it
-- [ ] Moon phase emoji matches actual phase (New Moon 🌑, Full Moon 🌕, etc.)
-- [ ] Back navigation ("← Back") returns to landing menu via `dispatch({ type: 'SET_VIEW', view: 'form' })` — or back to the CachedDataLanding state
-- [ ] Design matches the mystic dark theme: gold `#c9a84c`, bg `#0a0a0f`, Playfair Display headings, Inter body
-- [ ] Works correctly when `chartData` is available; handles null gracefully (shows personal day + moon only, transit section shows "Calculate your birth chart to see transit highlights")
-- [ ] TypeScript compiles with zero errors
+- [x] "Today ✦" button visible on the cached landing menu
+- [x] Today page renders with date header, personal day number + archetype, moon phase, top 3 transits, energy rating
+- [x] Personal day number is the largest visual element on the page (large Playfair Display font, gold color)
+- [x] GPT synthesis appears after a short delay if API key is set; page is fully useful without it
+- [x] Moon phase emoji matches actual phase (New Moon 🌑, Full Moon 🌕, etc.)
+- [x] Back navigation ("← Back") returns to landing menu via `dispatch({ type: 'SET_VIEW', view: 'form' })`
+- [x] Design matches the mystic dark theme: gold `#c9a84c`, bg `#0a0a0f`, Playfair Display headings, Inter body
+- [x] Works correctly when `chartData` is available; handles null gracefully (shows personal day + moon only, transit section shows "Enter birth data to see your transit highlights")
+- [x] TypeScript compiles with zero errors
+
+---
+
+## Outcome
+
+**Completed 2026-05-12.**
+
+**Files created:**
+- `src/components/reading/TodayPage.tsx` — full Today page with personal day card (responsive fluid font, gold), moon phase card (emoji + sign + void-of-course), sky highlights card (top 3 transit aspects with glyphs + aspect symbol + 1-word keyword), transit energy rating, and GPT morning synthesis section.
+
+**Files modified:**
+- `src/context/appState.ts` — added `'today'` to the `AppView` union type.
+- `src/services/gptInterpretation.ts` — added `getTodayPageInterpretation()` function building a richer 2-3 sentence personalized synthesis from personal day + moon + transits.
+- `src/App.tsx` — imported `TodayPage`, added `'Today ✦'` button (second position, gold styling) in `CachedDataLanding`, added `'today'` case to view renderer passing `chartData` and `birthDate`.
+
+**Build:** Zero TypeScript errors. Clean production build (88 modules, 8.13s).
