@@ -26,6 +26,15 @@ function eclipticToXY(r: number, deg: number): { x: number; y: number } {
   return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) }
 }
 
+function formatSignDegree(ecliptic: number): string {
+  const norm = ((ecliptic % 360) + 360) % 360
+  const signIndex = Math.floor(norm / 30)
+  const degInSign = norm - signIndex * 30
+  const deg = Math.floor(degInSign)
+  const min = Math.floor((degInSign - deg) * 60)
+  return `${deg}°${min}' ${ZODIAC_SIGNS[signIndex]}`
+}
+
 function eclipticArcPath(innerR: number, outerR: number, startDeg: number, endDeg: number): string {
   const p1 = eclipticToXY(outerR, startDeg)
   const p2 = eclipticToXY(outerR, endDeg)
@@ -123,7 +132,7 @@ export function FrequencyBar({ frequencyMap }: FrequencyBarProps) {
                 </div>
                 {sources.map((p, i) => (
                   <div key={i} className="text-mystic-muted" style={{ fontSize: 10 }}>
-                    {p.label} — {Math.floor(p.eclipticDegree)}°
+                    {p.label} — {formatSignDegree(p.eclipticDegree)}
                   </div>
                 ))}
               </div>
@@ -407,7 +416,7 @@ export default function NumerologySkyChart({ chartData }: NumerologySkyChartProp
               {point.label}
             </div>
             <div style={{ color: '#8a8694', fontSize: 10 }}>
-              {Math.floor(point.eclipticDegree)}° → {point.reducedNumber}
+              {formatSignDegree(point.eclipticDegree)} → {point.reducedNumber}
               {isMaster && ' ✦ master number'}
             </div>
           </div>
