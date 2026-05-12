@@ -167,6 +167,25 @@ export interface ChatMessage {
   content: string
 }
 
+export async function getNumerologyDiscussResponse(
+  context: string,
+  messages: ChatMessage[],
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: `You are a master numerologist and astrologer having a direct, personal conversation with someone about their numerological profile and natal chart. You hold both systems simultaneously. Answer using the full context below — be specific, direct, and personal. Reference the actual numbers and chart placements. Do not pad with generic numerology definitions. Every answer should feel like it's about this exact person.\n\n${context}`,
+      },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ], { temperature: 0.85, max_tokens: 1000 })
+  )
+  return result || 'Unable to generate a response.'
+}
+
 /**
  * Send a discuss chat request with full astrological context.
  * Supports multi-turn conversation by passing previous messages.

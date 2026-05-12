@@ -4,6 +4,7 @@ import { calculateNumerology } from '../../engine/numerology'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
 import type { ChartData } from '../../engine/types'
 import { calculateChart } from '../../engine/astronomy'
+import NumerologyDiscussModal from './NumerologyDiscussModal'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -153,6 +154,51 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0])
 }
 
+function calculatePersonalMonth(personalYear: number, currentMonth: number): number {
+  const sum = personalYear + currentMonth
+  if (sum === 11 || sum === 22 || sum === 33) return sum
+  if (sum < 10) return sum
+  const digits = String(sum).split('').map(Number)
+  const reduced = digits.reduce((a, b) => a + b, 0)
+  return reduced === 11 || reduced === 22 || reduced === 33 ? reduced : reduced < 10 ? reduced : calculatePersonalMonth(reduced, 0)
+}
+
+function buildNumerologyContext(
+  reading: ReturnType<typeof calculateNumerology>,
+  chartData: ChartData | null,
+  userName: string | undefined,
+  birthDate: string,
+): string {
+  const currentMonth = new Date().getMonth() + 1
+  const currentYear = new Date().getFullYear()
+  const personalMonth = calculatePersonalMonth(reading.personalYear, currentMonth)
+
+  let ctx = `## Numerology Profile\n`
+  if (userName) ctx += `Name: ${userName}\n`
+  ctx += `Born: ${birthDate}\n\n`
+
+  ctx += `### Core Numbers\n`
+  ctx += `- Life Path: ${reading.lifePath}\n`
+  ctx += `- Birthday Number: ${reading.birthdayNumber}\n`
+  if (reading.expressionNumber) ctx += `- Expression Number: ${reading.expressionNumber}\n`
+
+  ctx += `\n### Current Cycle Numbers (${currentYear})\n`
+  ctx += `- Personal Year: ${reading.personalYear}\n`
+  ctx += `- Personal Month: ${personalMonth} (Month ${currentMonth})\n`
+
+  if (chartData) {
+    ctx += `\n### Natal Chart Placements\n`
+    for (const p of chartData.planets) {
+      if (p.name === 'NorthNode') continue
+      ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.house ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
+    }
+    ctx += `\nAscendant: ${chartData.angles.ascendant.degree}°${chartData.angles.ascendant.minute}' ${chartData.angles.ascendant.sign}\n`
+    ctx += `Midheaven: ${chartData.angles.midheaven.degree}°${chartData.angles.midheaven.minute}' ${chartData.angles.midheaven.sign}\n`
+  }
+
+  return ctx
+}
+
 interface NumberCardProps {
   label: string
   number: number
@@ -245,6 +291,7 @@ export default function NumerologyPage() {
   const { birthData } = state
   const [nameInput, setNameInput] = useState(birthData.userName ?? '')
   const [editingName, setEditingName] = useState(!birthData.userName)
+  const [discussOpen, setDiscussOpen] = useState(false)
 
   const chartData = useMemo(() => getChartData(state), [state.chartData, birthData]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -262,6 +309,27 @@ export default function NumerologyPage() {
     () => buildPersonalYearCrossRef(reading.personalYear, chartData),
     [reading.personalYear, chartData],
   )
+
+  const numerologyContext = useMemo(
+    () => buildNumerologyContext(reading, chartData, birthData.userName, birthData.date),
+    [reading, chartData, birthData.userName, birthData.date],
+  )
+
+  const discussChips = useMemo(() => {
+    const chips = [
+      'What does my Life Path mean for love?',
+      `How does my Personal Year ${reading.personalYear} shape this season?`,
+      'What should I focus on this Personal Month?',
+      'What does my Life Path mean for my career?',
+    ]
+    if (reading.expressionNumber) {
+      chips.splice(2, 0, `What's the interaction between my Life Path ${reading.lifePath} and Expression ${reading.expressionNumber}?`)
+    }
+    if (chartData) {
+      chips.push('How do my numbers interact with my birth chart?')
+    }
+    return chips
+  }, [reading, chartData])
 
   const formatDate = (d: string) => {
     const [y, m, day] = d.split('-')
@@ -395,8 +463,15 @@ export default function NumerologyPage() {
         </div>
       )}
 
-      {/* Back button */}
-      <div className="text-center mb-12">
+      {/* Action buttons */}
+      <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center">
+        <button
+          type="button"
+          onClick={() => setDiscussOpen(true)}
+          className="px-8 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
+        >
+          Discuss ✦
+        </button>
         <button
           type="button"
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
@@ -405,6 +480,13 @@ export default function NumerologyPage() {
           ← Back to Menu
         </button>
       </div>
+
+      <NumerologyDiscussModal
+        open={discussOpen}
+        onClose={() => setDiscussOpen(false)}
+        context={numerologyContext}
+        chips={discussChips}
+      />
     </div>
   )
 }
