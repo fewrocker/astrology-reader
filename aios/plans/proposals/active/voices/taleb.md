@@ -1,49 +1,50 @@
-# Nassim Taleb — Sprint 4 Proposal Voice
+# Nassim Taleb — Sprint 5 Proposal Voice
 
-Everyone's excited about daily personalization and cross-integration. Let me be the one who checks whether the foundations are solid first.
+Sprint 4 delivered its promises without catastrophic side effects. I note this with cautious approval. Now let me stress-test the next round.
 
-## Hidden assumption #1: Personal day/month calculations are universally agreed upon
+## feat: Today page — antifragile or fragile?
 
-They're not. There are at least three common conventions for calculating the Personal Day in numerology, and they differ in how they reduce the current date. Some add birth month + birth day + universal day. Some include the full birth year. Some use the Gregorian calendar directly. Users who cross-reference with other numerology apps will get different numbers and think the app is wrong.
+The Today page is a composition of 4 data sources: personal day calculation, moon phase, transit aspects, and GPT. Let me assess each:
 
-**Risk:** User confusion and trust erosion when numbers don't match what they've seen elsewhere.
+**Personal day:** Pure function, offline, deterministic. Antifragile.
 
-**Fix:** Pick one convention (the most common: birth month + birth day + universal year), document it internally, and ensure the Personal Month and Personal Day calculations are consistent with each other and with the existing Personal Year calculation already in the code. Test edge cases: master number months (11, 22), years with high sums, birthday on the 29th/30th/31st.
+**Moon phase:** Computed from current Date + astronomy engine. No network dependency. But: the engine needs to be running and the calculation must not throw. Currently `getCurrentMoonPhase()` has no explicit error boundary. If it throws (e.g., edge case in astronomical calculation near a specific date), the whole Today page could white-screen. Fix: wrap in try/catch, return a graceful "moon unavailable" state.
 
-## Hidden assumption #2: The dream journal has stable localStorage structure
+**Transit aspects:** Requires `chartData` from AppContext. If chartData is null (user never computed their chart), the component would render with no transit data. This is acceptable behavior but must be handled — show "calculate your birth chart first" in place of transit data, not an empty section or a crash.
 
-Currently, `DreamModal.tsx` stores dream entries in localStorage as JSON. If we add new fields (moonSign, moonPhase, activeTransits) to the stored structure, and a user already has entries stored *without* these fields, the app must handle the mixed schema gracefully.
+**GPT:** Network dependency. Rate limits, failures, missing API key. The existing `getDailySnapshotInterpretation` already handles failure gracefully (returns null, card shows without it). The new Today page must do the same — fail silently, show the factual data without interpretation.
 
-The current code doesn't have a versioning strategy for localStorage entries. Adding new fields is safe *if* we use optional fields and defensive reads. But a clumsy implementation could fail to render old entries or, worse, throw a runtime error that corrupts the entire dream journal.
+**Overall risk: low** — if defensive patterns from existing features are applied consistently.
 
-**Fix:** Store transit context as a separate optional object with a schema version. Old entries simply show no sky context. Never mutate old entry structure.
+## feat: Natal dream resonance — hidden assumption
 
-## Hidden assumption #3: Current transits are "fast" to compute for the dream modal
+The `buildDreamscapeContext()` approach assumes `planet.house` is always populated on natal chart planets. I should check: when a user has `unknownTime = true` (birth time not known), the house system cannot be computed. `planet.house` will be undefined or null for all planets.
 
-`calculateTransits()` for daily transits runs an O(n) planetary calculation against the natal chart. It's not expensive — but it's called at the moment the user opens the dream modal to *write* a dream. That's a synchronous operation in a modal that should feel instant.
+If house assignments are unavailable, the dreamscape context should fall back to:
+- Neptune sign only (always computable)
+- Moon sign only (always computable)
+- No 12th house planets (house = unknown, skip gracefully)
 
-If the natal chart data isn't available in context (user opened the dream journal directly without having computed their chart), the transit computation will fail silently or show no transits.
+The implementation must not render "Neptune in undefined house" — that would be embarrassing. Check `planet.house` before using it.
 
-**Fix:** Make the transit context capture fault-tolerant. If `chartData` is null, store only Moon sign and phase (which need no natal data). If computation fails for any reason, store nothing rather than crashing.
+**Second hidden assumption:** Neptune is always in the natal chart planets array. It should be — the engine computes all major planets including Neptune. But if someone ever changed the planets list or we're in some partial-computation state, `chart.planets.find(p => p.name === 'Neptune')` could return `undefined`. The code must handle this: if Neptune not found, skip that line silently.
 
-## Hidden assumption #4: The personal day card in the landing page will always be available
+**Overall risk: low** — both edge cases are easily handled with null checks.
 
-The DailySnapshotCard only appears when `chartData` is truthy (when a natal chart has been calculated). But the personal day number only requires birth date — not the full chart. A user who entered a birth date but hasn't run a chart yet would benefit from seeing their personal day number, but the current architecture only shows DailySnapshotCard when the full chart is computed.
+## code: Personal day deduplication — zero risk
 
-**Not a blocker** — but worth noting. For now, tying personal day display to chartData availability is acceptable since birth date is required for the chart anyway.
+This is the lowest-risk change possible. Both functions compute the same output. The tests (if they existed) would still pass. This change only has upside: future maintainers won't be confused by two implementations.
 
-## Hidden assumption #5: Moon phase labels are stable
+**One subtle risk:** The local `calculatePersonalDay` in DailySnapshotCard might have different behavior for edge cases if the implementations ever diverged. They currently appear identical, but whoever wrote the local version might have had a reason. Before deleting it, verify both implementations produce the same output for: master number births (11th, 22nd), first month (January = 1), last day of year (December 31), leap year birthdays.
 
-The Moon phase is computed from Sun/Moon elongation. The phase *labels* (New Moon, Waxing Crescent, etc.) depend on where you draw the boundary between phases. There are 8 traditional phases and the transitions are at specific degree intervals. Two implementations might show "Waxing Crescent" vs "First Quarter" for the same day. This matters because we're storing the label in localStorage — and if we change the label convention in a future release, old entries will show different labels than new ones.
+## What I'm watching carefully
 
-**Fix:** Store the raw elongation angle alongside the label. This allows the label to be re-derived from the stored angle if the convention changes.
+**The Today page creates a permanent "north star" for the app.** Once it exists, users will compare every morning to every other morning through this lens. If the personal day calculation has any inconsistency (and I flagged this in sprint 4 — numerology conventions vary), users who notice "I got a 3 on Monday but another app says 5" will trust the app less. The calculation is already shipping; no new risk here, but it's worth documenting the convention clearly in a tooltip or About section.
 
-## What is genuinely robust about this plan
+**The dream dreamscape context creates an expectation.** If we tell a user "Neptune in your 8th house — your dreams venture into shadow and transformation," and then they have dreams that feel nothing like that, they'll feel misread. Astrological interpretations for Neptune placement are soft and probabilistic, not deterministic. The language must be hedged appropriately: "tends to," "often," "may incline you toward" — not "your dreams ARE."
 
-- Personal Year/Month/Day calculations are pure functions with no external dependencies. They're antifragile — always computable, always available offline, always fast.
-- The Moon sign at time of dream recording is independently computable from the timestamp alone (no birth data needed). This is the most durable piece of context we can attach to a dream.
-- Failure modes are graceful: if any computation fails, the dream entry still stores and renders correctly. Context is additive, not required.
+## What is genuinely robust
 
-## The uncomfortable truth
+All three proposals are additive — they do not require changing existing data structures or breaking existing user flows. They can be developed independently, in parallel worktrees, with no risk of breaking each other or existing features.
 
-The most fragile part of this sprint is not technical — it's numerological convention. We're about to present Personal Day numbers as facts to users who may cross-reference with other sources. We should display these numbers with a quiet note that numerology conventions vary, or at minimum ensure our convention is clearly documented. Otherwise we'll get users insisting our "3" is wrong because another app shows "5".
+The most antifragile path: build the Today page and natal dreamscape context as progressively enhanced components — they work without GPT, they degrade gracefully without chart data, they render safely regardless of moon phase edge cases.
