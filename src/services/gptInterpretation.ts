@@ -72,10 +72,12 @@ export async function getDreamInterpretation(
   transitSummary: string,
   transitAspectsText: string,
   apiKey: string,
+  pastDreamsContext?: string | null,
 ): Promise<string> {
   if (!apiKey) throw new Error('OpenAI API key is required.')
 
-  const prompt = `## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}\n\n## The Dream\n${dreamDescription}\n\nProvide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
+  const pastSection = pastDreamsContext ? `\n\n## Past Dreams Context\n${pastDreamsContext}` : ''
+  const prompt = `## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}${pastSection}\n\n## The Dream\n${dreamDescription}\n\nProvide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
 
   const response = await fetch(API_URL, {
     method: 'POST',
