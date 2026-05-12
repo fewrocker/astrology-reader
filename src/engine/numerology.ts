@@ -63,11 +63,28 @@ export function calculatePersonalMonth(personalYear: number, currentMonth?: numb
   return reduceToSingleDigit(personalYear + month)
 }
 
+// Personal Day = reduce(birthMonth + birthDay + universalDay)
+// Universal Day = reduce(sum of all individual digits in current YYYY-MM-DD)
+// Master numbers (11, 22, 33) are preserved at every reduction step.
+export function calculatePersonalDay(birthDate: string): number {
+  const [, birthMonthStr, birthDayStr] = birthDate.split('-')
+  const birthMonth = parseInt(birthMonthStr, 10)
+  const birthDay = parseInt(birthDayStr, 10)
+
+  const now = new Date()
+  const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const universalDaySum = dateStr.split('').reduce((acc, d) => acc + Number(d), 0)
+  const universalDay = reduceToSingleDigit(universalDaySum)
+
+  return reduceToSingleDigit(birthMonth + birthDay + universalDay)
+}
+
 export interface NumerologyReading {
   lifePath: number
   birthdayNumber: number
   personalYear: number
   personalMonth: number
+  personalDay: number
   karmicDebt: number | null
   expressionNumber?: number
   soulUrge?: number
@@ -84,6 +101,7 @@ export function calculateNumerology(birthDate: string, name?: string): Numerolog
     birthdayNumber: calculateBirthdayNumber(birthDate),
     personalYear,
     personalMonth: calculatePersonalMonth(personalYear),
+    personalDay: calculatePersonalDay(birthDate),
     karmicDebt: detectKarmicDebt(intermediate),
     expressionNumber: name ? calculateExpressionNumber(name) : undefined,
     soulUrge: name ? calculateSoulUrge(name) : undefined,
