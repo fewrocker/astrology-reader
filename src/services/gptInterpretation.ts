@@ -105,10 +105,19 @@ export async function getDreamInterpretation(
   transitSummary: string,
   transitAspectsText: string,
   apiKey: string,
+  skyContext?: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> },
 ): Promise<string> {
   if (!apiKey) throw new Error('OpenAI API key is required.')
 
-  const prompt = `## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}\n\n## The Dream\n${dreamDescription}\n\nProvide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
+  let skySection = ''
+  if (skyContext) {
+    const transitLine = skyContext.transits && skyContext.transits.length > 0
+      ? ' Active transits: ' + skyContext.transits.map(t => `${t.transitPlanet} ${t.aspect} natal ${t.natalPlanet} (${t.orb}° orb)`).join(', ') + '.'
+      : ''
+    skySection = `\n\n## Sky Context at Time of Recording\nMoon in ${skyContext.moonSign} (${skyContext.moonPhase}).${transitLine}`
+  }
+
+  const prompt = `## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}${skySection}\n\n## The Dream\n${dreamDescription}\n\nProvide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI(apiKey, [
