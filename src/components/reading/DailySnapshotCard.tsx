@@ -43,7 +43,7 @@ function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
 function buildSnapshotPrompt(chart: ChartData, moon: CurrentMoonPhase, aspects: TransitAspect[]): string {
   const sun = chart.planets.find(p => p.name === 'Sun')
   const moonNatal = chart.planets.find(p => p.name === 'Moon')
-  const asc = chart.houseCusps?.[0]
+  const asc = chart.houses?.[0]
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',

@@ -4,6 +4,7 @@ import type { Aspect } from '../engine/aspects'
 import type { FullReading } from '../data/interpretations'
 import type { TransitData, TransitPeriod } from '../engine/transits'
 import type { SynastryData } from '../engine/synastry'
+import type { SolarReturnData } from '../engine/solarReturn'
 
 export type FocusArea =
   | 'love'
@@ -35,6 +36,7 @@ export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'trans
   | 'partner-form' | 'synastry-loading' | 'synastry-results'
   | 'synastry-transit-select' | 'synastry-transit-loading' | 'synastry-transit-results'
   | 'numerology'
+  | 'solar-return-loading' | 'solar-return'
 
 export interface AppState {
   view: AppView
@@ -62,6 +64,11 @@ export interface AppState {
   synastryError: string | null
   transitTargetMonth: string | null
   synastryTransitTargetMonth: string | null
+  // Solar Return state
+  solarReturnData: SolarReturnData | null
+  solarReturnInterpretation: string | null
+  solarReturnTargetYear: number | null
+  solarReturnError: string | null
 }
 
 export type AppAction =
@@ -83,6 +90,9 @@ export type AppAction =
   | { type: 'SET_SYNASTRY_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
   | { type: 'SET_SYNASTRY_TRANSIT_ERROR'; error: string }
   | { type: 'SET_USER_NAME'; name: string | undefined }
+  | { type: 'START_SOLAR_RETURN'; targetYear?: number }
+  | { type: 'SET_SOLAR_RETURN_RESULTS'; data: SolarReturnData; interpretation: string }
+  | { type: 'SET_SOLAR_RETURN_ERROR'; error: string }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -260,6 +270,10 @@ function buildInitialState(): AppState {
     synastryError: null,
     transitTargetMonth: null,
     synastryTransitTargetMonth: null,
+    solarReturnData: null,
+    solarReturnInterpretation: null,
+    solarReturnTargetYear: null,
+    solarReturnError: null,
   }
 }
 
@@ -304,6 +318,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, synastryError: action.error, view: 'synastry-transit-select' }
     case 'SET_USER_NAME':
       return { ...state, birthData: { ...state.birthData, userName: action.name } }
+    case 'START_SOLAR_RETURN':
+      return { ...state, view: 'solar-return-loading', solarReturnData: null, solarReturnInterpretation: null, solarReturnTargetYear: action.targetYear ?? null, solarReturnError: null }
+    case 'SET_SOLAR_RETURN_RESULTS':
+      return { ...state, view: 'solar-return', solarReturnData: action.data, solarReturnInterpretation: action.interpretation, solarReturnTargetYear: action.data.targetYear }
+    case 'SET_SOLAR_RETURN_ERROR':
+      return { ...state, solarReturnError: action.error, view: 'form' }
     default:
       return state
   }

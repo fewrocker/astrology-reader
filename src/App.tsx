@@ -9,6 +9,7 @@ import ResultsPage from './components/results/ResultsPage'
 import TransitReadingPage from './components/results/TransitReadingPage'
 import SynastryPage from './components/results/SynastryPage'
 import SynastryTransitPage from './components/results/SynastryTransitPage'
+import SolarReturnPage from './components/results/SolarReturnPage'
 import SkyTodayChart from './components/chart/SkyTodayChart'
 import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
@@ -18,6 +19,7 @@ import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
+import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
 import { getGptInterpretation, getStoredApiKey } from './services/gptInterpretation'
 
 function CachedDataLanding() {
@@ -98,6 +100,26 @@ function CachedDataLanding() {
                 className="w-full px-6 py-3 bg-pink-900/20 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/30 transition-colors"
               >
                 Couple Synastry ♡
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'START_SOLAR_RETURN' })}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(201,168,76,0.08)',
+                  border: '1px solid rgba(201,168,76,0.22)',
+                  color: 'rgba(201,168,76,0.75)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.16)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.40)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.08)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.22)'
+                }}
+              >
+                Year Ahead ☀
               </button>
               <button
                 type="button"
@@ -421,6 +443,58 @@ function AppContent() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [state.view, state.synastryTransitPeriod]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Run solar return calculation when entering solar-return-loading view
+  useEffect(() => {
+    if (state.view !== 'solar-return-loading') return
+    const { birthData } = state
+    if (!birthData.city) return
+
+    let cancelled = false
+
+    const runSolarReturn = async () => {
+      try {
+        // Ensure natal chart is calculated
+        let chart = state.chartData
+        let aspects = state.aspects
+        if (!chart) {
+          chart = calculateChart(
+            birthData.date,
+            birthData.time,
+            birthData.city!.lat,
+            birthData.city!.lng,
+            birthData.city!.tz,
+            birthData.unknownTime,
+          )
+          aspects = calculateAspects(chart.planets)
+          const reading = assembleReading(chart, aspects, birthData.focusAreas[0])
+          dispatch({ type: 'CACHE_NATAL_CHART', chartData: chart, aspects, reading })
+        }
+
+        if (!chart) throw new Error('Unable to calculate natal chart')
+
+        // Calculate solar return
+        const srData = calculateSolarReturn(chart, birthData.date, birthData.city!.lat, birthData.city!.lng, state.solarReturnTargetYear ?? undefined)
+
+        // Get GPT interpretation
+        const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
+        const apiKey = getStoredApiKey()
+        const interpretation = await getGptInterpretation(prompt, apiKey)
+
+        if (!cancelled) {
+          dispatch({ type: 'SET_SOLAR_RETURN_RESULTS', data: srData, interpretation })
+        }
+      } catch (e) {
+        console.error('Solar return error:', e)
+        if (!cancelled) {
+          dispatch({ type: 'SET_SOLAR_RETURN_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
+        }
+      }
+    }
+
+    const timer = setTimeout(runSolarReturn, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const showCachedLanding = state.view === 'form' && hasCachedBirthData() && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
@@ -471,6 +545,14 @@ function AppContent() {
         )}
         {state.view === 'synastry-transit-results' && <SynastryTransitPage />}
         {state.view === 'numerology' && <NumerologyPage />}
+        {state.view === 'solar-return-loading' && (
+          <div className="text-center py-24" role="status" aria-live="polite">
+            <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s', color: '#e8a830' }} aria-hidden="true">☀</div>
+            <p className="font-heading text-xl animate-pulse" style={{ color: '#e8a830' }}>Calculating your solar return...</p>
+            <p className="text-mystic-muted text-sm mt-2">Finding the exact moment the Sun returns to your natal position</p>
+          </div>
+        )}
+        {state.view === 'solar-return' && <SolarReturnPage />}
       </div>
     </div>
   )
