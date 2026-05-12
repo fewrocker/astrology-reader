@@ -1,11 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { calculateNumerology } from '../../engine/numerology'
+import { buildNumerologyChartData } from '../../engine/numerologyChart'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
 import type { ChartData } from '../../engine/types'
 import { calculateChart } from '../../engine/astronomy'
-import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, generateNumerologySkyChartReading, getStoredApiKey } from '../../services/gptInterpretation'
 import NumerologyDiscussModal from './NumerologyDiscussModal'
+import NumerologySkyChart, { FrequencyBar } from '../chart/NumerologySkyChart'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -304,9 +306,18 @@ export default function NumerologyPage() {
   const [retryCount, setRetryCount] = useState(0)
   const [discussOpen, setDiscussOpen] = useState(false)
 
+  const [skyReadingText, setSkyReadingText] = useState<string | null>(null)
+  const [skyReadingLoading, setSkyReadingLoading] = useState(false)
+  const [skyReadingError, setSkyReadingError] = useState<string | null>(null)
+
   const apiKey = getStoredApiKey()
 
   const chartData = useMemo(() => getChartData(state), [state.chartData, birthData]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const skyChartData = useMemo(
+    () => (chartData ? buildNumerologyChartData(chartData) : null),
+    [chartData],
+  )
 
   const reading = useMemo(
     () => calculateNumerology(birthData.date, birthData.userName || undefined),
@@ -339,6 +350,24 @@ export default function NumerologyPage() {
       .finally(() => { if (!cancelled) setCrossReadingLoading(false) })
     return () => { cancelled = true }
   }, [chartData, reading, birthData.userName, apiKey, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sky chart reading — fires after chart renders, never blocks it
+  useEffect(() => {
+    if (!skyChartData || !apiKey) return
+    let cancelled = false
+    setSkyReadingLoading(true)
+    setSkyReadingText(null)
+    setSkyReadingError(null)
+    generateNumerologySkyChartReading(
+      { name: birthData.userName, date: birthData.date },
+      skyChartData.frequencyMap,
+      apiKey,
+    )
+      .then(text => { if (!cancelled) setSkyReadingText(text) })
+      .catch(err => { if (!cancelled) setSkyReadingError((err as Error).message) })
+      .finally(() => { if (!cancelled) setSkyReadingLoading(false) })
+    return () => { cancelled = true }
+  }, [skyChartData, birthData.userName, birthData.date, apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const numerologyContext = useMemo(
     () => buildNumerologyContext(reading, chartData, birthData.userName, birthData.date),
@@ -385,6 +414,97 @@ export default function NumerologyPage() {
         <p className="text-mystic-muted text-xs uppercase tracking-widest mb-2">Sacred Numbers</p>
         <h2 className="font-heading text-3xl text-mystic-gold mb-1">✦ Your Numerology Reading</h2>
         <p className="text-mystic-muted text-sm">Born {formatDate(birthData.date)}</p>
+      </div>
+
+      {/* ─── Sky in Numbers section ─── */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Your Sky in Numbers</span>
+          <div className="h-px flex-1 bg-mystic-border" />
+        </div>
+
+        {chartData ? (
+          <>
+            {/* Chart */}
+            <div className="rounded-2xl overflow-hidden mb-3" style={{ background: 'rgba(10,10,15,0.6)', border: '1px solid rgba(58,58,80,0.6)' }}>
+              <NumerologySkyChart chartData={chartData} />
+            </div>
+
+            {/* Frequency bar */}
+            <div className="rounded-xl mb-6" style={{ background: 'rgba(18,18,26,0.5)', border: '1px solid rgba(58,58,80,0.5)' }}>
+              <p className="text-center text-mystic-muted text-xs tracking-widest pt-4 px-4">Number frequency across your sky</p>
+              <FrequencyBar frequencyMap={skyChartData!.frequencyMap} />
+            </div>
+
+            {/* Sky chart GPT reading */}
+            {!apiKey ? (
+              <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-5 text-center">
+                <p className="text-mystic-muted text-sm">Add your OpenAI API key to receive a reading of your numerical sky.</p>
+              </div>
+            ) : skyReadingLoading ? (
+              <div className="bg-mystic-surface/50 border border-mystic-gold/20 rounded-xl p-6 md:p-8">
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Reading your sky…</span>
+                </div>
+                <div className="space-y-3">
+                  {[95, 85, 70, 100, 80, 65, 90].map((w, i) => (
+                    <div
+                      key={i}
+                      className="h-3 rounded-full"
+                      style={{
+                        width: `${w}%`,
+                        background: 'linear-gradient(90deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.06) 100%)',
+                        backgroundSize: '200% 100%',
+                        animation: `shimmer 1.8s ease-in-out infinite ${i * 0.1}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+              </div>
+            ) : skyReadingError ? (
+              <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
+                <p className="text-mystic-muted text-sm">The stars are quiet right now — try again in a moment.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSkyReadingError(null)
+                    setSkyReadingLoading(true)
+                    generateNumerologySkyChartReading(
+                      { name: birthData.userName, date: birthData.date },
+                      skyChartData!.frequencyMap,
+                      apiKey,
+                    )
+                      .then(text => setSkyReadingText(text))
+                      .catch(err => setSkyReadingError((err as Error).message))
+                      .finally(() => setSkyReadingLoading(false))
+                  }}
+                  className="px-4 py-2 text-xs font-heading rounded-lg transition-all"
+                  style={{ background: 'rgba(201,168,76,0.10)', border: '1px solid rgba(201,168,76,0.30)', color: 'rgba(201,168,76,0.85)' }}
+                >
+                  ✦ Try Again
+                </button>
+              </div>
+            ) : skyReadingText ? (
+              <div className="bg-mystic-surface/50 border border-mystic-gold/20 rounded-xl p-6 md:p-8">
+                <h3 className="font-heading text-mystic-gold text-lg mb-5">✦ Your Sky Reading</h3>
+                <div className="space-y-4">
+                  {skyReadingText.split(/\n\n+/).filter(Boolean).map((para, i) => (
+                    <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{para}</p>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-8 text-center">
+            <p className="font-heading text-mystic-gold/50 text-xl mb-2">✦</p>
+            <p className="text-mystic-text/70 text-sm leading-relaxed">
+              Generate your birth chart above to see your sky of numbers.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Name input for Expression Number */}
