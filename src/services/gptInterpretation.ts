@@ -141,6 +141,67 @@ export async function getDreamDiscussResponse(
   return result || 'Unable to generate a response.'
 }
 
+export async function generateAstroNumerologyCrossReading(
+  numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number },
+  chartData: { planets: Array<{ name: string; sign: string; house: number; retrograde: boolean; degree: number }>; angles: { ascendant: { sign: string }; midheaven: { sign: string } }; unknownTime: boolean },
+  userName: string | undefined,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const nameStr = userName ? `Name: ${userName}` : 'Name: not provided'
+  const planetLines = chartData.planets
+    .filter(p => p.name !== 'NorthNode')
+    .map(p => {
+      const houseStr = !chartData.unknownTime ? ` in the ${p.house}${houseSuffix(p.house)} house` : ''
+      const rxStr = p.retrograde ? ' (retrograde)' : ''
+      return `- ${p.name}: ${p.sign} ${p.degree}°${houseStr}${rxStr}`
+    })
+    .join('\n')
+
+  const anglesStr = !chartData.unknownTime
+    ? `Ascendant: ${chartData.angles.ascendant.sign}\nMidheaven: ${chartData.angles.midheaven.sign}`
+    : '(birth time unknown — houses not available)'
+
+  const expressionLine = numbers.expressionNumber !== undefined
+    ? `Expression Number: ${numbers.expressionNumber}`
+    : 'Expression Number: not provided (no birth name given)'
+
+  const prompt = `You are synthesizing numerology and astrology into a single integrated reading for one specific person.
+
+## Person
+${nameStr}
+
+## Numerology Profile
+Life Path: ${numbers.lifePath}
+Birthday Number: ${numbers.birthdayNumber}
+Personal Year: ${numbers.personalYear}
+${expressionLine}
+
+## Natal Chart
+${planetLines}
+${anglesStr}
+
+Write 2–3 paragraphs that synthesize both systems for this specific person. Name where the numbers and chart resonate and amplify each other, and name where they create interesting tension or complexity. Be specific — reference actual placements, actual numbers, and what that combination reveals. Do not write generic number definitions. Do not write generic planet definitions. Write only about this person's specific combination. Examples of what good synthesis looks like: "Your Life Path 7 resonates with your Scorpio Moon — both point toward a life of depth, research, and hidden truths." Or: "Your 8 Life Path's drive for material mastery sits in interesting tension with your 12th house Saturn — this combination suggests someone who must do their inner work before the outer success becomes stable." Speak directly to the person in second person. Be direct, evocative, and substantive.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'You are a master reader of both numerology and astrology — someone who holds both systems simultaneously and finds the living synthesis between them. You do not treat them as two separate readings placed side by side. You weave them together, finding where they echo and where they create productive tension. You are specific, personal, and direct. You never pad with generic definitions. You write as though you know this person.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 900 })
+  )
+  return result || 'Unable to generate cross-reading.'
+}
+
+function houseSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return s[(v - 20) % 10] || s[v] || s[0]
+}
+
 export async function getDailySnapshotInterpretation(
   prompt: string,
   apiKey: string,
@@ -165,6 +226,86 @@ export async function getDailySnapshotInterpretation(
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+const MASTER_NUMBERS = new Set([11, 22, 33])
+
+function isMaster(n: number): boolean {
+  return MASTER_NUMBERS.has(n)
+}
+
+function masterLabel(n: number): string {
+  if (!isMaster(n)) return ''
+  const labels: Record<number, string> = {
+    11: 'Master Intuitive',
+    22: 'Master Builder',
+    33: 'Master Teacher',
+  }
+  return ` [${labels[n]}]`
+}
+
+export async function generateNumerologyNarrative(
+  numbers: {
+    lifePath: number
+    birthdayNumber: number
+    personalYear: number
+    expressionNumber?: number
+    soulUrge?: number
+  },
+  userName: string | undefined,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const nameIntro = userName ? `Reading for: ${userName}` : 'Reading for: unnamed person'
+  const expressionLine = numbers.expressionNumber !== undefined
+    ? `Expression Number: ${numbers.expressionNumber}${masterLabel(numbers.expressionNumber)} — how gifts and personality express outward in the world`
+    : 'Expression Number: not provided (no birth name given)'
+  const soulUrgeLine = numbers.soulUrge !== undefined
+    ? `Soul Urge Number: ${numbers.soulUrge}${masterLabel(numbers.soulUrge)} — the inner desire, what the soul craves and is driven by`
+    : 'Soul Urge Number: not provided'
+
+  const prompt = `${nameIntro}
+
+## Complete Numerological Profile
+
+Life Path: ${numbers.lifePath}${masterLabel(numbers.lifePath)} — the fundamental nature, the overarching life theme and lesson
+Birthday Number: ${numbers.birthdayNumber}${masterLabel(numbers.birthdayNumber)} — a specific natural talent, a gift brought into this life
+Personal Year: ${numbers.personalYear}${masterLabel(numbers.personalYear)} — the current annual cycle, the dominant theme and energy of this year
+${expressionLine}
+${soulUrgeLine}
+
+Write a cohesive 3-paragraph reading that treats these numbers as a single integrated portrait — not as definitions placed side by side. In each paragraph, show how the numbers interact: where they reinforce each other and create coherent themes, and where they create genuine tension or complexity that this person must navigate.${isMaster(numbers.lifePath) || isMaster(numbers.birthdayNumber) || isMaster(numbers.personalYear) || (numbers.expressionNumber !== undefined && isMaster(numbers.expressionNumber)) || (numbers.soulUrge !== undefined && isMaster(numbers.soulUrge)) ? ' Name any master numbers with appropriate weight — they carry double the vibration and double the burden.' : ''} Reference the actual numbers throughout — never speak in generic archetypes without grounding them in these specific digits. Speak in second person, directly to this person${userName ? `, using their name (${userName}) where it feels natural` : ''}. Be evocative but precise — this is a real reading, not a textbook.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'You are a master numerologist who reads the full numerological profile as a single, integrated portrait — not as separate number definitions placed side by side. Every reading is personal, direct, and specific to this person\'s actual numbers and their interactions.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 1200 })
+  )
+  return result || 'Unable to generate numerology narrative.'
+}
+
+export async function getNumerologyDiscussResponse(
+  numerologyContext: string,
+  messages: ChatMessage[],
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: `You are an expert numerologist and astrologer who holds both systems simultaneously — you see numbers and planetary energies as two languages describing the same soul. You are continuing a conversation with someone about their numerological profile. Use the full context below to answer follow-up questions with depth, specificity, and personal directness. Reference their actual numbers. Do not be generic. Stay personal and direct.\n\n${numerologyContext}`,
+      },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ], { temperature: 0.85, max_tokens: 1000 })
+  )
+  return result || 'Unable to generate a response.'
 }
 
 /**

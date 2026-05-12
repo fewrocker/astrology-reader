@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { calculateNumerology } from '../../engine/numerology'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
 import type { ChartData } from '../../engine/types'
 import { calculateChart } from '../../engine/astronomy'
+import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, getStoredApiKey } from '../../services/gptInterpretation'
+import NumerologyDiscussModal from './NumerologyDiscussModal'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -16,141 +18,49 @@ function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | nu
   }
 }
 
-function buildChartCrossRef(lifePath: number, chartData: ChartData | null): string | null {
-  if (!chartData) return null
-
-  const planets = chartData.planets
-  const sun = planets.find(p => p.name === 'Sun')
-  const moon = planets.find(p => p.name === 'Moon')
-  const neptune = planets.find(p => p.name === 'Neptune')
-  const saturn = planets.find(p => p.name === 'Saturn')
-  const mars = planets.find(p => p.name === 'Mars')
-  const venus = planets.find(p => p.name === 'Venus')
-  const mercury = planets.find(p => p.name === 'Mercury')
-  const jupiter = planets.find(p => p.name === 'Jupiter')
-  const pluto = planets.find(p => p.name === 'Pluto')
-
-  const waterSigns = ['Cancer', 'Scorpio', 'Pisces']
-  const earthSigns = ['Taurus', 'Virgo', 'Capricorn']
-  const fireSigns = ['Aries', 'Leo', 'Sagittarius']
-  const airSigns = ['Gemini', 'Libra', 'Aquarius']
-
-  switch (lifePath) {
-    case 1: {
-      const sunNote = sun ? `Your Sun in ${sun.sign}${sun.house ? ` in the ${ordinal(sun.house)} house` : ''} amplifies your Life Path 1's core drive for self-expression and authentic leadership.` : ''
-      const marsNote = mars && fireSigns.includes(mars.sign) ? ` Mars in ${mars.sign} adds a bold, pioneering edge to your natural independence.` : ''
-      return `${sunNote}${marsNote} The Life Path 1's need for self-determination finds its astrological mirror in the placement and strength of the Sun in your chart — the planet of identity, will, and creative self-expression. Wherever your Sun is placed, that is where your leadership instinct is most alive.`
-    }
-    case 2: {
-      const moonNote = moon ? `Your Moon in ${moon.sign}${moon.house ? ` in the ${ordinal(moon.house)} house` : ''} deepens your Life Path 2's emotional intelligence and relational sensitivity.` : ''
-      const venusNote = venus ? ` Venus in ${venus.sign} colors how your diplomatic gifts express in relationships — ${waterSigns.includes(venus.sign) ? 'with intuitive emotional depth' : airSigns.includes(venus.sign) ? 'with graceful social intelligence' : 'with quiet, steady devotion'}.` : ''
-      return `${moonNote}${venusNote} The Life Path 2's gifts of receptivity and partnership find their astrological home in the Moon and Venus — the planets of feeling, beauty, and relational attunement. Their placements in your chart reveal where and how your capacity for deep connection is most naturally expressed.`
-    }
-    case 3: {
-      const mercNote = mercury ? `Your Mercury in ${mercury.sign}${mercury.house ? ` in the ${ordinal(mercury.house)} house` : ''} reveals the specific texture of your Life Path 3's expressive gifts.` : ''
-      const jupNote = jupiter ? ` Jupiter in ${jupiter.sign} expands your creative range with ${fireSigns.includes(jupiter.sign) ? 'visionary enthusiasm' : waterSigns.includes(jupiter.sign) ? 'emotional depth and artistic sensitivity' : earthSigns.includes(jupiter.sign) ? 'practical creative mastery' : 'intellectually adventurous breadth'}.` : ''
-      return `${mercNote}${jupNote} The Life Path 3's creative and communicative gifts are mirrored in Mercury — the planet of mind and expression — and Jupiter, the great amplifier. Their signs and houses tell you which domains will be most richly rewarded by your natural creative intelligence.`
-    }
-    case 4: {
-      const satNote = saturn ? `Your Saturn in ${saturn.sign}${saturn.house ? ` in the ${ordinal(saturn.house)} house` : ''} is the astrological echo of your Life Path 4's devotion to structure, discipline, and lasting achievement.` : ''
-      const earthNote = planets.filter(p => earthSigns.includes(p.sign)).length >= 3 ? ' With multiple planets in earth signs, your chart amplifies the 4\'s natural affinity for the tangible, the well-built, and the enduring.' : ''
-      return `${satNote}${earthNote} Saturn is the ruling planet of Life Path 4's themes: responsibility, mastery through sustained effort, and the architecture of enduring structures. Where Saturn sits in your chart is where your life demands — and ultimately rewards — your most serious and dedicated attention.`
-    }
-    case 5: {
-      const mercNote = mercury ? `Your Mercury in ${mercury.sign} gives your Life Path 5's restless curiosity a distinctive flavor — ${airSigns.includes(mercury.sign) ? 'intellectually wide-ranging and socially electric' : fireSigns.includes(mercury.sign) ? 'bold, direct, and inventive' : 'perceptive and strategically adaptive'}.` : ''
-      const uranNote = planets.find(p => p.name === 'Uranus') ? ` Uranus in your chart marks where the unexpected breaks through — and for a Life Path 5, those breakthroughs are not obstacles but the very territory where you thrive.` : ''
-      return `${mercNote}${uranNote} The Life Path 5's hunger for freedom and experience resonates through Mercury and Uranus in your chart — the planets of mobility, awakening, and the refusal of limitation. Their placements reveal where your capacity for inspired adaptation is most potently available to you.`
-    }
-    case 6: {
-      const venusNote = venus ? `Your Venus in ${venus.sign}${venus.house ? ` in the ${ordinal(venus.house)} house` : ''} is the astrological signature of your Life Path 6's gifts of beauty, care, and relational devotion.` : ''
-      const moonNote = moon && waterSigns.includes(moon.sign) ? ` Your Moon in ${moon.sign} adds a deep empathic current to your nurturing nature — you feel the needs of those you love before they can articulate them.` : ''
-      return `${venusNote}${moonNote} Venus is the natural ruler of Life Path 6's themes of love, beauty, harmony, and service. Where Venus sits in your chart tells you the arena where your gifts of care and aesthetic intelligence are most powerfully and naturally expressed.`
-    }
-    case 7: {
-      const nepNote = neptune ? `Your Neptune in ${neptune.sign}${neptune.house ? ` in the ${ordinal(neptune.house)} house` : ''} — the planet of the invisible, the mystical, and the transcendent — carries the deep frequency of your Life Path 7's quest for truth beyond appearances.` : ''
-      const moon12 = moon && moon.house === 12 ? ` Your Moon in the 12th house adds a profound interiority and psychic permeability to your already contemplative nature.` : ''
-      const waterNote = !moon || moon.house !== 12 ? (moon && waterSigns.includes(moon.sign) ? ` Your Moon in ${moon.sign} gives your inner world a fluid, emotionally intelligent depth that enriches your capacity for mystical understanding.` : '') : ''
-      return `${nepNote}${moon12}${waterNote} Neptune and the 12th house are the astrological home of Life Path 7's themes: the search for hidden truth, the value of solitude and contemplation, and the willingness to surrender to something vaster than the rational mind can fully comprehend.`
-    }
-    case 8: {
-      const satNote = saturn ? `Your Saturn in ${saturn.sign}${saturn.house ? ` in the ${ordinal(saturn.house)} house` : ''} — the planet of mastery through time and effort — is the astrological anchor of your Life Path 8's drive for lasting, meaningful achievement.` : ''
-      const plutNote = pluto ? ` Pluto in ${pluto.sign}${pluto.house ? ` in the ${ordinal(pluto.house)} house` : ''} adds depth and transformative intensity to your executive gifts — the capacity not just to build power but to wield it with genuine wisdom and consequence.` : ''
-      return `${satNote}${plutNote} Saturn and Pluto are the primary astrological resonances of Life Path 8: the disciplined pursuit of mastery, the responsible use of authority, and the understanding that the most enduring power is built on integrity rather than force.`
-    }
-    case 9: {
-      const jupNote = jupiter ? `Your Jupiter in ${jupiter.sign}${jupiter.house ? ` in the ${ordinal(jupiter.house)} house` : ''} — the planet of abundance, wisdom, and universal vision — amplifies your Life Path 9's gift for inclusive, philosophical compassion.` : ''
-      const nepNote = neptune ? ` Neptune in your chart marks where the boundaries of self dissolve into something larger — and for a Life Path 9, that dissolving is not loss but the very opening through which universal love flows.` : ''
-      return `${jupNote}${nepNote} Jupiter and Neptune carry the vibrational signature of Life Path 9: the broad compassion that sees the divine in every person, the artistic sensitivity that transmutes experience into meaning, and the spiritual understanding that completion and release are always the prelude to rebirth.`
-    }
-    case 11: {
-      const nepNote = neptune ? `Your Neptune in ${neptune.sign}${neptune.house ? ` in the ${ordinal(neptune.house)} house` : ''} resonates directly with the Master Number 11's extraordinary sensitivity to the invisible currents that move through all things.` : ''
-      const moonNote = moon ? ` Your Moon in ${moon.sign}${moon.house ? ` in the ${ordinal(moon.house)} house` : ''} — the planet of intuition and the unconscious — is the channel through which your 11's illuminating gifts most directly flow.` : ''
-      return `${nepNote}${moonNote} The Master Number 11 finds its astrological mirrors in Neptune and the Moon — the two luminaries of the hidden, the intuitive, and the psychically perceptive. Their placements in your chart mark the domains where your capacity for spiritual illumination is most available and most needed.`
-    }
-    case 22: {
-      const satNote = saturn ? `Your Saturn in ${saturn.sign}${saturn.house ? ` in the ${ordinal(saturn.house)} house` : ''} — the disciplined architect of time — is the astrological backbone of your Master Number 22's extraordinary capacity to turn vision into enduring reality.` : ''
-      const earthNote = planets.filter(p => earthSigns.includes(p.sign)).length >= 2 ? ' The presence of multiple earth sign placements in your chart gives the Master Builder\'s gifts their essential foundation of practical intelligence and grounded organizational wisdom.' : ''
-      return `${satNote}${earthNote} Saturn in its highest expression is the Master Builder's planet: the one who works patiently within the laws of time and matter to create something that will stand. For the Master Number 22, this planet is not a limitation but a collaborator — the force that transforms grand vision into architecture that actually exists in the world.`
-    }
-    case 33: {
-      const jupNote = jupiter ? `Your Jupiter in ${jupiter.sign}${jupiter.house ? ` in the ${ordinal(jupiter.house)} house` : ''} expands your Master Number 33's capacity for compassionate wisdom and philosophical generosity of spirit.` : ''
-      const waterNote = planets.filter(p => waterSigns.includes(p.sign)).length >= 3 ? ' With multiple planets in water signs, your chart amplifies the 33\'s gift of emotional attunement and empathic healing presence.' : ''
-      return `${jupNote}${waterNote} The Master Number 33's extraordinary compassion resonates through Jupiter and Neptune — the planets of universal love, spiritual wisdom, and the capacity for grace that transcends the merely personal. Where these planets sit in your chart marks the arenas where your sacred service is most powerfully called forth.`
-    }
-    default:
-      return null
-  }
+function calculatePersonalMonth(personalYear: number, currentMonth: number): number {
+  const sum = personalYear + currentMonth
+  if (sum === 11 || sum === 22 || sum === 33) return sum
+  if (sum < 10) return sum
+  const digits = String(sum).split('').map(Number)
+  const reduced = digits.reduce((a, b) => a + b, 0)
+  return reduced === 11 || reduced === 22 || reduced === 33 ? reduced : reduced < 10 ? reduced : calculatePersonalMonth(reduced, 0)
 }
 
-function buildPersonalYearCrossRef(personalYear: number, chartData: ChartData | null): string {
-  if (!chartData) {
-    switch (personalYear) {
-      case 1: return 'A Personal Year 1 resonates with Solar energy — a time of new beginnings aligned with the vitality and creative will of the Sun. Any natal Sun placements in your chart become especially activated this year.'
-      case 2: return 'A Personal Year 2 resonates with Lunar and Venusian energy — a year when relationships, emotions, and the quiet work of receptivity are cosmically supported. Your natal Moon and Venus speak directly to how this year\'s gifts are most available.'
-      case 3: return 'A Personal Year 3 resonates with Mercury and Jupiter — the planets of expression, communication, and expansive creative intelligence. Your natal placements of these planets reveal where creative opportunities will be most abundant.'
-      case 4: return 'A Personal Year 4 resonates with Saturn — the planet of disciplined mastery, responsibility, and structures built to last. This is a year when Saturn\'s lessons are gifts in disguise.'
-      case 5: return 'A Personal Year 5 resonates with Mercury and Uranus — the planets of mobility, intellectual freedom, and the liberating shock of the unexpected. Prepare for a year of necessary change and expansive new experiences.'
-      case 6: return 'A Personal Year 6 resonates with Venus and the Moon — the planets of love, beauty, and nurturing. Relationships and home are the primary arena of growth and meaning this year.'
-      case 7: return 'A Personal Year 7 resonates with Neptune and the 12th house — the domain of solitude, contemplation, and spiritual deepening. This is a year to honor the inner life above external achievement.'
-      case 8: return 'A Personal Year 8 resonates with Saturn and Pluto — the planets of material mastery and transformative power. Effort is rewarded with unusual directness; integrity is the key that unlocks the year\'s abundance.'
-      case 9: return 'A Personal Year 9 resonates with Jupiter and Neptune — the planets of completion, release, and the compassionate wisdom that comes from having lived through the full cycle. This year asks you to let go with grace.'
-      case 11: return 'A Master Year 11 resonates with Neptune and the Moon — amplifying intuitive sensitivity and spiritual awareness to extraordinary levels. Trust the inner voice above all external noise this year.'
-      case 22: return 'A Master Year 22 resonates with Saturn and Jupiter together — the disciplined builder paired with the expansive visionary. What you build this year can genuinely outlast you.'
-      case 33: return 'A Master Year 33 resonates with Neptune, Jupiter, and the compassionate impulse at the heart of all sacred service. This year\'s most important work will be done in the service of others.'
-      default: return ''
+function buildNumerologyContext(
+  reading: ReturnType<typeof calculateNumerology>,
+  chartData: ChartData | null,
+  userName: string | undefined,
+  birthDate: string,
+): string {
+  const currentMonth = new Date().getMonth() + 1
+  const currentYear = new Date().getFullYear()
+  const personalMonth = calculatePersonalMonth(reading.personalYear, currentMonth)
+
+  let ctx = `## Numerology Profile\n`
+  if (userName) ctx += `Name: ${userName}\n`
+  ctx += `Born: ${birthDate}\n\n`
+
+  ctx += `### Core Numbers\n`
+  ctx += `- Life Path: ${reading.lifePath}\n`
+  ctx += `- Birthday Number: ${reading.birthdayNumber}\n`
+  if (reading.expressionNumber) ctx += `- Expression Number: ${reading.expressionNumber}\n`
+
+  ctx += `\n### Current Cycle Numbers (${currentYear})\n`
+  ctx += `- Personal Year: ${reading.personalYear}\n`
+  ctx += `- Personal Month: ${personalMonth} (Month ${currentMonth})\n`
+
+  if (chartData) {
+    ctx += `\n### Natal Chart Placements\n`
+    for (const p of chartData.planets) {
+      if (p.name === 'NorthNode') continue
+      ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.house ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
     }
+    ctx += `\nAscendant: ${chartData.angles.ascendant.degree}°${chartData.angles.ascendant.minute}' ${chartData.angles.ascendant.sign}\n`
+    ctx += `Midheaven: ${chartData.angles.midheaven.degree}°${chartData.angles.midheaven.minute}' ${chartData.angles.midheaven.sign}\n`
   }
 
-  const planets = chartData.planets
-  const sun = planets.find(p => p.name === 'Sun')
-  const moon = planets.find(p => p.name === 'Moon')
-  const mercury = planets.find(p => p.name === 'Mercury')
-
-  const sunDesc = sun ? `Sun in ${sun.sign}` : 'your natal Sun'
-  const moonDesc = moon ? `Moon in ${moon.sign}` : 'your natal Moon'
-  const mercDesc = mercury ? `Mercury in ${mercury.sign}` : 'your natal Mercury'
-
-  switch (personalYear) {
-    case 1: return `Your Personal Year 1 activates the Solar force in your chart — particularly ${sunDesc}, which becomes a focal point for the new creative direction opening before you. This year's energy asks you to lead from your most authentic center.`
-    case 2: return `Your Personal Year 2 works through ${moonDesc} — the planet most attuned to the subtle, relational, and receptive qualities that define this year's gifts. Partnership and emotional attunement are your primary fields of growth.`
-    case 3: return `Your Personal Year 3 activates ${mercDesc} — the planet of mind, communication, and creative expression. Your natal Mercury placement reveals the specific domain where creative and communicative gifts will flourish most abundantly this year.`
-    case 4: return 'Your Personal Year 4 works through Saturn — the planet of disciplined mastery. This year, your natal Saturn placement becomes a focal point for serious, sustained work that builds structures meant to last well beyond this single year.'
-    case 5: return `Your Personal Year 5 energizes the most dynamic and mercurial placements in your chart — particularly ${mercDesc} and any Uranian influences. Flexibility and openness to the unexpected are your greatest assets this year.`
-    case 6: return 'Your Personal Year 6 works through Venus and the Moon — the planets of love, care, and relational beauty. Your natal Venus and Moon placements reveal where the deepest relational growth and healing are available to you this year.'
-    case 7: return 'Your Personal Year 7 activates Neptune and the 12th house in your chart — the domain of solitude, mystical understanding, and the patient inner work that transforms without spectacle. Honor the depth this year asks of you.'
-    case 8: return 'Your Personal Year 8 works through Saturn and Pluto — the planets of earned authority and transformative power. Your natal placements of these planets reveal where material mastery and consequential achievement are most accessible to you this year.'
-    case 9: return 'Your Personal Year 9 activates the Jupiterian and Neptunian dimensions of your chart — the domain of release, completion, and the compassionate wisdom that comes from having lived through the full arc of the cycle.'
-    case 11: return `A Master Year 11 amplifies the most sensitive and intuitive dimensions of your chart — particularly ${moonDesc} and any Neptunian placements. Trust the inner knowing that arrives clearly this year, even when it contradicts external appearances.`
-    case 22: return 'A Master Year 22 brings Saturn and Jupiter into powerful collaboration in your chart — the disciplined builder and the expansive visionary working in concert. The structures you commit to building this year will be among your most lasting contributions.'
-    case 33: return 'A Master Year 33 activates the highest frequencies of compassion and spiritual service available in your chart. Any placements in the 12th house, in Pisces, or involving Neptune or Jupiter become especially resonant with the year\'s call to selfless giving.'
-    default: return ''
-  }
-}
-
-function ordinal(n: number): string {
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return n + (s[(v - 20) % 10] || s[v] || s[0])
+  return ctx
 }
 
 interface NumberCardProps {
@@ -220,21 +130,160 @@ function NumberCard({ label, number, category, badge }: NumberCardProps) {
           ))}
         </div>
 
+        {/* Shadow toggle — hidden for brief monthly notes */}
+        {interpretation.shadow && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              className="flex items-center gap-2 text-mystic-muted text-xs hover:text-mystic-text transition-colors group"
+            >
+              <span className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>
+              <span>{expanded ? 'Hide' : 'Show'} shadow &amp; challenge</span>
+            </button>
+
+            {expanded && (
+              <div className="mt-4 pl-4 border-l border-mystic-border/60">
+                <p className="text-mystic-muted text-sm leading-relaxed italic">{interpretation.shadow}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function KarmicDebtCard({ debtNumber }: { debtNumber: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const interpretation = getInterpretation('karmicDebt', debtNumber)
+  if (!interpretation) return null
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden transition-all duration-300"
+      style={{
+        background: 'rgba(30, 18, 5, 0.6)',
+        border: '1px solid rgba(194, 120, 40, 0.45)',
+      }}
+    >
+      <div className="p-6 md:p-8">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <span
+              className="leading-none select-none"
+              style={{
+                fontSize: 'clamp(2.5rem, 7vw, 4rem)',
+                color: 'rgba(194, 120, 40, 0.9)',
+                textShadow: '0 0 24px rgba(194, 120, 40, 0.5)',
+              }}
+            >
+              ⚖
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(194, 120, 40, 0.6)' }}>
+                Karmic Debt
+              </p>
+              <h3 className="font-heading text-lg" style={{ color: 'rgba(220, 145, 60, 0.95)' }}>
+                {interpretation.archetype}
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        {/* Essence */}
+        <p className="text-sm leading-relaxed mb-5" style={{ color: 'rgba(220, 200, 170, 0.85)' }}>
+          {interpretation.essence}
+        </p>
+
+        {/* Keywords */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {interpretation.keywords.map(kw => (
+            <span
+              key={kw}
+              className="px-2.5 py-1 text-xs rounded-full font-heading tracking-wide"
+              style={{
+                background: 'rgba(194, 120, 40, 0.1)',
+                border: '1px solid rgba(194, 120, 40, 0.3)',
+                color: 'rgba(194, 120, 40, 0.85)',
+              }}
+            >
+              {kw}
+            </span>
+          ))}
+        </div>
+
         {/* Shadow toggle */}
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
-          className="flex items-center gap-2 text-mystic-muted text-xs hover:text-mystic-text transition-colors group"
+          className="flex items-center gap-2 text-xs transition-colors"
+          style={{ color: 'rgba(194, 120, 40, 0.55)' }}
         >
           <span className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>
-          <span>{expanded ? 'Hide' : 'Show'} shadow &amp; challenge</span>
+          <span>{expanded ? 'Hide' : 'Show'} shadow &amp; consequence</span>
         </button>
 
         {expanded && (
-          <div className="mt-4 pl-4 border-l border-mystic-border/60">
-            <p className="text-mystic-muted text-sm leading-relaxed italic">{interpretation.shadow}</p>
+          <div className="mt-4 pl-4" style={{ borderLeft: '1px solid rgba(194, 120, 40, 0.25)' }}>
+            <p className="text-sm leading-relaxed italic" style={{ color: 'rgba(194, 120, 40, 0.65)' }}>
+              {interpretation.shadow}
+            </p>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function NarrativeSkeleton() {
+  return (
+    <div className="bg-mystic-surface/50 border border-mystic-gold/25 rounded-xl p-6 md:p-8">
+      <div className="flex items-center gap-2 mb-5">
+        <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Your Reading</span>
+      </div>
+      <div className="space-y-3">
+        {[100, 90, 75, 100, 85, 60, 95, 80].map((w, i) => (
+          <div
+            key={i}
+            className="h-3 rounded-full"
+            style={{
+              width: `${w}%`,
+              background: 'linear-gradient(90deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.06) 100%)',
+              backgroundSize: '200% 100%',
+              animation: `shimmer 1.8s ease-in-out infinite ${i * 0.1}s`,
+            }}
+          />
+        ))}
+      </div>
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function CrossReadingSkeleton() {
+  return (
+    <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px flex-1 bg-mystic-border" />
+        <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Astrology & Numerology</span>
+        <div className="h-px flex-1 bg-mystic-border" />
+      </div>
+      <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Reading your chart connections…</p>
+      <div className="space-y-3">
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '92%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.06)', width: '85%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '96%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.05)', width: '78%' }} />
+        <div className="mt-4 h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '90%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.06)', width: '82%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.07)', width: '88%' }} />
       </div>
     </div>
   )
@@ -245,6 +294,17 @@ export default function NumerologyPage() {
   const { birthData } = state
   const [nameInput, setNameInput] = useState(birthData.userName ?? '')
   const [editingName, setEditingName] = useState(!birthData.userName)
+  const [narrativeText, setNarrativeText] = useState<string | null>(null)
+  const [narrativeLoading, setNarrativeLoading] = useState(false)
+  const [narrativeError, setNarrativeError] = useState<string | null>(null)
+
+  const [crossReadingText, setCrossReadingText] = useState<string | null>(null)
+  const [crossReadingLoading, setCrossReadingLoading] = useState(false)
+  const [crossReadingError, setCrossReadingError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+  const [discussOpen, setDiscussOpen] = useState(false)
+
+  const apiKey = getStoredApiKey()
 
   const chartData = useMemo(() => getChartData(state), [state.chartData, birthData]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -253,20 +313,64 @@ export default function NumerologyPage() {
     [birthData.date, birthData.userName],
   )
 
-  const lifepathCrossRef = useMemo(
-    () => buildChartCrossRef(reading.lifePath, chartData),
-    [reading.lifePath, chartData],
+  // Narrative GPT call — fires in parallel with cross-reading
+  useEffect(() => {
+    if (!apiKey) return
+    let cancelled = false
+    setNarrativeLoading(true)
+    setNarrativeText(null)
+    setNarrativeError(null)
+    generateNumerologyNarrative(reading, birthData.userName, apiKey)
+      .then(text => { if (!cancelled) setNarrativeText(text) })
+      .catch(err => { if (!cancelled) setNarrativeError((err as Error).message) })
+      .finally(() => { if (!cancelled) setNarrativeLoading(false) })
+    return () => { cancelled = true }
+  }, [reading, birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-reading GPT call — fires in parallel with narrative
+  useEffect(() => {
+    if (!chartData || !apiKey) return
+    let cancelled = false
+    setCrossReadingLoading(true)
+    setCrossReadingError(null)
+    generateAstroNumerologyCrossReading(reading, chartData, birthData.userName, apiKey)
+      .then(text => { if (!cancelled) setCrossReadingText(text) })
+      .catch(err => { if (!cancelled) setCrossReadingError(err.message) })
+      .finally(() => { if (!cancelled) setCrossReadingLoading(false) })
+    return () => { cancelled = true }
+  }, [chartData, reading, birthData.userName, apiKey, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const numerologyContext = useMemo(
+    () => buildNumerologyContext(reading, chartData, birthData.userName, birthData.date),
+    [reading, chartData, birthData.userName, birthData.date],
   )
 
-  const personalYearCrossRef = useMemo(
-    () => buildPersonalYearCrossRef(reading.personalYear, chartData),
-    [reading.personalYear, chartData],
-  )
+  const discussChips = useMemo(() => {
+    const chips = [
+      'What does my Life Path mean for love?',
+      `How does my Personal Year ${reading.personalYear} shape this season?`,
+      'What should I focus on this Personal Month?',
+      'What does my Life Path mean for my career?',
+    ]
+    if (reading.expressionNumber) {
+      chips.splice(2, 0, `What's the interaction between my Life Path ${reading.lifePath} and Expression ${reading.expressionNumber}?`)
+    }
+    if (chartData) {
+      chips.push('How do my numbers interact with my birth chart?')
+    }
+    return chips
+  }, [reading, chartData])
 
   const formatDate = (d: string) => {
     const [y, m, day] = d.split('-')
     return `${m}/${day}/${y}`
   }
+
+  const personalMonthBadge = useMemo(() => {
+    const now = new Date()
+    const monthName = now.toLocaleString('default', { month: 'long' })
+    return `${monthName} ${now.getFullYear()}`
+  }, [])
 
   const handleSaveName = () => {
     const trimmed = nameInput.trim()
@@ -336,6 +440,9 @@ export default function NumerologyPage() {
           number={reading.lifePath}
           category="lifePath"
         />
+        {reading.karmicDebt !== null && (
+          <KarmicDebtCard debtNumber={reading.karmicDebt} />
+        )}
         <NumberCard
           label="Birthday Number"
           number={reading.birthdayNumber}
@@ -346,6 +453,12 @@ export default function NumerologyPage() {
           number={reading.personalYear}
           category="personalYear"
           badge={String(new Date().getFullYear())}
+        />
+        <NumberCard
+          label="Personal Month"
+          number={reading.personalMonth}
+          category="personalMonth"
+          badge={personalMonthBadge}
         />
         {reading.expressionNumber ? (
           <NumberCard
@@ -359,44 +472,123 @@ export default function NumerologyPage() {
             <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Expression Number.</p>
           </div>
         )}
+        {reading.soulUrge ? (
+          <NumberCard
+            label="Soul Urge"
+            number={reading.soulUrge}
+            category="soulUrge"
+          />
+        ) : (
+          <div className="bg-mystic-surface/20 border border-dashed border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-gold/50 font-heading text-lg mb-1">Soul Urge (Heart's Desire)</p>
+            <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Soul Urge Number.</p>
+          </div>
+        )}
       </div>
 
-      {/* Cosmic Connections */}
-      {chartData && (
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="h-px flex-1 bg-mystic-border" />
-            <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Cosmic Connections</span>
-            <div className="h-px flex-1 bg-mystic-border" />
-          </div>
-          <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Where your numbers echo in your natal chart</p>
-
-          <div className="space-y-4">
-            {lifepathCrossRef && (
-              <div className="bg-mystic-surface/30 border border-mystic-gold/15 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-mystic-gold text-sm font-heading">Life Path {reading.lifePath}</span>
-                  <span className="text-mystic-muted text-xs">in your natal chart</span>
-                </div>
-                <p className="text-mystic-text/75 text-sm leading-relaxed">{lifepathCrossRef}</p>
-              </div>
-            )}
-
-            {personalYearCrossRef && (
-              <div className="bg-mystic-surface/30 border border-mystic-gold/15 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-mystic-gold text-sm font-heading">Personal Year {reading.personalYear}</span>
-                  <span className="text-mystic-muted text-xs">— current cycle energy</span>
-                </div>
-                <p className="text-mystic-text/75 text-sm leading-relaxed">{personalYearCrossRef}</p>
-              </div>
-            )}
-          </div>
+      {/* GPT Narrative Card */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Your Reading</span>
+          <div className="h-px flex-1 bg-mystic-border" />
         </div>
-      )}
+        {!apiKey ? (
+          <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-5 text-center">
+            <p className="text-mystic-muted text-sm">Add your OpenAI API key to unlock your personalized reading.</p>
+          </div>
+        ) : narrativeLoading ? (
+          <NarrativeSkeleton />
+        ) : narrativeError ? (
+          <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
+            <p className="text-mystic-muted text-sm">The stars are quiet right now — try again in a moment.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setNarrativeError(null)
+                setNarrativeLoading(true)
+                generateNumerologyNarrative(reading, birthData.userName, apiKey)
+                  .then(text => setNarrativeText(text))
+                  .catch(err => setNarrativeError((err as Error).message))
+                  .finally(() => setNarrativeLoading(false))
+              }}
+              className="px-4 py-2 text-xs font-heading rounded-lg transition-all"
+              style={{
+                background: 'rgba(201,168,76,0.10)',
+                border: '1px solid rgba(201,168,76,0.30)',
+                color: 'rgba(201,168,76,0.85)',
+              }}
+            >
+              ✦ Try Again
+            </button>
+          </div>
+        ) : narrativeText ? (
+          <div className="bg-mystic-surface/50 border border-mystic-gold/25 rounded-xl p-6 md:p-8">
+            <h3 className="font-heading text-mystic-gold text-lg mb-5">✦ Your Numerology Reading</h3>
+            <div className="space-y-4">
+              {narrativeText.split(/\n\n+/).filter(Boolean).map((para, i) => (
+                <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{para}</p>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-      {/* Back button */}
-      <div className="text-center mb-12">
+      {/* Astrology & Numerology GPT cross-reading */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Astrology & Numerology</span>
+          <div className="h-px flex-1 bg-mystic-border" />
+        </div>
+
+        {!chartData ? (
+          <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm">Enter your birth data to unlock the astrology ↔ numerology synthesis</p>
+          </div>
+        ) : !apiKey ? (
+          <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm">Add an OpenAI API key in settings to unlock the live astrology ↔ numerology synthesis</p>
+          </div>
+        ) : crossReadingLoading ? (
+          <CrossReadingSkeleton />
+        ) : crossReadingError ? (
+          <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm mb-4">The stars are quiet right now — try again in a moment</p>
+            <button
+              type="button"
+              onClick={() => setRetryCount(c => c + 1)}
+              className="px-5 py-2 font-heading text-sm rounded-lg transition-all"
+              style={{
+                background: 'rgba(201,168,76,0.10)',
+                border: '1px solid rgba(201,168,76,0.30)',
+                color: 'rgba(201,168,76,0.85)',
+              }}
+            >
+              ✦ Try again
+            </button>
+          </div>
+        ) : crossReadingText ? (
+          <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
+            <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Where your numbers echo in your natal chart</p>
+            <div className="space-y-4">
+              {crossReadingText.split('\n').filter(p => p.trim().length > 0).map((p, i) => (
+                <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{p}</p>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Action buttons */}
+      <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center">
+        <button
+          type="button"
+          onClick={() => setDiscussOpen(true)}
+          className="px-8 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
+        >
+          Discuss ✦
+        </button>
         <button
           type="button"
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
@@ -405,6 +597,13 @@ export default function NumerologyPage() {
           ← Back to Menu
         </button>
       </div>
+
+      <NumerologyDiscussModal
+        open={discussOpen}
+        onClose={() => setDiscussOpen(false)}
+        context={numerologyContext}
+        chips={discussChips}
+      />
     </div>
   )
 }
