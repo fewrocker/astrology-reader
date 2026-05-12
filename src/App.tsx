@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
@@ -8,6 +8,8 @@ import TransitReadingPage from './components/results/TransitReadingPage'
 import SynastryPage from './components/results/SynastryPage'
 import SynastryTransitPage from './components/results/SynastryTransitPage'
 import SkyTodayChart from './components/chart/SkyTodayChart'
+import DailySnapshotCard from './components/reading/DailySnapshotCard'
+import DreamModal from './components/dream/DreamModal'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -19,6 +21,7 @@ function CachedDataLanding() {
   const { state, dispatch } = useApp()
   const { birthData } = state
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const [dreamOpen, setDreamOpen] = useState(false)
 
   const formatDate = (d: string) => {
     const [y, m, day] = d.split('-')
@@ -29,6 +32,17 @@ function CachedDataLanding() {
     const [h, m] = t.split(':').map(Number)
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
+
+  const chartData = useMemo(() => {
+    if (state.chartData) return state.chartData
+    const { city } = birthData
+    if (!city || !birthData.date) return null
+    try {
+      return calculateChart(birthData.date, birthData.time, city.lat, city.lng, city.tz, birthData.unknownTime)
+    } catch {
+      return null
+    }
+  }, [state.chartData, birthData])
 
   const now = new Date()
   const todayLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -43,14 +57,14 @@ function CachedDataLanding() {
             <h2 className="font-heading text-2xl text-mystic-gold mb-6">Your Birth Details</h2>
             <div className="space-y-2 text-sm mb-8">
               <p className="text-mystic-text">
-                <span className="text-mystic-purple">Date:</span> {formatDate(birthData.date)}
+                <span className="text-mystic-purple">Place:</span> {cityLabel}
               </p>
               <p className="text-mystic-text">
                 <span className="text-mystic-purple">Time:</span>{' '}
                 {birthData.unknownTime ? 'Unknown (solar noon)' : formatTime24(birthData.time)}
               </p>
               <p className="text-mystic-text">
-                <span className="text-mystic-purple">Place:</span> {cityLabel}
+                <span className="text-mystic-purple">Date:</span> {formatDate(birthData.date)}
               </p>
             </div>
             <div className="flex flex-col gap-3">
@@ -84,6 +98,26 @@ function CachedDataLanding() {
               </button>
               <button
                 type="button"
+                onClick={() => setDreamOpen(true)}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(109, 40, 217, 0.15)',
+                  border: '1px solid rgba(139, 92, 246, 0.28)',
+                  color: 'rgba(196, 181, 253, 0.85)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.25)'
+                  e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.42)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.15)'
+                  e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.28)'
+                }}
+              >
+                Dream Interpretation ☽
+              </button>
+              <button
+                type="button"
                 onClick={() => dispatch({ type: 'CLEAR_CACHE' })}
                 className="w-full px-6 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
               >
@@ -92,6 +126,13 @@ function CachedDataLanding() {
             </div>
           </div>
         </div>
+
+        {/* Mobile-only: Daily Snapshot between menu and sky */}
+        {chartData && (
+          <div className="w-full lg:hidden">
+            <DailySnapshotCard chart={chartData} />
+          </div>
+        )}
 
         {/* Right: Today's Sky — 60% */}
         <div className="w-full lg:w-[60%] flex flex-col items-center justify-center relative min-h-[400px] lg:min-h-[600px]">
@@ -105,6 +146,15 @@ function CachedDataLanding() {
           </div>
         </div>
       </div>
+
+      {/* Desktop-only: Daily Snapshot below the two panels */}
+      {chartData && (
+        <div className="mt-8 hidden lg:block">
+          <DailySnapshotCard chart={chartData} />
+        </div>
+      )}
+
+      <DreamModal open={dreamOpen} onClose={() => setDreamOpen(false)} chartData={chartData} />
     </div>
   )
 }

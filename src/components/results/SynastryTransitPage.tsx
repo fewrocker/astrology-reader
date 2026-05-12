@@ -5,6 +5,7 @@ import type { PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import DiscussModal from '../discuss/DiscussModal'
+import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Couple Reading',
@@ -144,6 +145,9 @@ export default function SynastryTransitPage() {
           </div>
         </div>
       )}
+
+      {/* current moon phase */}
+      <CurrentMoonWidget date={new Date(synastryTransitData.dateRange.start + 'T12:00:00')} />
 
       {/* Transit aspects to composite */}
       <TransitAspectsToComposite transitData={synastryTransitData} />

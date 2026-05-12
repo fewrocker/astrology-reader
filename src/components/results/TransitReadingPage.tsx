@@ -10,6 +10,7 @@ import ChartWheel from '../chart/ChartWheel'
 import TransitTimeline from '../reading/TransitTimeline'
 import AdvanceTab from '../reading/AdvanceTab'
 import DiscussModal from '../discuss/DiscussModal'
+import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 
@@ -281,6 +282,9 @@ export default function TransitReadingPage() {
       {/* Reading tab content */}
       {activeTab === 'reading' && (
         <>
+          {/* current moon phase */}
+          <CurrentMoonWidget date={new Date(transitData.dateRange.start + 'T12:00:00')} />
+
           {/* GPT interpretation */}
           {transitInterpretation && (
             <TransitInterpretation text={transitInterpretation} />

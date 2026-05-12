@@ -5,6 +5,8 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import { ReadingSummary, PlanetSection, AspectSection, AspectPatternsSection, BalanceSection, FocusSection, HousesOverview, PlanetaryStrengthSection, RetrogradeSummarySection } from '../reading/ReadingDisplay'
+import { NatalMoonPhaseWidget } from '../reading/MoonPhaseWidget'
+import DailySnapshotCard from '../reading/DailySnapshotCard'
 import DiscussModal from '../discuss/DiscussModal'
 
 export default function ResultsPage() {
@@ -33,8 +35,25 @@ export default function ResultsPage() {
         </div>
       </div>
 
+      {/* daily snapshot */}
+      <DailySnapshotCard chart={chartData} />
+
       {/* reading */}
       <ReadingSummary reading={reading} chart={chartData} />
+
+      {/* natal moon phase */}
+      {(() => {
+        const sun = chartData.planets.find(p => p.name === 'Sun')
+        const moon = chartData.planets.find(p => p.name === 'Moon')
+        if (!sun || !moon) return null
+        return (
+          <div className="mb-8">
+            <div className="bg-mystic-gold/5 rounded-lg p-5 border border-mystic-gold/20">
+              <NatalMoonPhaseWidget sunLongitude={sun.longitude} moonLongitude={moon.longitude} />
+            </div>
+          </div>
+        )
+      })()}
 
       {/* focus area */}
       {reading.focus && <FocusSection focus={reading.focus} />}

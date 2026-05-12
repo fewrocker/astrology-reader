@@ -6,6 +6,7 @@ import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
+import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -305,6 +306,9 @@ export default function SynastryPage() {
 
       {/* Compatibility overview */}
       <CompatibilitySection synastryData={synastryData} />
+
+      {/* current moon phase */}
+      <CurrentMoonWidget date={new Date()} />
 
       {/* GPT interpretation */}
       {synastryInterpretation && (

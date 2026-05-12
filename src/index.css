@@ -321,3 +321,111 @@ body {
     opacity: 0.8;
   }
 }
+
+/* ---------- Dream Modal Animations ---------- */
+
+.dream-moon-container {
+  width: 110px;
+  height: 110px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dream-moon-core {
+  font-size: 52px;
+  animation: dreamMoonPulse 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(167, 139, 250, 0.45));
+  color: rgba(216, 180, 254, 0.92);
+  display: block;
+}
+
+.dream-star {
+  position: absolute;
+  animation: dreamStarFloat 3s ease-in-out infinite;
+  color: rgba(196, 181, 253, 0.65);
+  line-height: 1;
+}
+
+@keyframes dreamMoonPulse {
+  0%, 100% { transform: scale(1); opacity: 0.82; filter: drop-shadow(0 0 14px rgba(167, 139, 250, 0.35)); }
+  50% { transform: scale(1.08); opacity: 1; filter: drop-shadow(0 0 24px rgba(167, 139, 250, 0.65)); }
+}
+
+@keyframes dreamStarFloat {
+  0%, 100% { opacity: 0.3; transform: translateY(0px) scale(1); }
+  50% { opacity: 0.85; transform: translateY(-5px) scale(1.1); }
+}
+
+.dream-loading-moon {
+  font-size: 60px;
+  animation: dreamMoonRise 2.2s ease-in-out infinite;
+  filter: drop-shadow(0 0 18px rgba(167, 139, 250, 0.55));
+  color: rgba(216, 180, 254, 0.95);
+  display: block;
+}
+
+@keyframes dreamMoonRise {
+  0% { transform: translateY(10px) scale(0.93); opacity: 0.55; filter: drop-shadow(0 0 10px rgba(167, 139, 250, 0.25)); }
+  50% { transform: translateY(-6px) scale(1.06); opacity: 1; filter: drop-shadow(0 0 24px rgba(167, 139, 250, 0.7)); }
+  100% { transform: translateY(10px) scale(0.93); opacity: 0.55; filter: drop-shadow(0 0 10px rgba(167, 139, 250, 0.25)); }
+}
+
+.dream-loading-nebula {
+  font-size: 60px;
+  animation: dreamNebulaSwirl 3.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 22px rgba(139, 92, 246, 0.65));
+  color: rgba(167, 139, 250, 0.95);
+  display: block;
+}
+
+@keyframes dreamNebulaSwirl {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: 0.72; }
+  33% { transform: scale(1.18) rotate(90deg); opacity: 1; filter: drop-shadow(0 0 30px rgba(139, 92, 246, 0.8)); }
+  66% { transform: scale(0.92) rotate(200deg); opacity: 0.8; }
+}
+
+.dream-thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+}
+
+.dream-thinking-dot {
+  font-size: 14px;
+  color: rgba(167, 139, 250, 0.72);
+  filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.25));
+  animation: dreamDotPulse 1.4s ease-in-out infinite;
+}
+
+.dream-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.dream-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dreamDotPulse {
+  0%, 80%, 100% { opacity: 0.22; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.25); filter: drop-shadow(0 0 7px rgba(139, 92, 246, 0.55)); }
+}
+
+@keyframes dreamChatAppear {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.dream-chat-appear {
+  animation: dreamChatAppear 0.28s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dream-chat-appear { animation: none; }
+
+  .dream-moon-core,
+  .dream-star,
+  .dream-loading-moon,
+  .dream-loading-nebula,
+  .dream-thinking-dot {
+    animation: none !important;
+    opacity: 0.85;
+  }
+}
