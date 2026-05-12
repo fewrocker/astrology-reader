@@ -1,19 +1,25 @@
-# Steve Jobs — Proposals Voice
+# Steve Jobs — Numerology Sky Chart Voice
 
-I've been using this numerology page for ten minutes and I'm frustrated. Not because it's broken — it's actually well-built — but because it's *telling* me things instead of *reading* me. I enter my birth date, and I get a card that says "7 — The Seeker." Okay. What does that mean *for me*? What does it mean *right now*, in this year, given what's happening in my chart?
+I've been sitting with this numerology page. It's gotten richer — the GPT readings are personal, the cards expand beautifully, the Discuss modal works. But something is still missing, and it's the most important thing: **a moment of wonder**.
 
-The app already knows my chart. It knows my Moon is in Scorpio. It knows I have Saturn in the 10th. It knows my Personal Year is 4. And yet the numerology page sits there completely separated from all of that knowledge, delivering dictionary entries dressed up in gold typography.
+When you open the astrology section, the chart wheel does something to you before you read a single word. It's a picture of the sky at the moment you were born. That visual communicates: *this is about you, specifically. Here is the universe arranged at the moment of your existence.* The numerology section has no equivalent. It's numbers in cards. Beautiful cards — but still just cards.
 
-**The core insight: Numerology is not a reference book. It's a reading.** The difference between a book and a reading is that a reading is *about you*.
+**The Numerology Sky Chart is the missing moment.**
 
-**What would make someone love this:**
+Imagine opening numerology and the first thing you see is your sky — but instead of planet glyphs, every position is a number. Some of those numbers radiate. They're bigger, slightly glowing. Those are *your dominant numbers*. The chart says this without words, in the first second. Then the GPT reading below gives those numbers language.
 
-The moment I land on the numerology page, the static cards should appear instantly. But within seconds, a pulsing card materalizes: "Interpreting your numbers…" — then the text arrives. Not bullet points. A real paragraph: "Your Life Path 7 and Moon in Scorpio are pointing at the same thing: a need for depth most people around you will never satisfy." That's the product.
+This is the emotional sequence that makes a product great: **first feel it, then understand it**. Right now numerology starts with understanding. We need to start with feeling.
 
-**The second moment:** A second card pulses — this one weaving numbers with the natal chart. "Your 4 Personal Year is asking you to build something lasting, and natal Saturn in Capricorn amplifies this call..." This is the differentiator. No other app does this.
+**What makes this special:**
+- The chart reuses the exact same coordinate system and visual language as the astrology wheel — dark background, gold accents, subtle glows. It doesn't feel like a separate feature. It feels like the same universe, seen through a different lens.
+- Dominant numbers feel alive: larger, brighter, drawing the eye. The user doesn't need a legend to know what matters — they feel it.
+- The GPT reading below the chart is already excellent context. Now it has a visual anchor.
 
-**What to cut:** The static "Cosmic Connections" section. It tries to do what GPT should do, and does it badly — hardcoded text pretending to be personalized. Kill it when GPT cross-reading is live.
+**What to protect:**
+- The chart must render immediately. Never block on GPT. The map is the product. The reading layers in.
+- Don't turn the frequency bar into a data table. It should be a minimal, beautiful row of number glyphs that glow in proportion to their count.
+- Don't combine the regular chart with this one — no hybrid. This chart speaks only numbers.
 
-**On adding deeper numbers:** Only if each is GPT-interpreted. Another static card "Karmic Debt 13" with three explanation lines is not an improvement — it's clutter.
+**One-sentence story**: *See yourself as the universe counted you.*
 
-**The one thing this must nail:** The feeling that the app *knows me* — synthesizing two ancient systems on my behalf, right now, for this specific moment in my life.
+**The signature moment**: User opens numerology. Chart appears. They notice 7 glowing brighter than the others, appearing in the Moon's position, Venus's position, the MC. Before reading a word, they already *know* 7 is theirs. Then the reading tells them why.

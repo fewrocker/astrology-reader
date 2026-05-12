@@ -1,19 +1,38 @@
-# Hayao Miyazaki — Proposals Voice
+# Hayao Miyazaki — Numerology Sky Chart Voice
 
-I look at this numerology page and I think: the bones are beautiful. The golden numbers, the mystic typography, the shadow/challenge reveal. Someone cared about this. But then I read the "Cosmic Connections" section and I feel the care disappear. It is trying to be personal. It says "Your Neptune in [sign]..." — but it reads like a template wearing a disguise. The user can feel the template. They always can.
+I look at the existing astrology chart and feel something. The dark background, the gold zodiac ring, the glyph for Saturn glowing faintly in the upper left — it feels like looking through a window at something ancient and real. Someone cared about making it feel that way.
 
-**Where craft would make the biggest difference:**
+Now I think about the Numerology Sky Chart and ask: will it have that same feeling, or will it feel like someone pasted numbers onto a chart template?
 
-The loading state is the most important moment on the page that doesn't exist yet. Right now: nothing loads asynchronously. When we add GPT cards, the skeleton placeholder is not just a UX pattern — it is the product communicating "I am thinking about you." The skeleton must breathe. A gentle pulse, not a harsh flash. Gold-tinted shimmer lines that evoke the mystic palette, not a grey loading bar. The moment the text appears, it should fade in — not pop. Give it 300ms to arrive gracefully, like a revelation rather than a download.
+**The danger**: Numbers on a circular background look like a clock. Or a dial. Or an instrument panel. The challenge is to make them feel *celestial* — like they belong in the sky, not on a dashboard.
 
-**The text itself must earn the silence while it loads.** If someone waits even five seconds for a GPT response and the result is generic, they will feel cheated. The numerology narrative must be unmistakably *about them*: their name, their actual numbers, the interaction between the numbers. "Your 7 is shaped by your Scorpio Moon into something especially private — a seeker who does not seek in public." That is respectful. That is craft.
+**What makes numbers feel celestial:**
+- Typography matters enormously. The numbers must be set in a typeface that belongs in this app's visual language — the same serif or elegant sans used for glyphs elsewhere. Not system monospace. Not bold block digits.
+- Size variation must be smooth and intentional. A dominant 7 is not twice the size of a minor 3 — it's perhaps 20% larger, with a subtle glow ring behind it. The scale hierarchy is felt, not measured.
+- The glows must use the same gold/purple palette already in the design system. Not generic CSS box-shadow blue.
+- Numbers at house cusp positions should render slightly differently from numbers at planet positions — perhaps lighter, or slightly smaller — so the user's eye naturally reads planetary positions as primary.
+- The zodiac ring must stay. It provides orientation and beauty. Without it, the numbers float in meaningless space.
 
-**The "Cosmic Connections" section — replace it completely.** The current version renders static computed text that says "Your Neptune in [X] carries the frequency of your Life Path 7..." This is not craft. This is assembly. The GPT cross-reading will do this better. When it does, remove the static version entirely — do not keep both. Showing both would confuse the user and dilute the magic.
+**The frequency bar below the chart:**
+This is where most implementations go wrong. They make it a table: `7: ████ 4`, `3: ██ 2`, etc. That's an engineer's frequency bar. 
+
+What it should be: a minimal horizontal row of number glyphs, each displayed with a size or brightness proportional to its count. No labels. No numbers-next-to-numbers. The glyphs themselves communicate frequency through their visual weight. On hover, a tooltip can show the count and chart sources.
+
+**Loading sequence:**
+- Chart should appear immediately — before the GPT call even starts. No skeleton for the map.
+- Below the chart, a soft pulsing card: "Reading your sky of numbers…" — the same shimmer treatment used for other GPT cards.
+- When the reading arrives, it fades in gently. 400ms transition.
+
+**What I'd protect:**
+The chart must not try to show everything. The guidelines are right that 23 points is the right level. More would make it look cluttered. The restraint is the beauty.
 
 **Small details that matter:**
-- The skeleton card should have the same border-radius, padding, and gold-accent styling as the filled cards — when the text arrives, there should be zero layout shift
-- The numerology narrative card should have a distinct visual treatment from the static number cards — perhaps slightly warmer border glow — so the user understands: "this one thought about me"
-- If the user hasn't given their name, the GPT narrative should still work beautifully — and should gently invite them to add their name with a note like "Add your birth name above for an even more personal reading"
-- Error states must be human: not "Error fetching interpretation" but "The stars are quiet right now — try again in a moment"
+- When two numbers would overlap (planets close in degree), offset one radially rather than squashing them together
+- The number for the Sun position should subtly honor the Sun's importance — perhaps rendered in gold rather than white by default, not just when dominant
+- The chart needs a title or heading that doesn't say "Numerology Chart" — something like "Your Sky in Numbers" or simply the user's name and birth date
+- If birth time is unknown, the house cusps are uncertain — note this softly below the chart, not loudly in a warning box
 
-**On deeper numbers (Pinnacles, Challenges, Karmic Debt):** I support this, but only if the presentation is right. These are serious subjects. Karmic Debt in particular carries weight — the user must feel that the app understands the gravity of what it's revealing. The interpretation text must be written at that level of seriousness. Not frightening. Not dismissive. Grounded.
+**The feeling when it's right:**
+The user opens numerology. The chart appears — a circle of numbers in the dark sky. Some numbers feel brighter, more present. They can't explain why, but they want to keep looking. Then they read the reading below, and it names what they already felt.
+
+That is the goal.

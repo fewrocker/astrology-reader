@@ -1,8 +1,8 @@
 # Active Proposals
 
-Generated for Sprint 0002 focus: **Deepen Numerology**
+Generated for Sprint 0003 focus: **Numerology Sky Chart**
 
-All proposals are scoped to the guidelines sprint focus: making numerology richer, deeper, and more alive.
+All proposals are scoped to the guidelines sprint focus: a circular sky map on the numerology page that renders every chart element as its numerological number.
 
 ---
 
@@ -12,28 +12,13 @@ Sorted by impact-to-effort ratio:
 
 | Proposal | Originated by | Impact | Effort | Summary |
 |----------|--------------|--------|--------|---------|
-| [feat-gpt-astro-numerology-crossreading](feat-gpt-astro-numerology-crossreading.md) | Jobs + Carmack + Taleb | High | Low | Wire up existing `generateAstroNumerologyCrossReading` into NumerologyPage with parallel loading skeleton |
-| [feat-gpt-numerology-narrative](feat-gpt-numerology-narrative.md) | Jobs + Carmack + Miyazaki | High | Medium | One GPT call, all numbers together, cohesive flowing personal reading with skeleton placeholder |
-| [feat-advanced-numerology-layers](feat-advanced-numerology-layers.md) | Carmack + Taleb | High | Medium-High | Soul Urge, Karmic Debt, Personal Month calculations + interpretations + UI |
-| [feat-numerology-chat](feat-numerology-chat.md) | Jobs | Medium-High | Medium | Discuss ✦ modal for numerology — follow-up questions GPT chat |
-
-## Issue Fixes (issue-)
-
-| Proposal | Originated by | Impact | Effort | Summary |
-|----------|--------------|--------|--------|---------|
-| [issue-numerology-cosmic-connections-static](issue-numerology-cosmic-connections-static.md) | Taleb + Jobs | Medium | Low | Remove defective static Cosmic Connections section that simulates personalization but delivers templates |
-
-## Code Enhancements (code-)
-
-| Proposal | Originated by | Impact | Effort | Summary |
-|----------|--------------|--------|--------|---------|
-| [code-abort-controller-numerology-gpt](code-abort-controller-numerology-gpt.md) | Taleb | Medium | Low | Ensure all GPT useEffects in NumerologyPage use cancelled-flag pattern to prevent unmount state updates |
+| [feat-numerology-sky-chart](feat-numerology-sky-chart.md) | Jobs + Carmack + Miyazaki + Taleb | High | Medium | Circular sky map on NumerologyPage: planets/houses/node rendered as reduced numbers, frequency-driven visual emphasis, async GPT sky reading |
 
 ---
 
 ## Convergence Notes
 
-- **All four voices** agree the static number cards are insufficient as the sole output — a GPT reading layer is essential
-- **Jobs + Taleb** both flagged the static Cosmic Connections section as a liability that must be removed before GPT cross-reading ships
-- **Carmack** notes the `generateAstroNumerologyCrossReading` function already exists — wiring it up is low effort for high impact
-- **Taleb** flagged the Karmic Debt intermediate-sum issue as a required refactor for correctness, not just aesthetics
+- **All four voices** identified the missing visual centerpiece as the highest-priority gap
+- **Jobs + Miyazaki** emphasize the "first-second" emotional impact — chart must render immediately, feeling before words
+- **Carmack** confirms the technical path is clear: reuse coordinate math, build a fresh component, use existing reduction functions
+- **Taleb** flags the collision-avoidance and null-chartData cases as must-handle before shipping
