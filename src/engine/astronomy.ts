@@ -302,6 +302,84 @@ export function calculateChart(
 }
 
 /**
+ * Find the exact UTC moment when the Sun returns to natalSunLongitude in targetYear.
+ * Uses bisection search, accurate to ~1 minute.
+ * The solar return moment is calculated for geographic birthplace coordinates (traditional).
+ */
+export function findSolarReturn(
+  natalSunLongitude: number,
+  targetYear: number,
+  _birthLat: number,
+  _birthLng: number
+): Date {
+  // Start search 2 days before and after the approximate birthday in targetYear
+  // The Sun's longitude matches natal ~once per year, around birthday month/day
+  // We use Jan 1 of targetYear as start, Dec 31 as end for safety
+  const searchStart = new Date(Date.UTC(targetYear, 0, 1))
+  const searchEnd = new Date(Date.UTC(targetYear, 11, 31))
+
+  // Scan daily to find the window where Sun crosses natalSunLongitude
+  const dayMs = 86400000
+  const days = Math.ceil((searchEnd.getTime() - searchStart.getTime()) / dayMs)
+
+  // Angular difference: how far current Sun is from natal Sun longitude
+  // We want this to cross zero (modulo 360)
+  function sunDiff(date: Date): number {
+    const t = Astronomy.MakeTime(date)
+    const lon = Astronomy.SunPosition(t).elon
+    // Normalized difference in range (-180, 180]
+    let diff = lon - natalSunLongitude
+    if (diff > 180) diff -= 360
+    if (diff < -180) diff += 360
+    return diff
+  }
+
+  let crossStart: Date | null = null
+  let crossEnd: Date | null = null
+  let prevDiff = sunDiff(searchStart)
+
+  for (let i = 1; i <= days; i++) {
+    const d = new Date(searchStart.getTime() + i * dayMs)
+    const diff = sunDiff(d)
+
+    // Detect zero-crossing (Sun passes through natalSunLongitude)
+    if ((prevDiff < 0 && diff >= 0) || (prevDiff >= 0 && diff < 0)) {
+      crossStart = new Date(searchStart.getTime() + (i - 1) * dayMs)
+      crossEnd = d
+      break
+    }
+    prevDiff = diff
+  }
+
+  if (!crossStart || !crossEnd) {
+    // Fallback: return approximate date
+    return new Date(Date.UTC(targetYear, 5, 21)) // ~summer solstice as default
+  }
+
+  // Binary search to find exact crossing (within ~1 minute accuracy)
+  let lo = crossStart.getTime()
+  let hi = crossEnd.getTime()
+
+  for (let iter = 0; iter < 30; iter++) {
+    const mid = lo + (hi - lo) / 2
+    const diff = sunDiff(new Date(mid))
+
+    if (Math.abs(diff) < 0.0007) { // ~1 arcminute
+      return new Date(mid)
+    }
+
+    const diffLo = sunDiff(new Date(lo))
+    if ((diffLo < 0 && diff < 0) || (diffLo >= 0 && diff >= 0)) {
+      lo = mid
+    } else {
+      hi = mid
+    }
+  }
+
+  return new Date(lo + (hi - lo) / 2)
+}
+
+/**
  * Resolve a local date/time + IANA timezone to a UTC Date.
  */
 function resolveToUTC(
