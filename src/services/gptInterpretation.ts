@@ -1,3 +1,5 @@
+import type { ChartData } from '../engine/types'
+
 const API_KEY_STORAGE = 'astral-chart-openai-key'
 const API_URL = 'https://api.openai.com/v1/chat/completions'
 const DEFAULT_KEY = import.meta.env.VITE_OPENAI_API_KEY ?? ''
@@ -99,6 +101,35 @@ export async function getGptInterpretation(
   return result || 'Unable to generate interpretation.'
 }
 
+function buildDreamscapeContext(chart: ChartData): string {
+  const neptune = chart.planets.find(p => p.name === 'Neptune')
+  const moon = chart.planets.find(p => p.name === 'Moon')
+  const showHouses = !chart.unknownTime
+  const ascSign = showHouses ? (chart.angles?.ascendant?.sign) : undefined
+
+  let ctx = '## Dreamscape Natal Blueprint (emphasize these in interpretation)\n'
+  if (neptune) {
+    ctx += `Neptune (dream ruler): ${neptune.sign}`
+    if (showHouses && neptune.house) ctx += `, House ${neptune.house}`
+    ctx += '\n'
+  }
+  if (moon) {
+    ctx += `Moon (night mind): ${moon.sign}`
+    if (showHouses && moon.house) ctx += `, House ${moon.house}`
+    ctx += '\n'
+  }
+  if (showHouses) {
+    const twelfthHousePlanets = chart.planets.filter(p => p.house === 12)
+    if (twelfthHousePlanets.length > 0) {
+      ctx += `12th house (unconscious realm): ${twelfthHousePlanets.map(p => `${p.name} in ${p.sign}`).join(', ')}\n`
+    }
+  }
+  if (ascSign === 'Pisces') {
+    ctx += 'Pisces Rising: naturally permeable to dreamspace and the collective unconscious\n'
+  }
+  return ctx
+}
+
 export async function getDreamInterpretation(
   dreamDescription: string,
   natalContext: string,
@@ -106,6 +137,7 @@ export async function getDreamInterpretation(
   transitAspectsText: string,
   apiKey: string,
   skyContext?: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> },
+  chartData?: ChartData,
 ): Promise<string> {
   if (!apiKey) throw new Error('OpenAI API key is required.')
 
@@ -117,13 +149,15 @@ export async function getDreamInterpretation(
     skySection = `\n\n## Sky Context at Time of Recording\nMoon in ${skyContext.moonSign} (${skyContext.moonPhase}).${transitLine}`
   }
 
-  const prompt = `## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}${skySection}\n\n## The Dream\n${dreamDescription}\n\nProvide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
+  const dreamscapeSection = chartData ? buildDreamscapeContext(chartData) + '\n' : ''
+
+  const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${natalContext}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects Today\n${transitAspectsText}${skySection}\n\n## The Dream\n${dreamDescription}\n\nFocus your interpretation especially on the Dreamscape Blueprint above — these are the placements that most shape this person's dream life. Provide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI(apiKey, [
       {
         role: 'system',
-        content: `You are a mystical astrologer and dream interpreter. You read the unconscious mind through the lens of the cosmos — connecting dream symbols, emotions, and narratives with current planetary transits and the dreamer's natal chart.\n\nWhen interpreting:\n- Connect specific dream symbols to relevant planetary archetypes and active transits (Mars = conflict/drive, Neptune = dissolution/illusion/dreams, Moon = emotion/memory, Mercury = mind/communication, Saturn = limits/structure, etc.)\n- Reference the dreamer's natal placements to personalize the reading — show how the dream echoes their chart\n- Weave between psychological depth and cosmic synchronicity\n- Speak with poetic precision — evocative but grounded in actual astrological doctrine\n- Be specific about which planets and aspects are speaking through the dream imagery\n- Do not be generic — every interpretation must be personal to this chart and this transit moment`,
+        content: `You are a mystical astrologer and dream interpreter. You read the unconscious mind through the lens of the cosmos — connecting dream symbols, emotions, and narratives with current planetary transits and the dreamer's natal chart.\n\nWhen interpreting:\n- Focus especially on the Dreamscape Blueprint — these are the placements most relevant to this person's dream life\n- Connect specific dream symbols to relevant planetary archetypes and active transits (Mars = conflict/drive, Neptune = dissolution/illusion/dreams, Moon = emotion/memory, Mercury = mind/communication, Saturn = limits/structure, etc.)\n- Reference the dreamer's natal placements to personalize the reading — show how the dream echoes their chart\n- Weave between psychological depth and cosmic synchronicity\n- Speak with poetic precision — evocative but grounded in actual astrological doctrine\n- Be specific about which planets and aspects are speaking through the dream imagery\n- Do not be generic — every interpretation must be personal to this chart and this transit moment`,
       },
       { role: 'user', content: prompt },
     ], { temperature: 0.85, max_tokens: 1200 })
