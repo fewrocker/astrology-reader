@@ -84,19 +84,106 @@ function NumberCard({ label, number, category, badge }: NumberCardProps) {
           ))}
         </div>
 
+        {/* Shadow toggle — hidden for brief monthly notes */}
+        {interpretation.shadow && (
+          <>
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              className="flex items-center gap-2 text-mystic-muted text-xs hover:text-mystic-text transition-colors group"
+            >
+              <span className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>
+              <span>{expanded ? 'Hide' : 'Show'} shadow &amp; challenge</span>
+            </button>
+
+            {expanded && (
+              <div className="mt-4 pl-4 border-l border-mystic-border/60">
+                <p className="text-mystic-muted text-sm leading-relaxed italic">{interpretation.shadow}</p>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function KarmicDebtCard({ debtNumber }: { debtNumber: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const interpretation = getInterpretation('karmicDebt', debtNumber)
+  if (!interpretation) return null
+
+  return (
+    <div
+      className="rounded-xl overflow-hidden transition-all duration-300"
+      style={{
+        background: 'rgba(30, 18, 5, 0.6)',
+        border: '1px solid rgba(194, 120, 40, 0.45)',
+      }}
+    >
+      <div className="p-6 md:p-8">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-4">
+            <span
+              className="leading-none select-none"
+              style={{
+                fontSize: 'clamp(2.5rem, 7vw, 4rem)',
+                color: 'rgba(194, 120, 40, 0.9)',
+                textShadow: '0 0 24px rgba(194, 120, 40, 0.5)',
+              }}
+            >
+              ⚖
+            </span>
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(194, 120, 40, 0.6)' }}>
+                Karmic Debt
+              </p>
+              <h3 className="font-heading text-lg" style={{ color: 'rgba(220, 145, 60, 0.95)' }}>
+                {interpretation.archetype}
+              </h3>
+            </div>
+          </div>
+        </div>
+
+        {/* Essence */}
+        <p className="text-sm leading-relaxed mb-5" style={{ color: 'rgba(220, 200, 170, 0.85)' }}>
+          {interpretation.essence}
+        </p>
+
+        {/* Keywords */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          {interpretation.keywords.map(kw => (
+            <span
+              key={kw}
+              className="px-2.5 py-1 text-xs rounded-full font-heading tracking-wide"
+              style={{
+                background: 'rgba(194, 120, 40, 0.1)',
+                border: '1px solid rgba(194, 120, 40, 0.3)',
+                color: 'rgba(194, 120, 40, 0.85)',
+              }}
+            >
+              {kw}
+            </span>
+          ))}
+        </div>
+
         {/* Shadow toggle */}
         <button
           type="button"
           onClick={() => setExpanded(v => !v)}
-          className="flex items-center gap-2 text-mystic-muted text-xs hover:text-mystic-text transition-colors group"
+          className="flex items-center gap-2 text-xs transition-colors"
+          style={{ color: 'rgba(194, 120, 40, 0.55)' }}
         >
           <span className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>›</span>
-          <span>{expanded ? 'Hide' : 'Show'} shadow &amp; challenge</span>
+          <span>{expanded ? 'Hide' : 'Show'} shadow &amp; consequence</span>
         </button>
 
         {expanded && (
-          <div className="mt-4 pl-4 border-l border-mystic-border/60">
-            <p className="text-mystic-muted text-sm leading-relaxed italic">{interpretation.shadow}</p>
+          <div className="mt-4 pl-4" style={{ borderLeft: '1px solid rgba(194, 120, 40, 0.25)' }}>
+            <p className="text-sm leading-relaxed italic" style={{ color: 'rgba(194, 120, 40, 0.65)' }}>
+              {interpretation.shadow}
+            </p>
           </div>
         )}
       </div>
@@ -211,6 +298,12 @@ export default function NumerologyPage() {
     return `${m}/${day}/${y}`
   }
 
+  const personalMonthBadge = useMemo(() => {
+    const now = new Date()
+    const monthName = now.toLocaleString('default', { month: 'long' })
+    return `${monthName} ${now.getFullYear()}`
+  }, [])
+
   const handleSaveName = () => {
     const trimmed = nameInput.trim()
     dispatch({ type: 'SET_USER_NAME', name: trimmed || undefined })
@@ -279,6 +372,9 @@ export default function NumerologyPage() {
           number={reading.lifePath}
           category="lifePath"
         />
+        {reading.karmicDebt !== null && (
+          <KarmicDebtCard debtNumber={reading.karmicDebt} />
+        )}
         <NumberCard
           label="Birthday Number"
           number={reading.birthdayNumber}
@@ -290,6 +386,12 @@ export default function NumerologyPage() {
           category="personalYear"
           badge={String(new Date().getFullYear())}
         />
+        <NumberCard
+          label="Personal Month"
+          number={reading.personalMonth}
+          category="personalMonth"
+          badge={personalMonthBadge}
+        />
         {reading.expressionNumber ? (
           <NumberCard
             label="Expression Number"
@@ -300,6 +402,18 @@ export default function NumerologyPage() {
           <div className="bg-mystic-surface/20 border border-dashed border-mystic-border rounded-xl p-6 text-center">
             <p className="text-mystic-gold/50 font-heading text-lg mb-1">Expression Number</p>
             <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Expression Number.</p>
+          </div>
+        )}
+        {reading.soulUrge ? (
+          <NumberCard
+            label="Soul Urge"
+            number={reading.soulUrge}
+            category="soulUrge"
+          />
+        ) : (
+          <div className="bg-mystic-surface/20 border border-dashed border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-gold/50 font-heading text-lg mb-1">Soul Urge (Heart's Desire)</p>
+            <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Soul Urge Number.</p>
           </div>
         )}
       </div>
