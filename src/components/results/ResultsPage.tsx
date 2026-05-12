@@ -136,7 +136,13 @@ export default function ResultsPage() {
       </div>
 
       {/* action buttons */}
-      <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center">
+      <div className="text-center mb-12 flex flex-col sm:flex-row gap-3 justify-center flex-wrap">
+        <button
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'solar-return' })}
+          className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
+        >
+          Solar Return ☉
+        </button>
         <button
           onClick={() => setDiscussOpen(true)}
           className="px-8 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
@@ -145,7 +151,7 @@ export default function ResultsPage() {
         </button>
         <button
           onClick={() => dispatch({ type: 'RESET' })}
-          className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
+          className="px-8 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
         >
           Back to Menu
         </button>

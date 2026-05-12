@@ -7,6 +7,7 @@ import ResultsPage from './components/results/ResultsPage'
 import TransitReadingPage from './components/results/TransitReadingPage'
 import SynastryPage from './components/results/SynastryPage'
 import SynastryTransitPage from './components/results/SynastryTransitPage'
+import SolarReturnPage from './components/results/SolarReturnPage'
 import SkyTodayChart from './components/chart/SkyTodayChart'
 import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
@@ -641,6 +642,7 @@ function AppContent() {
           </div>
         )}
         {state.view === 'results' && <ResultsPage />}
+        {state.view === 'solar-return' && <SolarReturnPage />}
         {state.view === 'transit-select' && <TransitSelectScreen />}
         {state.view === 'transit-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">

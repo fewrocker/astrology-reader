@@ -33,6 +33,7 @@ export interface BirthData {
 export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'transit-loading' | 'transit-results'
   | 'partner-form' | 'synastry-loading' | 'synastry-results'
   | 'synastry-transit-select' | 'synastry-transit-loading' | 'synastry-transit-results'
+  | 'solar-return'
 
 export interface AppState {
   view: AppView
