@@ -4,7 +4,7 @@ import { calculateNumerology } from '../../engine/numerology'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
 import type { ChartData } from '../../engine/types'
 import { calculateChart } from '../../engine/astronomy'
-import { generateAstroNumerologyCrossReading, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, getStoredApiKey } from '../../services/gptInterpretation'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -104,6 +104,36 @@ function NumberCard({ label, number, category, badge }: NumberCardProps) {
   )
 }
 
+function NarrativeSkeleton() {
+  return (
+    <div className="bg-mystic-surface/50 border border-mystic-gold/25 rounded-xl p-6 md:p-8">
+      <div className="flex items-center gap-2 mb-5">
+        <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Your Reading</span>
+      </div>
+      <div className="space-y-3">
+        {[100, 90, 75, 100, 85, 60, 95, 80].map((w, i) => (
+          <div
+            key={i}
+            className="h-3 rounded-full"
+            style={{
+              width: `${w}%`,
+              background: 'linear-gradient(90deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.06) 100%)',
+              backgroundSize: '200% 100%',
+              animation: `shimmer 1.8s ease-in-out infinite ${i * 0.1}s`,
+            }}
+          />
+        ))}
+      </div>
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
 function CrossReadingSkeleton() {
   return (
     <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
@@ -131,6 +161,9 @@ export default function NumerologyPage() {
   const { birthData } = state
   const [nameInput, setNameInput] = useState(birthData.userName ?? '')
   const [editingName, setEditingName] = useState(!birthData.userName)
+  const [narrativeText, setNarrativeText] = useState<string | null>(null)
+  const [narrativeLoading, setNarrativeLoading] = useState(false)
+  const [narrativeError, setNarrativeError] = useState<string | null>(null)
 
   const [crossReadingText, setCrossReadingText] = useState<string | null>(null)
   const [crossReadingLoading, setCrossReadingLoading] = useState(false)
@@ -146,6 +179,21 @@ export default function NumerologyPage() {
     [birthData.date, birthData.userName],
   )
 
+  // Narrative GPT call — fires in parallel with cross-reading
+  useEffect(() => {
+    if (!apiKey) return
+    let cancelled = false
+    setNarrativeLoading(true)
+    setNarrativeText(null)
+    setNarrativeError(null)
+    generateNumerologyNarrative(reading, birthData.userName, apiKey)
+      .then(text => { if (!cancelled) setNarrativeText(text) })
+      .catch(err => { if (!cancelled) setNarrativeError((err as Error).message) })
+      .finally(() => { if (!cancelled) setNarrativeLoading(false) })
+    return () => { cancelled = true }
+  }, [reading, birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cross-reading GPT call — fires in parallel with narrative
   useEffect(() => {
     if (!chartData || !apiKey) return
     let cancelled = false
@@ -254,6 +302,54 @@ export default function NumerologyPage() {
             <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Expression Number.</p>
           </div>
         )}
+      </div>
+
+      {/* GPT Narrative Card */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Your Reading</span>
+          <div className="h-px flex-1 bg-mystic-border" />
+        </div>
+        {!apiKey ? (
+          <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-5 text-center">
+            <p className="text-mystic-muted text-sm">Add your OpenAI API key to unlock your personalized reading.</p>
+          </div>
+        ) : narrativeLoading ? (
+          <NarrativeSkeleton />
+        ) : narrativeError ? (
+          <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
+            <p className="text-mystic-muted text-sm">The stars are quiet right now — try again in a moment.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setNarrativeError(null)
+                setNarrativeLoading(true)
+                generateNumerologyNarrative(reading, birthData.userName, apiKey)
+                  .then(text => setNarrativeText(text))
+                  .catch(err => setNarrativeError((err as Error).message))
+                  .finally(() => setNarrativeLoading(false))
+              }}
+              className="px-4 py-2 text-xs font-heading rounded-lg transition-all"
+              style={{
+                background: 'rgba(201,168,76,0.10)',
+                border: '1px solid rgba(201,168,76,0.30)',
+                color: 'rgba(201,168,76,0.85)',
+              }}
+            >
+              ✦ Try Again
+            </button>
+          </div>
+        ) : narrativeText ? (
+          <div className="bg-mystic-surface/50 border border-mystic-gold/25 rounded-xl p-6 md:p-8">
+            <h3 className="font-heading text-mystic-gold text-lg mb-5">✦ Your Numerology Reading</h3>
+            <div className="space-y-4">
+              {narrativeText.split(/\n\n+/).filter(Boolean).map((para, i) => (
+                <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{para}</p>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Astrology & Numerology GPT cross-reading */}
