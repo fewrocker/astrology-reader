@@ -1,35 +1,17 @@
-# Nassim Taleb — Fragility & Risk Analysis
+# Nassim Taleb — Proposals Voice
 
-The product is accumulating features at a rapid pace. Most things that break in complex systems don't break at the center — they break at the seams. Let me tell you where the seams are.
+Let me tell you what I see that the others are not saying loudly enough.
 
----
+**The static "Cosmic Connections" section is a liability.** It currently generates cross-reference text like "Your Neptune in Pisces in the 7th house carries the frequency of your Life Path 7..." This text is hardcoded per Life Path number with a few conditional branches. It will say something intelligent-sounding for any chart. That's the problem — it sounds personalized but is not. When GPT cross-reading arrives and is genuinely personalized, having both on the page simultaneously creates a fragility: the user may notice the discrepancy between the static text (which says something semi-generic) and the GPT text (which says something specific). This is the kind of inconsistency that quietly erodes trust in a product.
 
-## Current Fragilities
+**Parallel GPT calls — timing fragility.** Two simultaneous GPT calls (narrative + cross-reading) running in parallel sounds elegant. It is, mostly. But consider: what if one succeeds and one fails? What if the user navigates away while both are in flight? What if the API key is rate-limited and both calls hit the limit simultaneously? Each failure mode needs a distinct state: loading, error-narrative, error-crossreading. The component cannot show "loading" for both and then render only one. It must handle the independent failures independently.
 
-**1. No app-level error boundary.**
+**Abort on navigation.** Right now there's no evidence of AbortController usage in NumerologyPage.tsx. If a user clicks to a different view while GPT calls are in flight, the calls continue resolving and potentially update state on a component that has unmounted. This is a React anti-pattern that causes the "Can't perform a React state update on an unmounted component" warning and potential memory leaks. Must be fixed when adding GPT calls.
 
-This is not a hypothetical risk — it's a certainty that at some point a component will throw an unhandled error. Maybe a null dereference on a planet that wasn't calculated. Maybe a localStorage parse failure. Right now, that error propagates to the root and shows a blank white page. There is no graceful degradation, no "something went wrong" message, no recovery path. This is basic resilience that every production React app should have.
+**Soul Urge calculation edge case:** Soul Urge uses only vowel letters (A, E, I, O, U). Some numerology systems treat Y as a vowel in certain conditions (when it's the only vowel sound in a syllable, e.g., "Stacy"). This edge case is common enough to affect a significant proportion of names. Decide now which approach to take and document it — otherwise it becomes a source of user confusion when their number "seems wrong."
 
-**2. GPT calls have zero retry logic.**
+**Karmic Debt number identification.** The current `reduceToSingleDigit` function reduces aggressively. To detect Karmic Debt, the intermediate sum (before final reduction) must be preserved and checked. Currently that intermediate is discarded. This requires a refactor of the reduction chain to preserve the raw sum at each step, not just the final result.
 
-OpenAI's API returns 429s (rate limit exceeded) regularly, especially with the free tier. Network timeouts happen. A single API failure means the user's transit reading — for which they waited through a loading screen — is destroyed. The fix is 15 lines of code: a retry function with exponential backoff. The cost of this fragility is high (user frustration, lost readings), the fix is trivial.
+**Not fragile, actually antifragile:** The one thing I'd call antifragile here is the progressive loading design itself. Because static cards render first and GPT loads asynchronously, a GPT failure means the user still has a complete static numerology reading. The product degrades gracefully. This is correct architecture. Don't change it.
 
-**3. Collecting user names for numerology (future fragility to design for).**
-
-When numerology is added with Expression/Soul Urge numbers, it will require the user's full name. This is a new data collection point. Consider carefully: should the name be stored in localStorage? Should it be optional (with graceful fallback to Life Path + Birthday only)? Don't collect what you don't need — but if you collect it, protect it by keeping it strictly local.
-
----
-
-## New Feature Risk Assessments
-
-**Numerology:** Low risk technically — simple math. The main risk is quality: generic numerology text is worthless. If the cross-references with the natal chart are lazy template strings ("Your Life Path 7 is influenced by Neptune"), users will feel cheated. The risk is underwhelming execution, not technical failure.
-
-**Solar Return:** Medium risk. The bisection search for exact Sun return time is the same algorithm used in the transit timeline — already validated. The rendering is an extension of the existing bi-wheel. The main failure mode is edge cases: what if the user's Sun is exactly on a sign cusp, or if the return falls in a leap year? These are testable. Document the expected behavior.
-
----
-
-## Recommendation
-
-Fix the two fragilities (error boundary, GPT retry) before adding new features. They protect everything that already works. Then add features in order of increasing complexity: code cleanup first, then numerology (simple, high value), then solar return (moderate complexity, high value).
-
-The product is not fragile in a fundamental way — but these two unfixed issues mean that one unlucky user interaction will produce a bad experience. Fix them now while the surface area is still manageable.
+**Depth proposals (Pinnacles, Challenges, etc.):** High value, but the interpretation database needs to expand significantly. Pinnacle interpretations require 4 cards × 9 possible values = 36+ entries. Challenge interpretations: 4 × 9 = 36+. Karmic Debt: 4 numbers × detailed text = serious writing effort. Don't underestimate the content work — it's not just the calculation code. The interpretation quality will determine whether users feel this depth is real or decorative.

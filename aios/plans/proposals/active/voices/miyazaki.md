@@ -1,35 +1,19 @@
-# Hayao Miyazaki — Craft & Soul Analysis
+# Hayao Miyazaki — Proposals Voice
 
-I sat with this product for a long time. There is genuine soul here — the dream interpretation especially. The idea of the cosmos speaking through the language of dreams, the slow reveal of text word by word — someone cared. That care must continue.
+I look at this numerology page and I think: the bones are beautiful. The golden numbers, the mystic typography, the shadow/challenge reveal. Someone cared about this. But then I read the "Cosmic Connections" section and I feel the care disappear. It is trying to be personal. It says "Your Neptune in [sign]..." — but it reads like a template wearing a disguise. The user can feel the template. They always can.
 
----
+**Where craft would make the biggest difference:**
 
-## What Has Soul
+The loading state is the most important moment on the page that doesn't exist yet. Right now: nothing loads asynchronously. When we add GPT cards, the skeleton placeholder is not just a UX pattern — it is the product communicating "I am thinking about you." The skeleton must breathe. A gentle pulse, not a harsh flash. Gold-tinted shimmer lines that evoke the mystic palette, not a grey loading bar. The moment the text appears, it should fade in — not pop. Give it 300ms to arrive gracefully, like a revelation rather than a download.
 
-The dream modal is the most human piece of this product. The way it gathers the sky's position, contemplates, then speaks to the dream — that is what this product should feel like everywhere. The moon animation in the loading state, the stars floating around — small details, but they make the user feel held, not processed.
+**The text itself must earn the silence while it loads.** If someone waits even five seconds for a GPT response and the result is generic, they will feel cheated. The numerology narrative must be unmistakably *about them*: their name, their actual numbers, the interaction between the numbers. "Your 7 is shaped by your Scorpio Moon into something especially private — a seeker who does not seek in public." That is respectful. That is craft.
 
-The Daily Snapshot is lovely. Honest, specific, personal. Not "today will be great!" but the real picture.
+**The "Cosmic Connections" section — replace it completely.** The current version renders static computed text that says "Your Neptune in [X] carries the frequency of your Life Path 7..." This is not craft. This is assembly. The GPT cross-reading will do this better. When it does, remove the static version entirely — do not keep both. Showing both would confuse the user and dilute the magic.
 
----
+**Small details that matter:**
+- The skeleton card should have the same border-radius, padding, and gold-accent styling as the filled cards — when the text arrives, there should be zero layout shift
+- The numerology narrative card should have a distinct visual treatment from the static number cards — perhaps slightly warmer border glow — so the user understands: "this one thought about me"
+- If the user hasn't given their name, the GPT narrative should still work beautifully — and should gently invite them to add their name with a note like "Add your birth name above for an even more personal reading"
+- Error states must be human: not "Error fetching interpretation" but "The stars are quiet right now — try again in a moment"
 
-## What is Still Generic
-
-**Numerology is missing, and its absence diminishes the experience.** The birth date is already there. The moment we calculate a Life Path number and say "You are a 7 — the seeker, the analyst, the one who asks the questions others dare not ask — and your Neptune Rising deepens this quiet internal world even further" — that is a moment of *recognition*. People cry at those moments. That is what we should be creating.
-
-**The Solar Return is a profound offering we're not making.** Every year, on or near your birthday, the Sun returns exactly where it was when you were born. That moment creates a new chart — the blueprint for your year. "Here is what this year holds for you" is the most intimate, most wanted reading. We have the chart engine. We have the bi-wheel. We have GPT. This is a composition problem, not a technical one.
-
----
-
-## Details That Need Care
-
-If we add numerology, it needs to feel like a natural part of the mystical experience — not a calculator result. Present the number with its symbol, its essence, its shadow. Cross-reference it with the chart with genuine insight, not template text.
-
-If we add Solar Return, the bi-wheel must honor the existing chart's beauty. The new outer ring (solar return planets) should feel different in color/weight from the natal ring — distinguishable at a glance. The GPT reading should speak in the language of "this year, as opposed to your eternal self..."
-
----
-
-## What I'd Ask
-
-Make every new feature feel like it was made by someone who loves astrology. Not a feature checklist. The numerology section should open with the number's symbol rendered large and golden, then expand into meaning. The solar return chart should show the date of the sun's return ("Your Sun returns on June 14, 2025 at 3:42 AM GMT") — that specificity is beautiful.
-
-The product is very close to something genuinely special. Don't stop now.
+**On deeper numbers (Pinnacles, Challenges, Karmic Debt):** I support this, but only if the presentation is right. These are serious subjects. Karmic Debt in particular carries weight — the user must feel that the app understands the gravity of what it's revealing. The interpretation text must be written at that level of seriousness. Not frightening. Not dismissive. Grounded.
