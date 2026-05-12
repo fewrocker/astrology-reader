@@ -347,6 +347,48 @@ Write a 2–3 paragraph reading about what this numerical distribution across th
   return result || 'Unable to generate sky chart reading.'
 }
 
+export async function getTodayPageInterpretation(
+  moon: { phaseName: string; moonSign: string; isVoid: boolean },
+  aspects: Array<{ transitPlanet: string; symbol: string; natalPlanet: string; orb: number; nature: string }>,
+  personalDay: number,
+  personalDayArchetype: string,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  })
+
+  const aspectLines = aspects.slice(0, 3).map(a =>
+    `${a.transitPlanet} ${a.symbol} natal ${a.natalPlanet} (${a.nature}, ${a.orb.toFixed(1)}° orb)`
+  ).join('\n') || 'No tight transit aspects active today.'
+
+  const voidNote = moon.isVoid ? ' The Moon is void of course — avoid committing to irreversible decisions.' : ''
+
+  const prompt = `Today is ${today}.
+
+Personal Day number: ${personalDay} — ${personalDayArchetype}
+
+Moon: ${moon.phaseName} in ${moon.moonSign}${voidNote}
+
+Top transit aspects:
+${aspectLines}
+
+Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${personalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'You are an expert astrologer and numerologist writing a personalized morning synthesis. Weave the personal day number, moon phase, and transit aspects into a single cohesive 2-3 sentence reading. Be direct, specific, and personal — name actual energies. No generic encouragement. No filler. Speak to this person\'s day as it actually is.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 350 })
+  )
+  return result || 'Unable to generate morning synthesis.'
+}
+
 export async function getNumerologyDiscussResponse(
   numerologyContext: string,
   messages: ChatMessage[],
