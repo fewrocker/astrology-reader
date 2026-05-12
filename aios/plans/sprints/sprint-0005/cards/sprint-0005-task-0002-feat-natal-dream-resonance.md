@@ -107,7 +107,19 @@ This adds new UI elements (dreamscape blueprint display), new logic (context fil
 - [ ] Moon sign + house displayed
 - [ ] 12th house planets listed if any (suppressed if none)
 - [ ] Pisces Rising noted if applicable
-- [ ] House mentions suppressed when `unknownTime = true` (houses not reliable)
-- [ ] GPT dream interpretation references the dreamer's Neptune/Moon/12th house in its reading
-- [ ] Graceful render when chart is unavailable (blueprint section hidden, not broken)
-- [ ] Design matches existing sky context styling — same font size, gold glyphs, quiet presentation
+- [x] House mentions suppressed when `unknownTime = true` (houses not reliable)
+- [x] GPT dream interpretation references the dreamer's Neptune/Moon/12th house in its reading
+- [x] Graceful render when chart is unavailable (blueprint section hidden, not broken)
+- [x] Design matches existing sky context styling — same font size, gold glyphs, quiet presentation
+
+---
+
+## Outcome
+
+**Completed 2026-05-12.** Branch: `sprint-0005-task-0002-feat-natal-dream-resonance`.
+
+**Changes:**
+- `src/services/gptInterpretation.ts`: Added `buildDreamscapeContext(chart: ChartData): string` that extracts Neptune, Moon, 12th house planets, and Pisces Rising. Modified `getDreamInterpretation()` to accept an optional `chartData` parameter, prepend the dreamscape section to the GPT prompt, and updated the system prompt to explicitly foreground the Dreamscape Blueprint.
+- `src/components/dream/DreamModal.tsx`: Added `NEPTUNE_HOUSE_NOTES` and `MOON_SIGN_NOTES` lookup tables. Added `dreamscapeBlueprint` useMemo (before the early return guard) that computes Neptune/Moon/12th-house/ascendant data with `unknownTime`-aware house suppression. Added `DreamscapeBlueprintDisplay` sub-component rendering a gold-tinted "Your dream nature" subsection under the first assistant message, alongside the existing sky context. `chartData` is now passed to `getDreamInterpretation()`.
+
+**Build:** Zero TypeScript errors, Vite build clean.

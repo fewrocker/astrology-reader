@@ -50,9 +50,15 @@ No user-facing behavior changes. No new capability added. The output is identica
 
 ## Acceptance Criteria
 
-- [ ] `DailySnapshotCard.tsx` no longer defines a local `calculatePersonalDay` function
-- [ ] `calculatePersonalDay` is imported from `../../engine/numerology`
-- [ ] `reduceToSingleDigit` is not imported in `DailySnapshotCard.tsx` (unused after removal)
-- [ ] DailySnapshotCard renders the same personal day number as before
-- [ ] TypeScript compiles with zero errors after the change
-- [ ] No other files affected
+- [x] `DailySnapshotCard.tsx` no longer defines a local `calculatePersonalDay` function
+- [x] `calculatePersonalDay` is imported from `../../engine/numerology`
+- [x] `reduceToSingleDigit` is not imported in `DailySnapshotCard.tsx` (unused after removal)
+- [x] DailySnapshotCard renders the same personal day number as before
+- [x] TypeScript compiles with zero errors after the change
+- [x] No other files affected
+
+---
+
+## Outcome
+
+Completed 2026-05-12. Removed the 10-line local `calculatePersonalDay` function from `DailySnapshotCard.tsx` (lines 72–81) and replaced the `reduceToSingleDigit` import with `calculatePersonalDay` from `../../engine/numerology`. Build passed with zero TypeScript errors. One file changed: 1 insertion, 12 deletions.
