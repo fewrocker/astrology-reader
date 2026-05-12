@@ -778,7 +778,21 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
 2. Update `proposals/active/index.md` and `proposals/done/index.md` if they exist.
 3. Mark the sprint complete in `sprints/sprint-XXXX/state.md` only after the validation-and-repair loop passes.
 
-**9. Write the sprint changelog**
+**9. Merge and push**
+1. For each successfully completed task worktree branch (`sprint-XXXX-task-YYYY-[TASK_NAME]`), merge it into the sprint branch `sprint-XXXX`:
+   - `git checkout sprint-XXXX`
+   - `git merge --no-ff sprint-XXXX-task-YYYY-[TASK_NAME]`
+2. Resolve any merge conflicts before proceeding. If a conflict cannot be resolved cleanly, mark the affected task as failed in `sprints/sprint-XXXX/state.md` and skip merging that branch.
+3. Once all task branches are merged into `sprint-XXXX`, push the sprint branch to GitHub:
+   - `git push origin sprint-XXXX`
+4. Merge the sprint branch into `master`:
+   - `git checkout master`
+   - `git merge --no-ff sprint-XXXX`
+5. Push `master` to GitHub:
+   - `git push origin master`
+6. Record the merge and push outcome in `sprints/sprint-XXXX/state.md`.
+
+**10. Write the sprint changelog**
 1. Write `sprints/sprint-XXXX/changelog.md`.
 2. The changelog must be concise and grouped by delivered task.
 3. For every completed task include:
@@ -791,7 +805,7 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
    - **How to use it** — one short instruction-oriented description
 5. For incomplete or failed tasks, list them separately with a brief blocker or failure note.
 
-**10. Report back to the user**
+**11. Report back to the user**
 1. Present the sprint result to the user with:
    - sprint number
    - number of completed tasks
@@ -799,7 +813,7 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
    - path to `sprints/sprint-XXXX/changelog.md`
 2. The changelog is the primary human-readable sprint summary.
 
-**11. Resumability rules**
+**12. Resumability rules**
 1. If `/sprint` is interrupted, resume from `sprints/sprint-XXXX/state.md`.
 2. Do not regenerate cards that already exist for the in-progress sprint.
 3. Do not create a new sprint until the current sprint has reached a terminal state.
