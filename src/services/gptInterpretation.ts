@@ -289,6 +289,55 @@ Write a cohesive 3-paragraph reading that treats these numbers as a single integ
   return result || 'Unable to generate numerology narrative.'
 }
 
+export async function generateNumerologySkyChartReading(
+  birthData: { name?: string; date: string },
+  frequencyMap: Record<number, Array<{ label: string; eclipticDegree: number }>>,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const nameStr = birthData.name ? `Name: ${birthData.name}` : 'Name: not provided'
+
+  const entriesByCount = Object.entries(frequencyMap)
+    .map(([num, pts]) => ({ num: Number(num), pts }))
+    .filter(e => e.pts.length > 0)
+    .sort((a, b) => b.pts.length - a.pts.length)
+
+  const freqLines = entriesByCount
+    .map(({ num, pts }) => {
+      const sources = pts.map(p => `${p.label} (${Math.floor(p.eclipticDegree)}°)`).join(', ')
+      return `  Number ${num}: ${pts.length}× — ${sources}`
+    })
+    .join('\n')
+
+  const dominant = entriesByCount.slice(0, 3)
+  const dominantLines = dominant
+    .map(({ num, pts }) => `  ${num} (${pts.length}×): ${pts.map(p => p.label).join(', ')}`)
+    .join('\n')
+
+  const prompt = `${nameStr}
+Birth date: ${birthData.date}
+
+## Sky Chart — Numerological Frequency Map
+${freqLines}
+
+## Dominant Numbers in the Sky
+${dominantLines}
+
+Write a 2–3 paragraph reading about what this numerical distribution across the sky reveals. Do not recite generic number meanings. Focus on: why do these particular numbers appear at these specific chart positions? What does it mean that ${dominant[0]?.num ?? 'this number'} is echoed by ${dominant[0]?.pts.map(p => p.label).join(', ')}? What does the full pattern suggest about this person's core nature and cosmic signature? Be personal, evocative, and specific to this person's actual distribution — not a textbook entry.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: "You are a numerologist-astrologer who reads birth charts through numbers. When all chart points are reduced numerologically, you see a numerical sky — and you read what that sky says about a person's soul. You do not define numbers in isolation. You interpret the pattern: why these numbers, at these positions, in this person's chart. You speak personally, directly, and with poetic precision.",
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 900 })
+  )
+  return result || 'Unable to generate sky chart reading.'
+}
+
 export async function getNumerologyDiscussResponse(
   numerologyContext: string,
   messages: ChatMessage[],
