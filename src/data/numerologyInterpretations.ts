@@ -5,7 +5,7 @@ export interface NumberInterpretation {
   keywords: string[]
 }
 
-export type NumerologyCategory = 'lifePath' | 'birthdayNumber' | 'personalYear' | 'expressionNumber' | 'soulUrge' | 'karmicDebt' | 'personalMonth'
+export type NumerologyCategory = 'lifePath' | 'birthdayNumber' | 'personalYear' | 'expressionNumber' | 'soulUrge' | 'karmicDebt' | 'personalMonth' | 'personalDay'
 
 export type NumberKey = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 11 | 22 | 33
 
@@ -488,6 +488,81 @@ const personalMonthInterpretations: Record<NumberKey, NumberInterpretation> = {
   },
 }
 
+const personalDayInterpretations: Record<NumberKey, NumberInterpretation> = {
+  1: {
+    archetype: 'The Pioneer',
+    essence: 'Today\'s energy supports bold action and fresh starts. This is an excellent day to take the first step on something you have been considering, to assert your independence, or to make a decision that has been waiting. Trust your instincts and move with clarity of purpose.',
+    shadow: 'Watch for impulsiveness — the energy of 1 can push toward action before adequate reflection. Boldness is different from recklessness; choose the direction consciously before moving.',
+    keywords: ['Initiative', 'New starts', 'Independence', 'Action'],
+  },
+  2: {
+    archetype: 'The Peacemaker',
+    essence: 'Today calls for patience, listening, and attunement to others. This is not the day to force outcomes but to notice the subtle cues in your relationships and surroundings. Collaboration and quiet receptivity will yield more than solo effort today.',
+    shadow: 'Beware of over-accommodation — in trying to keep peace, don\'t silence your own genuine needs. Sensitivity is a gift today; losing yourself in it is not.',
+    keywords: ['Receptivity', 'Cooperation', 'Listening', 'Partnership'],
+  },
+  3: {
+    archetype: 'The Communicator',
+    essence: 'Today\'s energy is bright with creative and communicative potential. Share your ideas, connect with people who energize you, and allow yourself the pleasure of authentic expression without forcing it toward a specific outcome. Spontaneity is favored over rigid plans.',
+    shadow: 'The energy of 3 can scatter across too many conversations and creative impulses. Choose one channel for your expressiveness and give it something real.',
+    keywords: ['Expression', 'Creativity', 'Connection', 'Joy'],
+  },
+  4: {
+    archetype: 'The Builder',
+    essence: 'Today supports focused, practical effort and the disciplined completion of important work. Choose one priority and give it your full attention rather than scattering across many fronts. The care you bring to your work today will produce tangible and lasting results.',
+    shadow: 'The 4 energy can make today feel heavy if you resist the necessary discipline. Lean in rather than away; the satisfaction of solid work is available today.',
+    keywords: ['Focus', 'Discipline', 'Work', 'Foundation'],
+  },
+  5: {
+    archetype: 'The Explorer',
+    essence: 'Today brings unexpected energy and the invitation to step outside your usual patterns. Stay flexible — what you planned may shift, and what arrives instead may be more valuable. Embrace the unplanned with curiosity rather than resistance.',
+    shadow: 'The restlessness of 5 can lead to abandoning something that deserves completion in favor of whatever is new. Notice when you\'re genuinely exploring versus simply escaping.',
+    keywords: ['Change', 'Flexibility', 'Adventure', 'Spontaneity'],
+  },
+  6: {
+    archetype: 'The Nurturer',
+    essence: 'Today\'s energy centers on connection, responsibility, and the people you love. Acts of genuine care expressed simply and without expectation carry special resonance today. Attend to home, family, or anything that asks for your nurturing presence.',
+    shadow: 'Over-giving is the shadow of 6 energy — ensure your care today comes from abundance rather than obligation, or resentment will quietly follow.',
+    keywords: ['Care', 'Family', 'Responsibility', 'Harmony'],
+  },
+  7: {
+    archetype: 'The Seeker',
+    essence: 'Today favors quiet contemplation, inner attunement, and the patient pursuit of genuine understanding. Step back from noise and activity when you can; the insight you\'ve been seeking is more likely to arrive in stillness than in motion today.',
+    shadow: 'The 7 energy can create a tendency to over-analyze or withdraw so completely that connection and presence suffer. Seek depth without disappearing.',
+    keywords: ['Reflection', 'Solitude', 'Insight', 'Contemplation'],
+  },
+  8: {
+    archetype: 'The Powerhouse',
+    essence: 'Today supports ambition, decisive action, and engagement with the material dimensions of life — career, finances, and consequential decisions. Act with confidence and integrity; the energy of 8 rewards clear intention aligned with honest dealing.',
+    shadow: 'The drive of 8 can blur into tunnel vision — watch that ambition today doesn\'t sacrifice the relationships or self-care that give achievement its meaning.',
+    keywords: ['Power', 'Achievement', 'Decisiveness', 'Manifestation'],
+  },
+  9: {
+    archetype: 'The Sage',
+    essence: 'Today\'s energy calls for finishing what has been started and releasing what is no longer needed. Clear an old obligation, conclude an unfinished conversation, or consciously let go of a thought pattern that has run its course. Create space.',
+    shadow: 'The resistance to completion can make a 9 day feel depleting rather than freeing. Trust that releasing genuinely creates room for what\'s next.',
+    keywords: ['Completion', 'Release', 'Letting go', 'Endings'],
+  },
+  11: {
+    archetype: 'The Illuminator',
+    essence: 'Today carries heightened intuitive charge — your inner knowing is unusually clear and your sensitivity amplified. Pay close attention to the thoughts, dreams, and synchronicities that arise; they are more than coincidental. Ground yourself before engaging with high-intensity situations.',
+    shadow: 'The sensitivity of 11 can become overwhelm without grounding practices. Protect your nervous system today while staying open to the insights that are genuinely available.',
+    keywords: ['Intuition', 'Inspiration', 'Sensitivity', 'Illumination'],
+  },
+  22: {
+    archetype: 'The Master Builder',
+    essence: 'Today\'s energy carries an unusual combination of visionary capacity and practical power — what you focus on building today can have lasting and significant impact. Think in terms of legacy rather than immediate gain. Begin or substantially advance something that truly matters.',
+    shadow: 'The weight of the 22 day can trigger paralysis in the face of its own potential. Begin imperfectly; what you start with integrity today can be refined in the days that follow.',
+    keywords: ['Vision', 'Building', 'Impact', 'Mastery'],
+  },
+  33: {
+    archetype: 'The Master Healer',
+    essence: 'Today the energy of compassion and healing is especially strong — your care for others carries amplified quality today, and genuine acts of kindness will ripple further than you can see. Lead with love; the simplest offering from the heart carries unusual power.',
+    shadow: 'Even on a day of exceptional compassion, you cannot pour from an empty vessel. Tend to your own center first, so what you offer to others comes from fullness rather than sacrifice.',
+    keywords: ['Compassion', 'Service', 'Healing', 'Love'],
+  },
+}
+
 export function getInterpretation(category: NumerologyCategory, number: number): NumberInterpretation | null {
   if (category === 'karmicDebt') {
     const validKarmicKeys: KarmicDebtKey[] = [13, 14, 16, 19]
@@ -507,5 +582,6 @@ export function getInterpretation(category: NumerologyCategory, number: number):
     case 'expressionNumber': return expressionNumberInterpretations[key]
     case 'soulUrge': return soulUrgeInterpretations[key]
     case 'personalMonth': return personalMonthInterpretations[key]
+    case 'personalDay': return personalDayInterpretations[key]
   }
 }
