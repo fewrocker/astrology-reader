@@ -44,6 +44,26 @@
 - Calculation engine should not throw — return result objects with optional error fields
 - UI should gracefully handle missing data (e.g., unknown birth time → skip house-dependent readings)
 
+### Async GPT Calls in useEffect — Cancelled-Flag Pattern
+
+All `useEffect` blocks that fire GPT calls must use the **cancelled-flag pattern** to prevent state updates on unmounted components:
+
+```typescript
+useEffect(() => {
+  let cancelled = false
+  setLoading(true)
+  someGptService(args, apiKey)
+    .then(text => { if (!cancelled) setText(text) })
+    .catch(err => { if (!cancelled) setError(err.message) })
+    .finally(() => { if (!cancelled) setLoading(false) })
+  return () => { cancelled = true }
+}, [dependencies])
+```
+
+- Use this pattern instead of AbortController when the underlying GPT functions in `gptInterpretation.ts` don't accept an `AbortSignal`
+- Every GPT `useEffect` must return a cleanup function that sets `cancelled = true`
+- Never call `setState` after a component unmounts — this pattern prevents that class of bug
+
 ### Git
 - Commit messages: `type: description` (e.g., `feat: add aspect calculation engine`)
 - Types: `feat`, `fix`, `refactor`, `docs`, `chore`, `style`
