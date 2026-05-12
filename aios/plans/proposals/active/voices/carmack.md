@@ -1,63 +1,75 @@
-# John Carmack — Numerology Sky Chart Voice
+# John Carmack — Sprint 4 Proposal Voice
 
-Let me think through the technical path for this feature carefully.
+Let me look at what's actually in the code.
 
-## What already exists
+## Personal Year / Month / Day — already computed, not displayed
 
-- `ChartWheel.tsx` — A 700×700 SVG with full polar coordinate layout. Zodiac ring, house cusps, planet glyphs, aspect lines, tooltips. Rich interactivity. ~600+ lines.
-- `src/engine/astronomy.ts` — Already calculates planets, house cusps, angles (ASC/MC/DSC/IC), North Node. This data is already on the NumerologyPage via AppContext (if chart has been calculated).
-- `src/engine/numerology.ts` — Has `reduceToSingleDigit()` with master number support. This is exactly the reduction function needed.
-- `NumerologyPage.tsx` — Currently accesses `chartData` from context (used for cross-reading). The data is there.
+`NumerologyPage.tsx` has `calculatePersonalMonth()` and uses `reading.personalYear` from `calculateNumerology()`. Both are computed on render. But they're only used inside `buildNumerologyContext()` to construct a GPT prompt string. The user never sees these numbers in the UI.
 
-## What needs to be built
+This is the lowest-hanging fruit I've seen in a while. The calculation is done. The data is correct. The UI just needs cards. Looking at the numerology engine, I'd add one more function:
 
-**1. A `NumerologySkyChart.tsx` component** — NOT a fork of `ChartWheel.tsx`. The shared logic is the polar coordinate math, which is maybe 30 lines. The rendering is entirely different:
-- No planet glyphs → numbers
-- No aspect lines → frequency-driven size/glow per number
-- House rings still useful as context
-- Zodiac ring still useful as reference
-
-The cleanest approach: create a new self-contained SVG component that derives its coordinate math from the same constants as ChartWheel (OUTER_R=344, INNER_R=234, etc.) but has its own render logic. This avoids coupling to ChartWheel's complexity.
-
-**2. A `numerologyReduction.ts` utility or extension to `numerology.ts`** — A function that takes chart data (planets + degrees + houses) and returns an array of `{label, degree, number, source}` objects. This is the data bridge between astronomy and numerology:
-```
-buildNumerologyChartData(chartData: ChartData): NumerologyChartPoint[]
+```ts
+function calculatePersonalDay(birthMonth: number, birthDay: number): number {
+  const today = new Date()
+  // personal day = reduce(personal month + today's day)
+  // but more precisely: reduce(birth_month + birth_day + current_month + current_day + current_year_digits)
+}
 ```
 
-Where `NumerologyChartPoint = { label: string, eclipticDegree: number, reducedNumber: number, source: 'planet' | 'house_cusp' | 'angle' | 'node' }`
+Personal Day = reduce(Birth Month + Birth Day + Current Month + Current Day + Universal Day)
+where Universal Day = reduce(current year + current month + current day)
 
-**3. Data subset decision (the research question from guidelines)**:
-Based on analysis:
-- **Planets (10 points)**: Sun through Pluto — degree reduced. Best source. Spread across chart, personal.
-- **House cusps (12 points)**: Degrees reduced. Places numbers at sector boundaries. Adds structural coverage.
-- **North Node (1 point)**: Degree reduced. Karmic significance, worth including.
-- **Skip aspects**: No clear positional placement — would overlap with existing points.
-- **Skip sign-as-number**: Would cluster at 30° intervals, not reflective of individual chart.
-- **Skip DSC/IC as separate entries**: They're 180° from ASC/MC — redundant.
+This is a clean pure function, totally testable, no dependencies. It can live in `numerology.ts` alongside the rest.
 
-Total: 23 points on the chart. Rich but not overwhelming.
+**Implementation path:** Add `personalDay` to the return of `calculateNumerology()`. Add interpretation entries to `numerologyInterpretations.ts` for personal year (already exists for some), personal month, personal day. Render as cards in NumerologyPage between the core numbers and the chart. Done. Probably 200 lines total.
 
-**4. Frequency analysis function**: Count occurrences of each number (1-9, 11, 22, 33) across all chart points. Return sorted array for the legend bar and for driving visual emphasis (larger font, brighter glow for high-frequency numbers).
+## Dream journal missing transit context at record time
 
-**5. GPT call extension**: `generateNumerologySkyChartReading(chartData, frequencies, birthData, apiKey)` — takes the top 2-3 dominant numbers, their chart sources, and the full frequency table. Sends to GPT for a specific sky-chart reading distinct from the existing narrative.
+`DreamModal.tsx` stores entries to localStorage with a timestamp. It does NOT capture the astrological state at time of recording. This is a lossy operation — you can't reconstruct the exact transits retroactively with high precision because the time of the dream entry matters.
 
-## Complexity assessment
+What I'd store alongside each dream entry:
+```ts
+interface DreamEntry {
+  id: string
+  date: string // ISO timestamp
+  title: string
+  content: string
+  reading: string
+  // NEW:
+  moonSign?: string     // Moon's current sign at time of recording
+  moonPhase?: string    // 'New Moon' | 'Waxing Crescent' | ... | 'Balsamic'
+  activeTransits?: Array<{ planet: string; aspect: string; natalPlanet: string }>
+}
+```
 
-- Building `NumerologySkyChart.tsx` from scratch: Medium. The coordinate math is straightforward. The visual polish (glows, size scaling) takes care.
-- The data pipeline (`buildNumerologyChartData`): Easy. Pure transformation.
-- Integrating into NumerologyPage: Easy. One new section at the top.
-- The GPT call: Easy. One new function in gptInterpretation.ts.
+The Moon sign and phase are computable from `astronomy.ts` with just the current timestamp — no birth data required for Moon sign. For active transits, we need the natal chart from context, which is available in AppContext.
 
-**What's NOT hard but might seem hard**: The coordinate math for placing numbers. The same `eclipticToSVG(degree)` conversion used in ChartWheel works directly — just place a `<text>` element at that coordinate instead of a glyph path.
+The DreamModal already has access to `chartData` via props. Adding the computation there is straightforward:
+- `getMoonSign(new Date())` — already calculable from astronomy engine
+- `getMoonPhase(new Date())` — computable from Sun/Moon elongation
+- Top 3 active transits — filter `calculateTransits(chartData, 'daily')` for tight orb aspects (<2°)
 
-**What IS hard**: The visual design of the chart. Making numbers feel celestial (not like a spreadsheet) requires careful font sizing, color gradients, glow intensity scaling, and preventing label overlap for nearby degrees.
+Store these with the entry. Display them as a small "sky at this dream" footer on each dream card.
 
-**Label overlap problem**: Two planets at similar degrees (e.g., 5° apart) will have overlapping numbers. Need a simple collision-avoidance algorithm or radial offset for close neighbors. This is solvable with a few lines of dedup logic.
+**Migration concern:** Existing dream entries won't have this data. Handle gracefully with optional fields and a "no sky data available" fallback.
 
-## Build order
+## DailySnapshotCard missing numerology
 
-1. `buildNumerologyChartData()` utility function
-2. `NumerologySkyChart.tsx` component (SVG rendering)
-3. Frequency bar component
-4. GPT reading function + wire-up in NumerologyPage
-5. Integration at top of NumerologyPage
+`DailySnapshotCard.tsx` shows today's sky (Moon position, key transits, active aspect). It gets `chart` as a prop. It doesn't know anything about numerology.
+
+Adding personal day number: pass `birthData` into DailySnapshotCard (it's already available in AppContext where DailySnapshotCard is called from App.tsx and CachedDataLanding). Compute personalDay inside the component or pass it as prop. Add one line to the card: "Personal Day 3 · The Communicator."
+
+This is ~20 lines. The payoff is high — the landing page becomes a genuine daily oracle.
+
+## Complexity summary
+
+- Personal Year/Month/Day cards in Numerology: Low complexity, high value
+- Dream transit context at record time: Medium complexity (need to capture + store + display)
+- DailySnapshotCard numerology integration: Low complexity
+- No new external dependencies needed for any of these
+
+## Build risk
+
+The only real risk is the personal day calculation formula. There are multiple conventions in numerology for personal day calculation. Need to pick one and be consistent. I'd go with the most common: Personal Day = reduce(Birth Month + Birth Day + Universal Day) where Universal Day = reduce(year digits + month + day of current date).
+
+Label overlap on the display (similar to numerology sky chart) is not a concern here — these are text cards, not visual charts.
