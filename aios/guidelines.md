@@ -4,43 +4,63 @@ When evolving the product:
 
 ---
 
-## Sprint focus: Deepen Numerology
+## Sprint focus: Numerology Sky Chart
 
-**All proposals for the next sprint must be about making numerology richer, deeper, and more alive.**
-The current numerology reading is a good start but it is too shallow — static cards showing "Life Path 7 means introspection." That is not enough.
+**One big feature, done really well: a sky chart that speaks numbers.**
 
-### What to explore and propose:
+When the user taps into the numerology analysis, the first thing they see is a sky map — the same kind of beautiful circular birth chart the app already renders for astrology. But on this map, every element that can be translated into a number is rendered as a number, not a planet glyph. The goal is to look at the birth chart through a numerological lens, see which numbers dominate, and then receive a GPT reading about what that numerical pattern means for this specific person.
 
-**1. GPT interpretation layer for numerology**
-- Do NOT make one GPT call per number — make one call that receives all the user's numbers together and returns a cohesive, flowing reading that shows how the numbers combine and interact
-- The static cards (Life Path, Expression, Soul Urge, Birthday, etc.) render immediately with their pre-computed meanings — no loading wait
-- The GPT narrative card loads asynchronously: show a placeholder with a skeleton/pulse animation ("Interpreting your numbers…") while the call is in flight, then swap in the text when it resolves
-- The interpretation must feel like a real reading of the whole person, not a dictionary entry per number
-- Use the user's name and birth data to make it personal and specific
+---
 
-**2. GPT layer for numerology ↔ astrology cross-reading**
-- A second GPT call (run in parallel with the numerology interpretation call, not sequentially) weaves numerology and astrology together once both datasets are available
-- Example: "Your Life Path 7 resonates with your Scorpio Sun — both point toward a life of depth, research, and hidden truths"
-- This call also gets a placeholder card with animation while it loads — the page is never blocked waiting for GPT
-- Parallelize both GPT calls (numerology reading + astrology cross-reading) so they run simultaneously; total wait time is the slowest of the two, not the sum
-- This cross-reading is the real differentiator — no app does this well
+### Research phase (must run before the proposal, not as a task)
 
-**3. Go deeper on numerology itself**
-- Beyond the basics (Life Path, Expression, Soul Urge): explore Personal Year, Personal Month, Pinnacles, Challenges, Karmic Debt numbers, Hidden Passion, Planes of Expression
-- Each layer should have its own GPT narrative, not just a label
-- Show how the numbers interact with each other (e.g. Life Path + Soul Urge tension or harmony)
+Before proposing implementation, the agent must research and answer:
 
-**4. Make it interactive and alive**
-- Let the user ask GPT follow-up questions about their numerology ("why is my Life Path 7 relevant now?", "what does my Karmic Debt 13 mean for relationships?")
-- Explore a "numerology moment" — similar to transits in astrology, show what the current Personal Year/Month/Day says about right now
-- Let the user explore different number combinations and what they reveal
+- What birth chart elements can be reduced to a single-digit (or master number) via numerological reduction? Examples to investigate:
+  - Planet degree positions (e.g. Sun at 23° → 2+3 = 5)
+  - House cusp degrees
+  - Angles (ASC, MC, DSC, IC) as degrees
+  - Aspects between planets (angle in degrees → reduced)
+  - Planet positions by sign (Aries=1, Taurus=2, … Pisces=12 → 1+2=3)
+  - Planet positions by house (house number itself)
+  - Node degrees, Part of Fortune degree
+- Which of these sources produce the richest, most varied number distribution? Which are too noisy or redundant?
+- What is the best subset to display on the map so it's rich but not overwhelming?
+- How do other numerology systems (Pythagorean, Chaldean) handle birth chart numbers — is there prior art to draw from?
+- How should master numbers (11, 22, 33) be treated — kept as-is or reduced further?
 
-### Progressive loading pattern (required for all GPT cards)
-- Static numerology content (computed numbers + pre-written card meanings) must render immediately on page load — zero GPT dependency for first paint
-- GPT interpretation cards start loading in parallel as soon as the page mounts; they show a pulsing skeleton placeholder until resolved
-- Never block the page render on a GPT call — the user sees real content right away, the AI enrichment layers in on top
+The research conclusion must inform exactly which data points feed the map and how the reduction is computed, before any code is written.
+
+---
+
+### The feature: Numerology Sky Chart
+
+**What it is**
+A circular sky map rendered at the top of the numerology page — the same polar coordinate canvas already used for astrology charts. Instead of planet glyphs and aspect lines, every data point on the chart is drawn as its numerological number. The visual output is a sky full of numbers.
+
+**How it works**
+1. Compute the birth chart (planets, houses, angles) using the user's birth data — same ephemeris pipeline already in use.
+2. For each chart element in the selected subset (determined by research), reduce the degree or position value to a single digit (or master number).
+3. Place that number on the chart at the correct position (sign + degree) using the same polar layout as the existing sky map.
+4. Numbers that appear most often get visual emphasis: larger font size, brighter color, or a glowing ring — so at a glance the dominant numbers pop out.
+5. A legend or summary bar below the map shows the frequency count per number (1 through 9, plus 11/22/33 if present), sorted descending.
+
+**GPT reading (async, non-blocking)**
+- After the map renders, a single GPT call receives: the user's name, birth data, full number frequency table, and the top 2–3 dominant numbers with their chart sources.
+- The prompt asks: what does this pattern reveal about this person? Why are these numbers dominant? What do they mean in combination?
+- This is not a generic "number 7 means introspection" response — it must be a flowing reading specific to this person's chart, grounded in the actual chart positions that produced those numbers.
+- The card shows a pulsing skeleton ("Reading your numbers…") while the call is in flight. Never block the map render on the GPT call.
+
+**Design**
+- The map must follow the same majestic visual language as existing sky charts: dark background, elegant typography, subtle glows for emphasis.
+- Numbers should be styled to feel celestial — not like a spreadsheet. Think constellations of numbers.
+- Dominant numbers should feel alive: slightly larger, subtly glowing, drawing the eye naturally.
+- The frequency summary below the map should be minimal and beautiful, not a data table.
+
+---
 
 ### What NOT to propose
-- Do not propose features outside of numerology unless they are a direct bridge between numerology and astrology
-- Do not propose cosmetic or UI-only improvements that have no interpretive depth behind them
-- Do not add more static content — every new number or layer must be GPT-interpreted
+- Do not split this into many small tasks — this is one cohesive feature
+- Do not propose a generic "show numbers on a list" fallback — the map is the feature
+- Do not add new static numerology cards — the point is the chart and the GPT reading
+- Do not block the map on GPT — the chart must render immediately, the reading layers in asynchronously

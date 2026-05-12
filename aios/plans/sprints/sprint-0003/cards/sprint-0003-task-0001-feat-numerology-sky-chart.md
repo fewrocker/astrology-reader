@@ -115,3 +115,18 @@ This adds a net-new, user-visible visual capability that changes how users exper
 - Frequency emphasis: compute frequency map; scale font-size linearly from 14px (freq=1) to 20px (freq=dominant); opacity from 0.7 to 1.0
 - Master number detection: numbers 11, 22, 33 get gold text color regardless of frequency
 - No aspect lines — this chart speaks only numbers
+
+---
+
+## Outcome
+
+**Status**: Done — 2026-05-12 · Commit `74ef323`
+
+**Delivered:**
+
+- `src/engine/numerologyChart.ts` — `buildNumerologyChartData()` reduces planet ecliptic degrees, house cusps (when time known), and North Node to single digits (preserving 11/22/33); returns `NumerologyChartPoint[]` and `frequencyMap`
+- `src/components/chart/NumerologySkyChart.tsx` — SVG chart (SIZE=700) with dark radial background, zodiac ring with element colors, house cusp dividers, numbers at ecliptic positions via `x = CX + R·cos(deg·π/180 - π/2)`, collision avoidance (±20px radial offset for points within 8°), frequency-driven emphasis (font 15→20px, opacity 0.75→1.0, gold glow for dominant), master numbers always gold, hover tooltip; `FrequencyBar` sub-component with hover details and frequency weighting
+- `src/services/gptInterpretation.ts` — `generateNumerologySkyChartReading()` added; builds sky-specific prompt from frequencyMap and dominant numbers; same `retryWithBackoff` pattern as existing functions
+- `src/components/results/NumerologyPage.tsx` — "Your Sky in Numbers" section at top of page; null-state card when `chartData` is null; sky GPT reading card with shimmer skeleton; cancelled-flag pattern in `useEffect`; all three GPT calls fire in parallel without blocking chart render
+
+**Build**: `npm run build` passes with zero TypeScript errors. Bundle size unchanged relative to pre-sprint baseline (chunk warning is pre-existing cities data).

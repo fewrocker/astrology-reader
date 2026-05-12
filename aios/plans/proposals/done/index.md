@@ -1,5 +1,11 @@
 # Done Proposals
 
+## Sprint 0003 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [feat-numerology-sky-chart](feat-numerology-sky-chart.md) | Feature | ✅ commit 74ef323 |
+
 ## Sprint 0001 — Completed
 
 | Proposal | Type | Delivered |
