@@ -141,6 +141,67 @@ export async function getDreamDiscussResponse(
   return result || 'Unable to generate a response.'
 }
 
+export async function generateAstroNumerologyCrossReading(
+  numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number },
+  chartData: { planets: Array<{ name: string; sign: string; house: number; retrograde: boolean; degree: number }>; angles: { ascendant: { sign: string }; midheaven: { sign: string } }; unknownTime: boolean },
+  userName: string | undefined,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const nameStr = userName ? `Name: ${userName}` : 'Name: not provided'
+  const planetLines = chartData.planets
+    .filter(p => p.name !== 'NorthNode')
+    .map(p => {
+      const houseStr = !chartData.unknownTime ? ` in the ${p.house}${houseSuffix(p.house)} house` : ''
+      const rxStr = p.retrograde ? ' (retrograde)' : ''
+      return `- ${p.name}: ${p.sign} ${p.degree}°${houseStr}${rxStr}`
+    })
+    .join('\n')
+
+  const anglesStr = !chartData.unknownTime
+    ? `Ascendant: ${chartData.angles.ascendant.sign}\nMidheaven: ${chartData.angles.midheaven.sign}`
+    : '(birth time unknown — houses not available)'
+
+  const expressionLine = numbers.expressionNumber !== undefined
+    ? `Expression Number: ${numbers.expressionNumber}`
+    : 'Expression Number: not provided (no birth name given)'
+
+  const prompt = `You are synthesizing numerology and astrology into a single integrated reading for one specific person.
+
+## Person
+${nameStr}
+
+## Numerology Profile
+Life Path: ${numbers.lifePath}
+Birthday Number: ${numbers.birthdayNumber}
+Personal Year: ${numbers.personalYear}
+${expressionLine}
+
+## Natal Chart
+${planetLines}
+${anglesStr}
+
+Write 2–3 paragraphs that synthesize both systems for this specific person. Name where the numbers and chart resonate and amplify each other, and name where they create interesting tension or complexity. Be specific — reference actual placements, actual numbers, and what that combination reveals. Do not write generic number definitions. Do not write generic planet definitions. Write only about this person's specific combination. Examples of what good synthesis looks like: "Your Life Path 7 resonates with your Scorpio Moon — both point toward a life of depth, research, and hidden truths." Or: "Your 8 Life Path's drive for material mastery sits in interesting tension with your 12th house Saturn — this combination suggests someone who must do their inner work before the outer success becomes stable." Speak directly to the person in second person. Be direct, evocative, and substantive.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'You are a master reader of both numerology and astrology — someone who holds both systems simultaneously and finds the living synthesis between them. You do not treat them as two separate readings placed side by side. You weave them together, finding where they echo and where they create productive tension. You are specific, personal, and direct. You never pad with generic definitions. You write as though you know this person.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 900 })
+  )
+  return result || 'Unable to generate cross-reading.'
+}
+
+function houseSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return s[(v - 20) % 10] || s[v] || s[0]
+}
+
 export async function getDailySnapshotInterpretation(
   prompt: string,
   apiKey: string,
