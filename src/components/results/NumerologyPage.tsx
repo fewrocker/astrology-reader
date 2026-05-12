@@ -1,7 +1,21 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { calculateNumerology } from '../../engine/numerology'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
+import type { ChartData } from '../../engine/types'
+import { calculateChart } from '../../engine/astronomy'
+import { generateAstroNumerologyCrossReading, getStoredApiKey } from '../../services/gptInterpretation'
+
+function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
+  if (state.chartData) return state.chartData
+  const { birthData } = state
+  if (!birthData.city || !birthData.date) return null
+  try {
+    return calculateChart(birthData.date, birthData.time, birthData.city.lat, birthData.city.lng, birthData.city.tz, birthData.unknownTime)
+  } catch {
+    return null
+  }
+}
 
 interface NumberCardProps {
   label: string
@@ -90,16 +104,59 @@ function NumberCard({ label, number, category, badge }: NumberCardProps) {
   )
 }
 
+function CrossReadingSkeleton() {
+  return (
+    <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px flex-1 bg-mystic-border" />
+        <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Astrology & Numerology</span>
+        <div className="h-px flex-1 bg-mystic-border" />
+      </div>
+      <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Reading your chart connections…</p>
+      <div className="space-y-3">
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '92%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.06)', width: '85%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '96%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.05)', width: '78%' }} />
+        <div className="mt-4 h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '90%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.06)', width: '82%' }} />
+        <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.07)', width: '88%' }} />
+      </div>
+    </div>
+  )
+}
+
 export default function NumerologyPage() {
   const { state, dispatch } = useApp()
   const { birthData } = state
   const [nameInput, setNameInput] = useState(birthData.userName ?? '')
   const [editingName, setEditingName] = useState(!birthData.userName)
 
+  const [crossReadingText, setCrossReadingText] = useState<string | null>(null)
+  const [crossReadingLoading, setCrossReadingLoading] = useState(false)
+  const [crossReadingError, setCrossReadingError] = useState<string | null>(null)
+  const [retryCount, setRetryCount] = useState(0)
+
+  const apiKey = getStoredApiKey()
+
+  const chartData = useMemo(() => getChartData(state), [state.chartData, birthData]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const reading = useMemo(
     () => calculateNumerology(birthData.date, birthData.userName || undefined),
     [birthData.date, birthData.userName],
   )
+
+  useEffect(() => {
+    if (!chartData || !apiKey) return
+    let cancelled = false
+    setCrossReadingLoading(true)
+    setCrossReadingError(null)
+    generateAstroNumerologyCrossReading(reading, chartData, birthData.userName, apiKey)
+      .then(text => { if (!cancelled) setCrossReadingText(text) })
+      .catch(err => { if (!cancelled) setCrossReadingError(err.message) })
+      .finally(() => { if (!cancelled) setCrossReadingLoading(false) })
+    return () => { cancelled = true }
+  }, [chartData, reading, birthData.userName, apiKey, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatDate = (d: string) => {
     const [y, m, day] = d.split('-')
@@ -197,6 +254,52 @@ export default function NumerologyPage() {
             <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Expression Number.</p>
           </div>
         )}
+      </div>
+
+      {/* Astrology & Numerology GPT cross-reading */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Astrology & Numerology</span>
+          <div className="h-px flex-1 bg-mystic-border" />
+        </div>
+
+        {!chartData ? (
+          <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm">Enter your birth data to unlock the astrology ↔ numerology synthesis</p>
+          </div>
+        ) : !apiKey ? (
+          <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm">Add an OpenAI API key in settings to unlock the live astrology ↔ numerology synthesis</p>
+          </div>
+        ) : crossReadingLoading ? (
+          <CrossReadingSkeleton />
+        ) : crossReadingError ? (
+          <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 text-center">
+            <p className="text-mystic-muted text-sm mb-4">The stars are quiet right now — try again in a moment</p>
+            <button
+              type="button"
+              onClick={() => setRetryCount(c => c + 1)}
+              className="px-5 py-2 font-heading text-sm rounded-lg transition-all"
+              style={{
+                background: 'rgba(201,168,76,0.10)',
+                border: '1px solid rgba(201,168,76,0.30)',
+                color: 'rgba(201,168,76,0.85)',
+              }}
+            >
+              ✦ Try again
+            </button>
+          </div>
+        ) : crossReadingText ? (
+          <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
+            <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Where your numbers echo in your natal chart</p>
+            <div className="space-y-4">
+              {crossReadingText.split('\n').filter(p => p.trim().length > 0).map((p, i) => (
+                <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{p}</p>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Back button */}
