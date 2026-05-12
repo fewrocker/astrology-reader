@@ -12,6 +12,7 @@ import SynastryTransitPage from './components/results/SynastryTransitPage'
 import SkyTodayChart from './components/chart/SkyTodayChart'
 import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
+import NumerologyPage from './components/results/NumerologyPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -117,6 +118,26 @@ function CachedDataLanding() {
                 }}
               >
                 Dream Interpretation ☽
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'numerology' })}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(201,168,76,0.1)',
+                  border: '1px solid rgba(201,168,76,0.25)',
+                  color: 'rgba(201,168,76,0.85)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.18)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.45)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.1)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.25)'
+                }}
+              >
+                Numerology ✦
               </button>
               <button
                 type="button"
@@ -449,6 +470,7 @@ function AppContent() {
           </div>
         )}
         {state.view === 'synastry-transit-results' && <SynastryTransitPage />}
+        {state.view === 'numerology' && <NumerologyPage />}
       </div>
     </div>
   )
