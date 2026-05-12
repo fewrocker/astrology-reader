@@ -6,7 +6,7 @@ import type { TransitAspect } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
-import { reduceToSingleDigit } from '../../engine/numerology'
+import { calculatePersonalDay } from '../../engine/numerology'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -67,17 +67,6 @@ Active transit aspects today (tightest first):
 ${aspectLines || 'No tight aspects active today.'}
 
 Write 2-3 specific, honest sentences about what this person's day looks like astrologically. Be direct and personal.`
-}
-
-function calculatePersonalDay(birthDate: string): number {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = now.getMonth() + 1
-  const day = now.getDate()
-  const yearDigitSum = String(year).split('').reduce((acc, d) => acc + Number(d), 0)
-  const universalDay = reduceToSingleDigit(yearDigitSum + month + day)
-  const [, birthMonthStr, birthDayStr] = birthDate.split('-')
-  return reduceToSingleDigit(parseInt(birthMonthStr, 10) + parseInt(birthDayStr, 10) + universalDay)
 }
 
 function personalDayArchetype(n: number): string {
