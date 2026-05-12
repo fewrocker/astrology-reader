@@ -14,6 +14,7 @@ import SkyTodayChart from './components/chart/SkyTodayChart'
 import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
 import NumerologyPage from './components/results/NumerologyPage'
+import TodayPage from './components/reading/TodayPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -79,6 +80,26 @@ function CachedDataLanding() {
                 className="w-full px-6 py-3 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors"
               >
                 Read My Chart ✦
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(201,168,76,0.12)',
+                  border: '1px solid rgba(201,168,76,0.35)',
+                  color: '#c9a84c',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
+                }}
+              >
+                Today ✦
               </button>
               <button
                 type="button"
@@ -553,6 +574,9 @@ function AppContent() {
           </div>
         )}
         {state.view === 'solar-return' && <SolarReturnPage />}
+        {state.view === 'today' && (
+          <TodayPage chartData={state.chartData} birthDate={state.birthData.date} />
+        )}
       </div>
     </div>
   )
