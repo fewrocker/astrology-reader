@@ -732,23 +732,55 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
 2. If the branch already exists, resume it instead of creating a conflicting branch.
 3. Record the branch name in `sprints/sprint-XXXX/state.md`.
 
-**6. Execute each task via a separate subagent**
-1. Spawn one separate subagent for **each** sprint card.
-2. Each subagent is responsible only for its assigned card.
-3. Before implementation, each subagent must create a dedicated git worktree named exactly after the task slug:
-   - `sprint-XXXX-task-YYYY-[TASK_NAME]`
-4. The worktree must check out a branch with the same name as the worktree.
-5. The subagent must:
-   - read the sprint card
-   - develop and deliver the task end-to-end
-   - validate its changes appropriately
-   - update the card with outcome notes
-   - signal the task done in `sprints/sprint-XXXX/state.md`
-6. The parent `/sprint` workflow must wait until every task subagent has finished before closing the sprint.
-7. If a task fails, mark it clearly in `sprints/sprint-XXXX/state.md` and do not silently drop it.
+**6. Execute each task via a separate claude CLI process**
+
+Do NOT use the Agent tool. Each task must run as an independent OS-level `claude` process launched via the Bash tool. This prevents context window contamination across tasks and enables true parallelism.
+
+1. **Write a self-contained prompt file for each task** at `/tmp/sprint-XXXX-task-YYYY-[TASK_NAME]-prompt.txt`. The prompt must be fully self-contained — include the absolute project root path, the sprint card path, and all instructions the process needs to complete the task without any outside context:
+
+   ```
+   Project root: <absolute path to project root>
+   Sprint card: <absolute path>/aios/plans/sprints/sprint-XXXX/cards/sprint-XXXX-task-YYYY-[TASK_NAME].md
+
+   Read origin.md at the project root to understand conventions, then execute this task:
+
+   1. The branch sprint-XXXX-task-YYYY-[TASK_NAME] already exists. Create a git worktree for it:
+      git -C <project root> worktree add /tmp/sprint-XXXX-task-YYYY-[TASK_NAME] sprint-XXXX-task-YYYY-[TASK_NAME]
+
+   2. Work exclusively inside /tmp/sprint-XXXX-task-YYYY-[TASK_NAME] for all source code changes.
+
+   3. Read the sprint card and implement everything it describes, end-to-end.
+
+   4. Commit all changes inside the worktree.
+
+   5. In the MAIN repo (not the worktree), update <absolute path>/aios/plans/sprints/sprint-XXXX/state.md:
+      change this task's status from "pending" to "done".
+
+   6. Append a brief outcome summary to the sprint card file.
+   ```
+
+2. **Launch all task processes in parallel** using the Bash tool — start every background process before waiting for any:
+
+   ```bash
+   claude --dangerously-skip-permissions \
+     -p "$(cat /tmp/sprint-XXXX-task-0001-prompt.txt)" \
+     > /tmp/sprint-XXXX-task-0001.log 2>&1 &
+
+   claude --dangerously-skip-permissions \
+     -p "$(cat /tmp/sprint-XXXX-task-0002-prompt.txt)" \
+     > /tmp/sprint-XXXX-task-0002.log 2>&1 &
+
+   # ... one line per task ...
+
+   wait   # blocks until every background process exits
+   ```
+
+3. **After `wait` returns**, read each `/tmp/sprint-XXXX-task-YYYY.log` to determine success or failure. A task succeeded if the log shows no fatal errors and the worktree branch has at least one new commit beyond the sprint base.
+
+4. If a task failed, mark it as `failed` in `sprints/sprint-XXXX/state.md` and include a one-line reason extracted from its log.
 
 **7. Validate and repair the sprint**
-1. After all task subagents have finished, do **not** consider the sprint complete yet.
+1. After all task processes have finished, do **not** consider the sprint complete yet.
 2. First verify sprint state integrity:
    - confirm every card has a terminal status
    - confirm every task branch/worktree produced a clear outcome
