@@ -4,6 +4,7 @@ import type { PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
+import ErrorBoundary from '../ErrorBoundary'
 import { ReadingSummary, PlanetSection, AspectSection, AspectPatternsSection, BalanceSection, FocusSection, HousesOverview, PlanetaryStrengthSection, RetrogradeSummarySection } from '../reading/ReadingDisplay'
 import { NatalMoonPhaseWidget } from '../reading/MoonPhaseWidget'
 import DailySnapshotCard from '../reading/DailySnapshotCard'
@@ -31,7 +32,9 @@ export default function ResultsPage() {
       {/* chart wheel */}
       <div className="flex justify-center mb-10">
         <div className="w-full max-w-2xl">
-          <ChartWheel chartData={chartData} aspects={aspects} />
+          <ErrorBoundary>
+            <ChartWheel chartData={chartData} aspects={aspects} />
+          </ErrorBoundary>
         </div>
       </div>
 
