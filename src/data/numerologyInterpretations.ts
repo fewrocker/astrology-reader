@@ -5,9 +5,11 @@ export interface NumberInterpretation {
   keywords: string[]
 }
 
-export type NumerologyCategory = 'lifePath' | 'birthdayNumber' | 'personalYear' | 'expressionNumber'
+export type NumerologyCategory = 'lifePath' | 'birthdayNumber' | 'personalYear' | 'expressionNumber' | 'soulUrge' | 'karmicDebt' | 'personalMonth'
 
 export type NumberKey = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 11 | 22 | 33
+
+export type KarmicDebtKey = 13 | 14 | 16 | 19
 
 const lifePathInterpretations: Record<NumberKey, NumberInterpretation> = {
   1: {
@@ -309,7 +311,190 @@ const expressionNumberInterpretations: Record<NumberKey, NumberInterpretation> =
   },
 }
 
+const soulUrgeInterpretations: Record<NumberKey, NumberInterpretation> = {
+  1: {
+    archetype: '1 — The Sovereign Heart',
+    essence: 'At the deepest level of your soul, you hunger to be wholly, unmistakably yourself — uncompromised and undiluted. Your innermost desire is not fame or recognition but authentic self-determination: the freedom to lead your own life from the inside out, trusting your own instincts as the final authority. You are secretly driven by a fierce need to be original, to forge something that could only have come from you, and to stand apart from the crowd not from arrogance but from a deeply felt allegiance to your own truth. This soul desire, when honored, produces remarkable courage and creative force.',
+    shadow: 'The shadow of Soul Urge 1 is the hunger for dominance when the desire for self-determination goes unmet — needing to win in order to feel worthy. The soul learns that authentic sovereignty requires no conquest of others, only honest sovereignty of the self.',
+    keywords: ['Autonomy', 'Originality', 'Self-determination', 'Courage', 'Inner authority'],
+  },
+  2: {
+    archetype: '2 — The Gentle Heart',
+    essence: 'What your soul most deeply desires is connection — not the surface variety, but the kind of profound, mutual understanding that makes two people feel genuinely known to each other. Behind everything you do runs a quiet longing for harmony, for the feeling that you and the people you love are woven together in something real and sustaining. Your inner world is exquisitely sensitive to emotional tone; dissonance disturbs you at a cellular level, and you are most alive when there is peace, tenderness, and genuine cooperation in your closest relationships. You have a secret gift for making others feel seen, and you receive this same seeing as the deepest possible gift.',
+    shadow: 'The shadow of Soul Urge 2 is the self that disappears in its desire for union — merging so completely with others' needs that one's own heart becomes inaudible. The soul's work is learning that true connection requires two distinct presences, not one dissolving into the other.',
+    keywords: ['Union', 'Harmony', 'Sensitivity', 'Being known', 'Peace'],
+  },
+  3: {
+    archetype: '3 — The Radiant Heart',
+    essence: 'Your soul's deepest desire is to express — to pour the full abundance of your inner life into the world through beauty, language, humor, and creative joy. You are inwardly driven by a need for delight, for the experience of being genuinely alive to the richness of existence, and for sharing that aliveness with others through some form of art or communication. There is a child-like creative hunger at the core of your soul that never tires of wondering, imagining, and making. At your most fulfilled, you are a fountain of inspired expression, giving the world something it would not have had without you.',
+    shadow: 'The shadow of Soul Urge 3 is the creative soul that goes silent from fear of judgment — the one who hides the very gift the world most needs from them. The wound of 3 is believing that authentic expression is too much, too vulnerable, too exposed to be risked.',
+    keywords: ['Creative joy', 'Expression', 'Delight', 'Beauty', 'Aliveness'],
+  },
+  4: {
+    archetype: '4 — The Steadfast Heart',
+    essence: 'What your soul most deeply desires is stability — not the stagnant kind, but the living, rooted stability of a life built on solid ground: clear values, genuine security, and meaningful, lasting work. You carry an inner hunger to build something real, to contribute something that will outlast the moment and give the people you love a foundation they can stand on. Your soul takes deep satisfaction in competence, in excellence, and in the quiet dignity of work done well. You are secretly sustained by the feeling that you are dependable — that your word is solid and your presence can be counted on.',
+    shadow: 'The shadow of Soul Urge 4 is the one who mistakes rigidity for security — clinging so tightly to what has been built that growth and adaptation become impossible. The soul learns that the most enduring foundations are not inflexible but alive, responsive, and capable of revision.',
+    keywords: ['Security', 'Lasting work', 'Dependability', 'Solid ground', 'Dignity'],
+  },
+  5: {
+    archetype: '5 — The Wandering Heart',
+    essence: 'At the root of your soul is an unquenchable hunger for freedom and experience — the desire to taste everything, to remain forever in motion, and to never let the walls close in. Your inner life is electric with curiosity; you are driven by a deep need to discover, to experiment, and to remain unconstrained by any single identity, role, or circumstance. The soul of 5 craves variety not from restlessness but from a genuine metaphysical conviction that life is meant to be lived in the full breadth of its possibility, and that too-early commitment is a form of spiritual death. At your highest, this hunger becomes genuine wisdom gathered from the full spectrum of human experience.',
+    shadow: 'The shadow of Soul Urge 5 is the one who confuses perpetual motion with freedom, who flees commitment before roots can form and depth can develop. The soul's deepest freedom is ultimately chosen, not escaped into.',
+    keywords: ['Freedom', 'Experience', 'Exploration', 'Curiosity', 'Motion'],
+  },
+  6: {
+    archetype: '6 — The Devoted Heart',
+    essence: 'Your soul's deepest desire is to love and be loved in the fullness of that word — to create a life of genuine beauty, warmth, and care, and to give yourself to the people and places and ideals that you have chosen to call your own. You are driven inwardly by a need to be of real use: to see that your presence in someone's life has made a tangible difference, that your care has healed something or made someone feel genuinely held. There is an artist's soul beneath your nurturing impulse — a sensitivity to beauty, to harmony, to the quality of the spaces you inhabit and the relationships you tend. Your highest fulfillment arrives when love and craft and service merge into one.',
+    shadow: 'The shadow of Soul Urge 6 is the one who gives compulsively and then resents the very people they insisted on helping without being asked. The soul learns that love given from need is not the same as love given from abundance.',
+    keywords: ['Love', 'Beauty', 'Service', 'Care', 'Belonging'],
+  },
+  7: {
+    archetype: '7 — The Seeking Heart',
+    essence: 'What your soul most deeply desires is truth — not the agreed-upon kind, but the hidden, deep-structure truth that hides beneath the surface of appearances and can only be reached through sustained solitude, contemplation, and the willingness to ask questions that have no comfortable answers. You are inwardly driven by a hunger to understand — the universe, the nature of consciousness, the deeper meaning of your own life and the lives of those around you. Your inner world is your primary domain; the quality of your inner life is the measure of your wealth. At the deepest level, you are a seeker, and the seeking itself — conducted with rigor and genuine humility — is your truest form of devotion.',
+    shadow: 'The shadow of Soul Urge 7 is the seeker who substitutes knowing for feeling — who retreats so completely into the mind that the warmth of genuine intimacy becomes inaccessible. The soul eventually discovers that the deepest truth is found not only in solitude but in the mystery of genuine connection.',
+    keywords: ['Truth', 'Understanding', 'Solitude', 'Mystery', 'Inner life'],
+  },
+  8: {
+    archetype: '8 — The Masterful Heart',
+    essence: 'Your soul's deepest desire is mastery — the genuine, hard-won kind that comes from sustained effort, integrity, and the willingness to take on consequential challenges. You are driven inwardly by a need to matter in the real world: to create, achieve, and steward things of actual significance. At your core, you hunger not merely for success but for the kind of authority that is earned rather than assumed — the authority that comes from genuine competence, wisdom, and the courage to make consequential decisions with integrity. Your soul is most alive when it is engaged with something large, real, and genuinely demanding.',
+    shadow: 'The shadow of Soul Urge 8 is the one who has equated worth with power and lost touch with the deeper satisfaction that mastery was always meant to serve. The soul learns that the true harvest of all its striving is wisdom, not merely accumulation.',
+    keywords: ['Mastery', 'Achievement', 'Authority', 'Significance', 'Integrity'],
+  },
+  9: {
+    archetype: '9 — The Universal Heart',
+    essence: 'At the deepest level of your soul, you carry a love that wants to include everyone — a hunger not for personal satisfaction alone but for the healing and uplift of something larger than yourself. You are inwardly driven by a need for meaning that transcends the merely personal: a life that contributes to the long arc of human dignity, that adds beauty or wisdom or compassion to a world that is always in need of more of all three. Your soul carries the accumulated depth of many cycles of experience, and what you most deeply desire is to give that depth away — to pour it into art, into service, into relationships of genuine, unconditional love.',
+    shadow: 'The shadow of Soul Urge 9 is the one whose universal love has become a way of avoiding the vulnerability of personal love — who loves humanity in the abstract but cannot bear to be loved as a specific, imperfect person. The soul learns that universal love must begin, not end, with the self.',
+    keywords: ['Universal love', 'Meaning', 'Giving', 'Compassion', 'Transcendence'],
+  },
+  11: {
+    archetype: '11 — The Illuminated Heart',
+    essence: 'Your soul's deepest desire is illumination — a profound, lived experience of the connection between all things, and the ability to transmit that knowing in ways that genuinely awaken others. You are inwardly driven by a hunger for the sacred: for experiences of beauty, insight, and spiritual contact that confirm that this life is more than what it appears on the surface. Your soul carries a visionary sensitivity that picks up on frequencies most people cannot access, and at its deepest level, it longs not merely to perceive these frequencies but to become a clear, trustworthy channel through which they can flow into the world for the benefit of others.',
+    shadow: 'The shadow of Soul Urge 11 is the sensitivity that becomes a burden — the one whose inner world is so vast and so charged that ordinary life feels unbearable by comparison, and who uses their spiritual gifts as a reason for remaining unavailable to the earthly work of love and relationship.',
+    keywords: ['Illumination', 'Spiritual contact', 'Vision', 'Transmission', 'Sacred beauty'],
+  },
+  22: {
+    archetype: '22 — The Architect Heart',
+    essence: 'What your soul most deeply desires is to build — not merely to dream or to envision, but to translate vision into form of genuinely significant scale and lasting impact. You are inwardly driven by a hunger to create things that are real, enduring, and genuinely useful to the world: systems, structures, communities, works of art or enterprise whose impact extends far beyond the personal. The soul of 22 carries both the visionary capacity of the master and the practical genius of the builder, and its deepest satisfaction arrives when those two capacities are working in full collaboration — when something that seemed impossible has been made unquestionably real.',
+    shadow: 'The shadow of Soul Urge 22 is the architect who never breaks ground — paralyzed by the gap between the magnitude of the vision and the humility required to begin with a single imperfect stone. The soul learns that the greatest structures in history were all begun by someone who was not yet ready.',
+    keywords: ['Building', 'Legacy', 'Vision made real', 'Scale', 'Impact'],
+  },
+  33: {
+    archetype: '33 — The Compassionate Heart',
+    essence: 'Your soul's deepest desire is to be a living expression of unconditional love — not as an idea or an aspiration, but as the actual quality of your presence in the world. You are inwardly driven by a longing to heal, to uplift, and to serve as a vessel through which something genuinely sacred can flow into the lives of others. At the core of your soul is a conviction — sometimes felt before it is understood — that love is the fundamental substance of all things, and that your work in this lifetime is to embody that truth as completely as humanly possible. When you are living in alignment, your very presence has a therapeutic quality that others feel without being able to name.',
+    shadow: 'The shadow of Soul Urge 33 is the saint who has forgotten they are also human — who gives with such completeness that the self is extinguished rather than transformed. The soul learns that the fire of compassion must be continually renewed from within, or it will burn the one who tends it.',
+    keywords: ['Unconditional love', 'Healing', 'Sacred service', 'Compassion', 'Living truth'],
+  },
+}
+
+const karmicDebtInterpretations: Record<KarmicDebtKey, NumberInterpretation> = {
+  13: {
+    archetype: '13 — The Debt of Transformation',
+    essence: 'Karmic Debt 13 carries the weight of lifetimes in which effort was avoided, shortcuts were taken, and the discipline required to build something of lasting value was consistently refused. The soul arrives in this life with a deep karmic obligation: to learn, through direct and sometimes uncompromising experience, that meaningful achievement cannot be borrowed, inherited, or circumvented — it must be earned through sustained, patient, and often unglamorous work. Life with Karmic Debt 13 tends to repeat a pattern: when shortcuts are attempted, they collapse; when the work is done faithfully and completely, the ground becomes solid beneath the feet. The number 13 does not punish — it teaches, with the kind of precision that only comes from long experience with what the soul has refused to learn.',
+    shadow: 'If the lessons of Karmic Debt 13 are ignored — if the pattern of avoidance continues in this lifetime — the soul will encounter the same collapses in more concentrated form, until the only path forward is the disciplined one. The debt is not discharged by suffering; it is discharged by choosing, again and again, the harder and more honest path.',
+    keywords: ['Discipline', 'Earned effort', 'Transformation through work', 'Karmic pattern', 'Integrity'],
+  },
+  14: {
+    archetype: '14 — The Debt of Freedom',
+    essence: 'Karmic Debt 14 originates in past-life patterns of misused freedom — excessive indulgence, the abuse of others' freedom, or a reckless surrender to sensation and appetite that accumulated consequences the soul was not willing to face. In this lifetime, the soul is called to discover what freedom truly means: not the freedom from constraint, but the freedom that comes from genuine self-mastery and the conscious, courageous choice to act with integrity even when no one is watching. Life with Karmic Debt 14 tends to involve recurring encounters with excess, addiction, instability, or the consequences of others' unexamined choices — not as punishment, but as the precise mirror of the soul's own unfinished work.',
+    shadow: 'The path that does not honor Karmic Debt 14 leads to escalating cycles of excess and consequence, each loop tighter than the last, until the soul recognizes that the freedom it has been seeking outwardly can only be found inwardly. The debt is discharged through the practice of moderation, accountability, and the patient building of a life grounded in chosen values.',
+    keywords: ['Moderation', 'Self-mastery', 'True freedom', 'Accountability', 'Conscious choice'],
+  },
+  16: {
+    archetype: '16 — The Debt of Ego',
+    essence: 'Karmic Debt 16 carries one of the heaviest of soul-level patterns: the residue of lives lived in pride, in the misuse of love and power, in the construction of identities and achievements that served the ego rather than the spirit. The soul that carries this debt arrives in this life with something that will eventually fall — not because it is being punished, but because the ego-structures that were built in prior lifetimes must be cleared to make room for the authentic self that lives beneath them. When the fall comes — and it tends to come — it is an invitation, not an ending: the invitation to rebuild from a foundation of genuine humility, authentic love, and service that does not require recognition.',
+    shadow: 'The soul that resists the humbling that Karmic Debt 16 requires — that clings to pride, to the false self, to constructed superiority — will find that life dismantles what it has built with increasing frequency and force. The debt is discharged not through loss, but through what is chosen after the loss: the decision to build, this time, from the inside out.',
+    keywords: ['Humility', 'Authentic self', 'Surrender of ego', 'Rebuilding', 'Soul-level reckoning'],
+  },
+  19: {
+    archetype: '19 — The Debt of Self-Sufficiency',
+    essence: 'Karmic Debt 19 arises from past-life patterns of radical self-centeredness — the misuse of power and intelligence in service of the self alone, without genuine regard for the needs, freedom, or dignity of others. In this lifetime, the soul is called to learn the deep interdependence of all living things: that genuine strength is not independence from others, but the wisdom to know when to ask, when to receive, and how to hold power with care for the collective good. Life with Karmic Debt 19 frequently presents situations that force the soul to depend on others, to be vulnerable, and to discover that receiving with grace is its own form of courage and its own expression of strength.',
+    shadow: 'The soul that refuses the lessons of Karmic Debt 19 — that continues to use power and intelligence in the service of the self alone — will find itself increasingly isolated, its strength becoming a cage rather than a gift. The debt is discharged through the genuine, practiced recognition that the self is not an island but a thread in an irreducibly shared fabric.',
+    keywords: ['Interdependence', 'Receiving', 'Shared power', 'Humility in strength', 'Collective wisdom'],
+  },
+}
+
+const personalMonthInterpretations: Record<NumberKey, NumberInterpretation> = {
+  1: {
+    archetype: 'Personal Month 1',
+    essence: 'This month carries the energy of fresh starts and new initiatives — it is the ideal time to begin something you have been delaying, to take the first step toward a direction that matters to you, or to assert yourself with renewed clarity. Act from your own authority this month; the universe is particularly receptive to bold, intentional beginnings.',
+    shadow: '',
+    keywords: [],
+  },
+  2: {
+    archetype: 'Personal Month 2',
+    essence: 'This month asks for patience and attunement — it is less about pushing forward than about listening carefully, attending to the quality of your relationships, and allowing things to unfold at their own pace. Cooperation and sensitivity are your assets this month; partnership and quiet receptivity will yield more than force.',
+    shadow: '',
+    keywords: [],
+  },
+  3: {
+    archetype: 'Personal Month 3',
+    essence: 'This is a month for creative expression, social connection, and allowing yourself to enjoy life with less urgency. Communication flows more easily now — say the things you have been holding back, create for the pleasure of creating, and give yourself permission to play. The energy of 3 rewards lightness and authentic self-expression.',
+    shadow: '',
+    keywords: [],
+  },
+  4: {
+    archetype: 'Personal Month 4',
+    essence: 'This month calls for focus, discipline, and the patient completion of work that matters. It is not a glamorous month, but it is a productive one — the things you build carefully now will hold. Attend to health, organization, and the foundations beneath the areas of life you care most about.',
+    shadow: '',
+    keywords: [],
+  },
+  5: {
+    archetype: 'Personal Month 5',
+    essence: 'This month brings movement, change, and the unexpected — hold your plans loosely and be ready to adapt. New experiences, encounters, and opportunities may arrive from surprising directions; the energy of 5 rewards flexibility and the willingness to step outside familiar patterns. Resist the urge to over-control.',
+    shadow: '',
+    keywords: [],
+  },
+  6: {
+    archetype: 'Personal Month 6',
+    essence: 'This month brings the energy of responsibility, love, and care to the foreground — it is a time to tend to your closest relationships, to attend to home and family, and to show up for the people who depend on you. Service given freely this month is especially meaningful; beauty and harmony in your environment will also lift your energy considerably.',
+    shadow: '',
+    keywords: [],
+  },
+  7: {
+    archetype: 'Personal Month 7',
+    essence: 'This is a month for inner work, study, and the kind of reflective solitude that allows deeper understanding to surface. Avoid forcing outcomes; the insight you need is more likely to arrive through contemplation than through action. Trust the quiet knowing that emerges when you give yourself space to think.',
+    shadow: '',
+    keywords: [],
+  },
+  8: {
+    archetype: 'Personal Month 8',
+    essence: 'This month activates the energy of manifestation, material focus, and consequential decisions — it is a good time to attend to career, finances, and any area where you have been building toward a tangible result. Act with integrity and confidence; the energy of 8 responds to effort made with clear intention and honest dealing.',
+    shadow: '',
+    keywords: [],
+  },
+  9: {
+    archetype: 'Personal Month 9',
+    essence: 'This month calls for completion, release, and the conscious clearing of what no longer belongs in your life. Let go of what has run its course — relationships, projects, attitudes, and stories that have served their purpose. What you release with grace now creates genuine space for what is coming.',
+    shadow: '',
+    keywords: [],
+  },
+  11: {
+    archetype: 'Personal Month 11',
+    essence: 'This is a month of heightened intuition and spiritual sensitivity — pay close attention to your inner knowing, to dreams, and to the synchronicities that arise. Inspired insights are available to you now with unusual clarity; trust what arrives through quiet awareness rather than striving. Ground yourself regularly to remain a clear channel.',
+    shadow: '',
+    keywords: [],
+  },
+  22: {
+    archetype: 'Personal Month 22',
+    essence: 'This month carries an unusually powerful building energy — what you organize, commit to, or launch now has the potential for significant and lasting impact. Think bigger than comfort allows, then begin anyway. The Master Builder energy rewards ambition paired with patient, methodical follow-through.',
+    shadow: '',
+    keywords: [],
+  },
+  33: {
+    archetype: 'Personal Month 33',
+    essence: 'This is a month when acts of selfless service and compassion carry unusual resonance — your care for others is amplified, and the love you give will move in circles beyond what you can see. Lead from the heart this month; genuine kindness is the most powerful thing you can offer.',
+    shadow: '',
+    keywords: [],
+  },
+}
+
 export function getInterpretation(category: NumerologyCategory, number: number): NumberInterpretation | null {
+  if (category === 'karmicDebt') {
+    const validKarmicKeys: KarmicDebtKey[] = [13, 14, 16, 19]
+    if (!validKarmicKeys.includes(number as KarmicDebtKey)) return null
+    return karmicDebtInterpretations[number as KarmicDebtKey]
+  }
+
   const validKeys: NumberKey[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 22, 33]
   if (!validKeys.includes(number as NumberKey)) return null
 
@@ -320,5 +505,7 @@ export function getInterpretation(category: NumerologyCategory, number: number):
     case 'birthdayNumber': return birthdayNumberInterpretations[key]
     case 'personalYear': return personalYearInterpretations[key]
     case 'expressionNumber': return expressionNumberInterpretations[key]
+    case 'soulUrge': return soulUrgeInterpretations[key]
+    case 'personalMonth': return personalMonthInterpretations[key]
   }
 }
