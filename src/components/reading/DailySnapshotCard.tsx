@@ -6,6 +6,7 @@ import type { TransitAspect } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
+import { reduceToSingleDigit } from '../../engine/numerology'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -68,6 +69,27 @@ ${aspectLines || 'No tight aspects active today.'}
 Write 2-3 specific, honest sentences about what this person's day looks like astrologically. Be direct and personal.`
 }
 
+function calculatePersonalDay(birthDate: string): number {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = now.getMonth() + 1
+  const day = now.getDate()
+  const yearDigitSum = String(year).split('').reduce((acc, d) => acc + Number(d), 0)
+  const universalDay = reduceToSingleDigit(yearDigitSum + month + day)
+  const [, birthMonthStr, birthDayStr] = birthDate.split('-')
+  return reduceToSingleDigit(parseInt(birthMonthStr, 10) + parseInt(birthDayStr, 10) + universalDay)
+}
+
+function personalDayArchetype(n: number): string {
+  const archetypes: Record<number, string> = {
+    1: 'The Pioneer', 2: 'The Peacemaker', 3: 'The Communicator',
+    4: 'The Builder', 5: 'The Explorer', 6: 'The Nurturer',
+    7: 'The Seeker', 8: 'The Powerhouse', 9: 'The Sage',
+    11: 'The Illuminator', 22: 'The Architect', 33: 'The Healer',
+  }
+  return archetypes[n] ?? ''
+}
+
 const CACHE_PREFIX = 'daily-snapshot-'
 
 function getCacheKey(chart: ChartData): string {
@@ -76,7 +98,10 @@ function getCacheKey(chart: ChartData): string {
   return `${CACHE_PREFIX}${sun?.longitude?.toFixed(0)}-${today}`
 }
 
-export default function DailySnapshotCard({ chart }: { chart: ChartData }) {
+export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartData; birthDate?: string }) {
+  const personalDay = birthDate ? calculatePersonalDay(birthDate) : null
+  const personalDayLabel = personalDay !== null ? personalDayArchetype(personalDay) : null
+
   const [text, setText] = useState<string | null>(null)
   const [energy, setEnergy] = useState<EnergyRating | null>(null)
   const [moon, setMoon] = useState<CurrentMoonPhase | null>(null)
@@ -227,6 +252,13 @@ export default function DailySnapshotCard({ chart }: { chart: ChartData }) {
             </div>
           )}
         </div>
+
+        {/* personal day line */}
+        {personalDay !== null && (
+          <p className="text-mystic-gold/70 text-xs mb-4">
+            Personal Day {personalDay}{personalDayLabel ? ` · ${personalDayLabel}` : ''}
+          </p>
+        )}
 
         {/* main reading */}
         {loading && (

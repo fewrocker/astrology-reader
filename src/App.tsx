@@ -175,7 +175,7 @@ function CachedDataLanding() {
         {/* Mobile-only: Daily Snapshot between menu and sky */}
         {chartData && (
           <div className="w-full lg:hidden">
-            <DailySnapshotCard chart={chartData} />
+            <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
           </div>
         )}
 
@@ -195,7 +195,7 @@ function CachedDataLanding() {
       {/* Desktop-only: Daily Snapshot below the two panels */}
       {chartData && (
         <div className="mt-8 hidden lg:block">
-          <DailySnapshotCard chart={chartData} />
+          <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
         </div>
       )}
 
