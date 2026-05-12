@@ -1,5 +1,13 @@
 # Done Proposals
 
+## Sprint 0005 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [feat-today-immersive-view](feat-today-immersive-view.md) | Feature | ✅ commit 12d4ad5 |
+| [feat-natal-dream-resonance](feat-natal-dream-resonance.md) | Feature | ✅ commit 7082c74 |
+| [code-personal-day-engine-unification](code-personal-day-engine-unification.md) | Code Enhancement | ✅ commit 8f5a0cf |
+
 ## Sprint 0004 — Completed
 
 | Proposal | Type | Delivered |
