@@ -20,24 +20,16 @@ function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | nu
   }
 }
 
-function calculatePersonalMonth(personalYear: number, currentMonth: number): number {
-  const sum = personalYear + currentMonth
-  if (sum === 11 || sum === 22 || sum === 33) return sum
-  if (sum < 10) return sum
-  const digits = String(sum).split('').map(Number)
-  const reduced = digits.reduce((a, b) => a + b, 0)
-  return reduced === 11 || reduced === 22 || reduced === 33 ? reduced : reduced < 10 ? reduced : calculatePersonalMonth(reduced, 0)
-}
-
 function buildNumerologyContext(
   reading: ReturnType<typeof calculateNumerology>,
   chartData: ChartData | null,
   userName: string | undefined,
   birthDate: string,
 ): string {
-  const currentMonth = new Date().getMonth() + 1
-  const currentYear = new Date().getFullYear()
-  const personalMonth = calculatePersonalMonth(reading.personalYear, currentMonth)
+  const now = new Date()
+  const currentMonth = now.getMonth() + 1
+  const currentYear = now.getFullYear()
+  const currentDay = now.getDate()
 
   let ctx = `## Numerology Profile\n`
   if (userName) ctx += `Name: ${userName}\n`
@@ -50,7 +42,8 @@ function buildNumerologyContext(
 
   ctx += `\n### Current Cycle Numbers (${currentYear})\n`
   ctx += `- Personal Year: ${reading.personalYear}\n`
-  ctx += `- Personal Month: ${personalMonth} (Month ${currentMonth})\n`
+  ctx += `- Personal Month: ${reading.personalMonth} (Month ${currentMonth})\n`
+  ctx += `- Personal Day: ${reading.personalDay} (Day ${currentDay})\n`
 
   if (chartData) {
     ctx += `\n### Natal Chart Placements\n`
@@ -70,9 +63,10 @@ interface NumberCardProps {
   number: number
   category: NumerologyCategory
   badge?: string
+  accentBadge?: boolean
 }
 
-function NumberCard({ label, number, category, badge }: NumberCardProps) {
+function NumberCard({ label, number, category, badge, accentBadge }: NumberCardProps) {
   const [expanded, setExpanded] = useState(false)
   const interpretation = getInterpretation(category, number)
   if (!interpretation) return null
@@ -115,7 +109,9 @@ function NumberCard({ label, number, category, badge }: NumberCardProps) {
             </div>
           </div>
           {badge && (
-            <span className="text-xs px-2 py-1 rounded-md text-mystic-muted border border-mystic-border">{badge}</span>
+            accentBadge
+              ? <span className="text-xs px-2 py-1 rounded-md font-heading tracking-wide" style={{ background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.35)', color: 'rgba(201,168,76,0.85)' }}>{badge}</span>
+              : <span className="text-xs px-2 py-1 rounded-md text-mystic-muted border border-mystic-border">{badge}</span>
           )}
         </div>
 
@@ -395,12 +391,6 @@ export default function NumerologyPage() {
     return `${m}/${day}/${y}`
   }
 
-  const personalMonthBadge = useMemo(() => {
-    const now = new Date()
-    const monthName = now.toLocaleString('default', { month: 'long' })
-    return `${monthName} ${now.getFullYear()}`
-  }, [])
-
   const handleSaveName = () => {
     const trimmed = nameInput.trim()
     dispatch({ type: 'SET_USER_NAME', name: trimmed || undefined })
@@ -553,7 +543,7 @@ export default function NumerologyPage() {
         )}
       </div>
 
-      {/* Number cards */}
+      {/* Core number cards */}
       <div className="space-y-5 mb-10">
         <NumberCard
           label="Life Path"
@@ -567,18 +557,6 @@ export default function NumerologyPage() {
           label="Birthday Number"
           number={reading.birthdayNumber}
           category="birthdayNumber"
-        />
-        <NumberCard
-          label="Personal Year"
-          number={reading.personalYear}
-          category="personalYear"
-          badge={String(new Date().getFullYear())}
-        />
-        <NumberCard
-          label="Personal Month"
-          number={reading.personalMonth}
-          category="personalMonth"
-          badge={personalMonthBadge}
         />
         {reading.expressionNumber ? (
           <NumberCard
@@ -604,6 +582,36 @@ export default function NumerologyPage() {
             <p className="text-mystic-muted text-sm">Enter your full birth name above to reveal your Soul Urge Number.</p>
           </div>
         )}
+      </div>
+
+      {/* Your Cycles · Today section */}
+      <div className="mb-10">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px flex-1 bg-mystic-border" />
+          <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Your Cycles · Today</span>
+          <div className="h-px flex-1 bg-mystic-border" />
+        </div>
+        <div className="space-y-5">
+          <NumberCard
+            label="Personal Year"
+            number={reading.personalYear}
+            category="personalYear"
+            badge="This Year"
+          />
+          <NumberCard
+            label="Personal Month"
+            number={reading.personalMonth}
+            category="personalMonth"
+            badge="This Month"
+          />
+          <NumberCard
+            label="Personal Day"
+            number={reading.personalDay}
+            category="personalDay"
+            badge="Today"
+            accentBadge
+          />
+        </div>
       </div>
 
       {/* GPT Narrative Card */}

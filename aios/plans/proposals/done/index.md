@@ -1,5 +1,13 @@
 # Done Proposals
 
+## Sprint 0004 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [feat-personal-year-month-day-numerology](feat-personal-year-month-day-numerology.md) | Feature | ✅ commit 1ff89b2 |
+| [feat-dream-sky-context](feat-dream-sky-context.md) | Feature | ✅ commit e542898 |
+| [code-daily-snapshot-numerology](code-daily-snapshot-numerology.md) | Code Enhancement | ✅ commit 299d482 |
+
 ## Sprint 0003 — Completed
 
 | Proposal | Type | Delivered |

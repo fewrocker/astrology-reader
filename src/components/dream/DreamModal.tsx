@@ -7,17 +7,35 @@ import {
   getStoredApiKey,
   type ChatMessage,
 } from '../../services/gptInterpretation'
-import { calculateCurrentPositions, calculateTransitAspects } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
+import { getMoonSignAndPhase } from '../../engine/astronomy'
 import type { ChartData } from '../../engine/types'
 
 const todayKey = new Date().toISOString().slice(0, 10)
 const DREAM_SESSION_KEY = `dream-session-${todayKey}`
 
+interface SkyContext {
+  moonSign: string
+  moonPhase: string
+  moonElongation: number
+  transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }>
+}
+
 interface DreamSession {
   messages: ChatMessage[]
   dreamContext: string
   dreamInput: string
+  skyContext?: SkyContext
+}
+
+const PLANET_GLYPHS: Record<string, string> = {
+  Sun: '☉', Moon: '☽', Mercury: '☿', Venus: '♀', Mars: '♂',
+  Jupiter: '♃', Saturn: '♄', Uranus: '♅', Neptune: '♆', Pluto: '♇', NorthNode: '☊',
+}
+
+function planetGlyph(name: string): string {
+  return PLANET_GLYPHS[name] ?? name
 }
 
 interface DreamModalProps {
@@ -79,6 +97,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
   const [chatLoading, setChatLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dreamContext, setDreamContext] = useState('')
+  const [skyContext, setSkyContext] = useState<SkyContext | undefined>()
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
@@ -96,6 +115,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
         setMessages(session.messages)
         setDreamContext(session.dreamContext)
         setDreamInput(session.dreamInput)
+        setSkyContext(session.skyContext)
         setRestoredCount(session.messages.length)
         setStage('chat')
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'instant' }), 80)
@@ -110,6 +130,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
     setMessages([])
     setRestoredCount(0)
     setDreamContext('')
+    setSkyContext(undefined)
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [open])
 
@@ -117,12 +138,12 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
   useEffect(() => {
     if (messages.length === 0) return
     try {
-      const session: DreamSession = { messages, dreamContext, dreamInput }
+      const session: DreamSession = { messages, dreamContext, dreamInput, skyContext }
       localStorage.setItem(DREAM_SESSION_KEY, JSON.stringify(session))
     } catch {
       // ignore quota errors
     }
-  }, [messages, dreamContext, dreamInput])
+  }, [messages, dreamContext, dreamInput, skyContext])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -156,6 +177,29 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
       const transitAspects = calculateTransitAspects(transitPlanets, chartData.planets, 'daily')
       const moonPhase = getCurrentMoonPhase(now)
 
+      // Capture sky context — fail open (never block the save)
+      let capturedSkyCtx: SkyContext | undefined
+      try {
+        const moonData = getMoonSignAndPhase(now)
+        capturedSkyCtx = {
+          moonSign: moonData.sign,
+          moonPhase: moonData.phase,
+          moonElongation: moonData.elongation,
+        }
+        const topTransits = getTopActiveTransits(chartData, 3, 2)
+        if (topTransits.length > 0) {
+          capturedSkyCtx.transits = topTransits.map(t => ({
+            transitPlanet: t.transitPlanet as string,
+            aspect: t.symbol,
+            natalPlanet: t.natalPlanet as string,
+            orb: t.orb,
+          }))
+        }
+      } catch {
+        // sky context is optional — continue without it
+      }
+      setSkyContext(capturedSkyCtx)
+
       const snapshotPrompt = buildDreamSnapshotPrompt(chartData, moonPhase, transitAspects)
       const transitSummary = await getDailySnapshotInterpretation(snapshotPrompt, apiKey)
 
@@ -166,8 +210,14 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
         `Transit ${a.transitPlanet} ${a.symbol} Natal ${a.natalPlanet} (${a.type}, orb ${a.orb}°, ${a.applying ? 'applying' : 'separating'}, ${a.nature})`
       ).join('\n') || 'No tight transit aspects active today.'
 
+      const gptSkyCtx = capturedSkyCtx ? {
+        moonSign: capturedSkyCtx.moonSign,
+        moonPhase: capturedSkyCtx.moonPhase,
+        transits: capturedSkyCtx.transits,
+      } : undefined
+
       const interpretation = await getDreamInterpretation(
-        dream, natalCtx, transitSummary, transitAspectsText, apiKey,
+        dream, natalCtx, transitSummary, transitAspectsText, apiKey, gptSkyCtx,
       )
 
       const ctx = `## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects\n${transitAspectsText}\n\n## The Dream\n${dream}`
@@ -387,6 +437,22 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
                           <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
                         ))
                     }
+                    {msg.role === 'assistant' && i === 0 && skyContext && (
+                      <div
+                        className="mt-3 pt-2"
+                        style={{
+                          borderTop: '1px solid rgba(139, 92, 246, 0.12)',
+                          color: 'rgba(139, 92, 246, 0.52)',
+                          fontSize: '11px',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {'☽ ' + skyContext.moonSign + ' · ' + skyContext.moonPhase}
+                        {skyContext.transits?.map((t, ti) => (
+                          <span key={ti}>{' · '}{planetGlyph(t.transitPlanet)} {t.aspect} {planetGlyph(t.natalPlanet)}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

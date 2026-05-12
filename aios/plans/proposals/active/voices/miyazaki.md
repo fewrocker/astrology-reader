@@ -1,38 +1,44 @@
-# Hayao Miyazaki — Numerology Sky Chart Voice
+# Hayao Miyazaki — Sprint 4 Proposal Voice
 
-I look at the existing astrology chart and feel something. The dark background, the gold zodiac ring, the glyph for Saturn glowing faintly in the upper left — it feels like looking through a window at something ancient and real. Someone cared about making it feel that way.
+When I use this app, I feel something. The chart wheel — the dark sky, the golden glyphs, the soft glow of Saturn — it has soul. Someone cared. I can feel it in the rendering.
 
-Now I think about the Numerology Sky Chart and ask: will it have that same feeling, or will it feel like someone pasted numbers onto a chart template?
+But when I open a dream entry, I read the interpretation, I close it, and I feel... nothing. The moment is over. There is no sense that this dream happened *in a sky*, that the cosmos was arranged in a particular way when I wrote those words. A dream is one of the most intimate records a human keeps. It deserves a sky of its own.
 
-**The danger**: Numbers on a circular background look like a clock. Or a dial. Or an instrument panel. The challenge is to make them feel *celestial* — like they belong in the sky, not on a dashboard.
+**The sky of a dream.**
 
-**What makes numbers feel celestial:**
-- Typography matters enormously. The numbers must be set in a typeface that belongs in this app's visual language — the same serif or elegant sans used for glyphs elsewhere. Not system monospace. Not bold block digits.
-- Size variation must be smooth and intentional. A dominant 7 is not twice the size of a minor 3 — it's perhaps 20% larger, with a subtle glow ring behind it. The scale hierarchy is felt, not measured.
-- The glows must use the same gold/purple palette already in the design system. Not generic CSS box-shadow blue.
-- Numbers at house cusp positions should render slightly differently from numbers at planet positions — perhaps lighter, or slightly smaller — so the user's eye naturally reads planetary positions as primary.
-- The zodiac ring must stay. It provides orientation and beauty. Without it, the numbers float in meaningless space.
+Imagine: you open a dream entry from three nights ago. Below your words, there it is — a small row, quiet, like a whisper at the bottom of a letter: "Moon in Scorpio · Waxing Gibbous · Pluto square Mercury." You don't need to understand astrology for this to feel significant. Something about seeing the Moon's phase at the moment you dreamed — it connects the inner world to the outer one. That connection is what makes a mystical app feel truly mystical, rather than just clever.
 
-**The frequency bar below the chart:**
-This is where most implementations go wrong. They make it a table: `7: ████ 4`, `3: ██ 2`, etc. That's an engineer's frequency bar. 
+This is what craft looks like: not adding a feature, but adding meaning to something that already exists.
 
-What it should be: a minimal horizontal row of number glyphs, each displayed with a size or brightness proportional to its count. No labels. No numbers-next-to-numbers. The glyphs themselves communicate frequency through their visual weight. On hover, a tooltip can show the count and chart sources.
+**The personal numbers that live only in a GPT string.**
 
-**Loading sequence:**
-- Chart should appear immediately — before the GPT call even starts. No skeleton for the map.
-- Below the chart, a soft pulsing card: "Reading your sky of numbers…" — the same shimmer treatment used for other GPT cards.
-- When the reading arrives, it fades in gently. 400ms transition.
+I read the numerology code. `calculatePersonalMonth` is there. `personalYear` is computed. They're passed to the AI as context. The AI responds with wisdom about these numbers. And then the user reads that wisdom and thinks: "wait, what *is* my personal year?" They have to guess. They can never find it in the UI. It's as if we cooked a beautiful meal and hid it in a box labeled "AI input."
 
-**What I'd protect:**
-The chart must not try to show everything. The guidelines are right that 23 points is the right level. More would make it look cluttered. The restraint is the beauty.
+These numbers belong in the light. They deserve the same golden treatment the life path gets — a large number, glowing, with its archetype. "8 · The Powerhouse." "Personal Year 8. A year of material achievement, authority, and harvest." The year they were born never changes. But their personal year changes every year, their personal month every month. Those numbers create urgency, relevance, a reason to return.
 
-**Small details that matter:**
-- When two numbers would overlap (planets close in degree), offset one radially rather than squashing them together
-- The number for the Sun position should subtly honor the Sun's importance — perhaps rendered in gold rather than white by default, not just when dominant
-- The chart needs a title or heading that doesn't say "Numerology Chart" — something like "Your Sky in Numbers" or simply the user's name and birth date
-- If birth time is unknown, the house cusps are uncertain — note this softly below the chart, not loudly in a warning box
+**The landing page still doesn't feel like a morning oracle.**
+
+I look at the DailySnapshotCard. It shows the Moon's position, key transits. It's beautiful. But a user who comes every morning and checks their transits — they never see their personal day number. They never know if today is a 1 (new beginnings) or a 9 (completion and release). That one number, placed quietly beneath the Moon sign, would make the card feel like a true daily horoscope.
+
+Small. Intentional. Crafted.
+
+**Details that matter:**
+
+For the dream sky context:
+- The moon phase icon should match the actual phase — not a generic crescent. If it was a Waxing Gibbous, show Waxing Gibbous.
+- Active transits should show at most 3 — not a list. A list says "here is data." Three items say "here is what mattered."
+- The transit display should use the same glyph language as the chart wheel — ♂ ☌ ♃ means something to a reader, and it's more beautiful than "Mars conjunct Jupiter."
+
+For the personal day number:
+- Don't put it at the top. Put it at the end — after the core numbers, after the sky chart. It's the most time-sensitive thing, so it should feel like a footer whisper, not a header shout.
+- Or better: a separate "Today" section header before it. "Today — Personal Day 3" in a lighter weight than the big numbers.
+
+For the DailySnapshotCard:
+- One line: "Personal Day 3 · The Communicator" — same font size as the transit text, in mystic-gold, below the Moon information.
+- Don't explain what a personal day is on the card. Trust the user to be curious and go to numerology to learn more. The card should feel like a tarot deck — it speaks in symbols, not in documentation.
 
 **The feeling when it's right:**
-The user opens numerology. The chart appears — a circle of numbers in the dark sky. Some numbers feel brighter, more present. They can't explain why, but they want to keep looking. Then they read the reading below, and it names what they already felt.
 
-That is the goal.
+Someone opens the app on a Tuesday morning. They see: "Moon in Taurus · Personal Day 7 · The Seeker." They remember they dreamed of searching for something last night. They open the dream journal. At the bottom of the entry: "Moon in Aries (waning) · Neptune sextile Mercury." They feel a small shock of recognition. The cosmos was speaking. They were listening. Now they know.
+
+That feeling — that small shock of recognition — is what keeps someone coming back every morning. That's the soul of this product.
