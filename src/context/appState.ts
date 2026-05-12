@@ -28,11 +28,13 @@ export interface BirthData {
   unknownTime: boolean
   city: City | null
   focusAreas: FocusArea[]
+  userName?: string
 }
 
 export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'transit-loading' | 'transit-results'
   | 'partner-form' | 'synastry-loading' | 'synastry-results'
   | 'synastry-transit-select' | 'synastry-transit-loading' | 'synastry-transit-results'
+  | 'numerology'
 
 export interface AppState {
   view: AppView
@@ -80,6 +82,7 @@ export type AppAction =
   | { type: 'START_SYNASTRY_TRANSIT'; period: TransitPeriod; targetMonth?: string }
   | { type: 'SET_SYNASTRY_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
   | { type: 'SET_SYNASTRY_TRANSIT_ERROR'; error: string }
+  | { type: 'SET_USER_NAME'; name: string | undefined }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -87,6 +90,7 @@ export const initialBirthData: BirthData = {
   unknownTime: false,
   city: null,
   focusAreas: [],
+  userName: undefined,
 }
 
 const BIRTH_DATA_CACHE_KEY = 'astral-chart-birth-data'
@@ -106,6 +110,7 @@ export function loadCachedBirthData(): BirthData {
       unknownTime: typeof cached.unknownTime === 'boolean' ? cached.unknownTime : false,
       city: cached.city && typeof cached.city === 'object' ? cached.city : null,
       focusAreas: Array.isArray(cached.focusAreas) ? cached.focusAreas : [],
+      userName: typeof cached.userName === 'string' ? cached.userName : undefined,
     }
   } catch {
     return { ...initialBirthData }
@@ -297,6 +302,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, view: 'synastry-transit-results', synastryTransitData: action.transitData, synastryTransitInterpretation: action.interpretation }
     case 'SET_SYNASTRY_TRANSIT_ERROR':
       return { ...state, synastryError: action.error, view: 'synastry-transit-select' }
+    case 'SET_USER_NAME':
+      return { ...state, birthData: { ...state.birthData, userName: action.name } }
     default:
       return state
   }
