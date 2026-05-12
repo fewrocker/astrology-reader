@@ -37,6 +37,7 @@ export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'trans
   | 'synastry-transit-select' | 'synastry-transit-loading' | 'synastry-transit-results'
   | 'numerology'
   | 'solar-return-loading' | 'solar-return'
+  | 'today'
 
 export interface AppState {
   view: AppView
