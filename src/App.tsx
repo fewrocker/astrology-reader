@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
+import ErrorBoundary from './components/ErrorBoundary'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -675,9 +676,11 @@ function AppContent() {
 
 function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   )
 }
 
