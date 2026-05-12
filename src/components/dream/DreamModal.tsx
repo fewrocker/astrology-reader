@@ -10,7 +10,7 @@ import {
 import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import { getMoonSignAndPhase } from '../../engine/astronomy'
-import type { ChartData } from '../../engine/types'
+import type { ChartData, PlanetPosition } from '../../engine/types'
 
 const todayKey = new Date().toISOString().slice(0, 10)
 const DREAM_SESSION_KEY = `dream-session-${todayKey}`
@@ -36,6 +36,21 @@ const PLANET_GLYPHS: Record<string, string> = {
 
 function planetGlyph(name: string): string {
   return PLANET_GLYPHS[name] ?? name
+}
+
+const NEPTUNE_HOUSE_NOTES: Record<number, string> = {
+  1: 'mystical identity', 2: 'material dissolution', 3: 'visionary mind',
+  4: 'ancestral depths', 5: 'creative visions', 6: 'healing dissolution',
+  7: 'idealized bonds', 8: 'transformation and shadow', 9: 'spiritual seeking',
+  10: 'dissolving ambition', 11: 'collective dreaming', 12: 'native to the unseen',
+}
+
+const MOON_SIGN_NOTES: Record<string, string> = {
+  Aries: 'impulsive, reactive', Taurus: 'grounded, sensory', Gemini: 'restless, verbal',
+  Cancer: 'deep, instinctive', Leo: 'dramatic, proud', Virgo: 'analytical, anxious',
+  Libra: 'relational, attuned', Scorpio: 'intense, depth-seeking',
+  Sagittarius: 'free, expansive', Capricorn: 'controlled, reserved',
+  Aquarius: 'detached, unusual', Pisces: 'porous, dissolving',
 }
 
 interface DreamModalProps {
@@ -156,6 +171,16 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  const dreamscapeBlueprint = useMemo(() => {
+    if (!chartData) return null
+    const neptune = chartData.planets.find(p => p.name === 'Neptune')
+    const moon = chartData.planets.find(p => p.name === 'Moon')
+    const showHouses = !chartData.unknownTime
+    const twelfthPlanets = showHouses ? chartData.planets.filter(p => p.house === 12) : []
+    const ascSign = showHouses ? chartData.angles?.ascendant?.sign : undefined
+    return { neptune, moon, twelfthPlanets, ascSign, showHouses }
+  }, [chartData])
+
   if (!open || !chartData) return null
 
   const handleInterpret = async () => {
@@ -217,7 +242,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
       } : undefined
 
       const interpretation = await getDreamInterpretation(
-        dream, natalCtx, transitSummary, transitAspectsText, apiKey, gptSkyCtx,
+        dream, natalCtx, transitSummary, transitAspectsText, apiKey, gptSkyCtx, chartData,
       )
 
       const ctx = `## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects\n${transitAspectsText}\n\n## The Dream\n${dream}`
@@ -453,6 +478,9 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
                         ))}
                       </div>
                     )}
+                    {msg.role === 'assistant' && i === 0 && dreamscapeBlueprint && (
+                      <DreamscapeBlueprintDisplay blueprint={dreamscapeBlueprint} />
+                    )}
                   </div>
                 </div>
               ))}
@@ -587,6 +615,69 @@ function RevealText({ text }: { text: string }) {
       {revealed.split('\n').map((line, j) => (
         <p key={j} className={j > 0 ? 'mt-2' : ''}>{line}</p>
       ))}
+    </div>
+  )
+}
+
+interface DreamscapeBlueprintProps {
+  blueprint: {
+    neptune: PlanetPosition | undefined
+    moon: PlanetPosition | undefined
+    twelfthPlanets: PlanetPosition[]
+    ascSign: string | undefined
+    showHouses: boolean
+  }
+}
+
+function DreamscapeBlueprintDisplay({ blueprint }: DreamscapeBlueprintProps) {
+  const neptuneHouseNote = blueprint.showHouses && blueprint.neptune?.house
+    ? NEPTUNE_HOUSE_NOTES[blueprint.neptune.house]
+    : undefined
+  const moonSignNote = blueprint.moon ? MOON_SIGN_NOTES[blueprint.moon.sign] : undefined
+
+  return (
+    <div
+      className="mt-2 pt-2"
+      style={{ borderTop: '1px solid rgba(201, 168, 76, 0.12)' }}
+    >
+      <div style={{
+        color: 'rgba(201, 168, 76, 0.45)',
+        fontSize: '10px',
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        marginBottom: '3px',
+      }}>
+        Your dream nature
+      </div>
+      <div style={{
+        color: 'rgba(201, 168, 76, 0.7)',
+        fontSize: '11px',
+        letterSpacing: '0.02em',
+        lineHeight: '1.65',
+      }}>
+        {blueprint.neptune && (
+          <div>
+            ♆ Neptune · {blueprint.neptune.sign}
+            {blueprint.showHouses && blueprint.neptune.house ? ` · House ${blueprint.neptune.house}` : ''}
+            {neptuneHouseNote ? ` — ${neptuneHouseNote}` : ''}
+          </div>
+        )}
+        {blueprint.moon && (
+          <div>
+            ☽ Moon · {blueprint.moon.sign}
+            {blueprint.showHouses && blueprint.moon.house ? ` · House ${blueprint.moon.house}` : ''}
+            {moonSignNote ? ` — ${moonSignNote}` : ''}
+          </div>
+        )}
+        {blueprint.twelfthPlanets.length > 0 && (
+          <div>
+            {blueprint.twelfthPlanets.map(p => `${planetGlyph(p.name)} ${p.name}`).join(' · ')} in 12th
+          </div>
+        )}
+        {blueprint.ascSign === 'Pisces' && (
+          <div>♓ Pisces Rising — porous to the dream realm</div>
+        )}
+      </div>
     </div>
   )
 }
