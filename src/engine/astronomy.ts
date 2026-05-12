@@ -380,6 +380,30 @@ export function findSolarReturn(
 }
 
 /**
+ * Get the Moon's current sign and phase for a given date.
+ * Returns sign name, human-readable phase label, and raw elongation (Moon-Sun angle).
+ */
+export function getMoonSignAndPhase(date: Date): { sign: string; phase: string; elongation: number } {
+  const time = Astronomy.MakeTime(date)
+  const moonLon = Astronomy.EclipticGeoMoon(time).lon
+  const sunLon = Astronomy.SunPosition(time).elon
+  const elongation = normalizeAngle(moonLon - sunLon)
+  const sign = longitudeToZodiac(moonLon).sign
+
+  let phase: string
+  if (elongation < 22.5 || elongation >= 337.5) phase = 'New Moon'
+  else if (elongation < 67.5) phase = 'Waxing Crescent'
+  else if (elongation < 112.5) phase = 'First Quarter'
+  else if (elongation < 157.5) phase = 'Waxing Gibbous'
+  else if (elongation < 202.5) phase = 'Full Moon'
+  else if (elongation < 247.5) phase = 'Waning Gibbous'
+  else if (elongation < 292.5) phase = 'Last Quarter'
+  else phase = 'Waning Crescent'
+
+  return { sign, phase, elongation }
+}
+
+/**
  * Resolve a local date/time + IANA timezone to a UTC Date.
  */
 function resolveToUTC(
