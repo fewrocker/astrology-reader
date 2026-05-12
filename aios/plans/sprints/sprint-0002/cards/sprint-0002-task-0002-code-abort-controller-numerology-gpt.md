@@ -59,3 +59,9 @@ This is not new user-visible capability — it's a correctness and stability imp
    - All `useEffect` blocks that fire GPT calls must use the `cancelled` flag pattern
    - Two effects: one for numerology narrative, one for astro cross-reading
    - Each has its own `cancelled` boolean and cleanup function
+
+---
+
+## Outcome
+
+Added `generateNumerologyNarrative` and `getNumerologyDiscussResponse` to `src/services/gptInterpretation.ts`. The narrative function takes all five numerology numbers, constructs a user-prompt that names each number's archetype and flags master numbers (11, 22, 33) with appropriate weight, and returns a cohesive 3-paragraph reading via a single GPT call at temperature 0.85 / max_tokens 1200 wrapped in `retryWithBackoff`. The discuss function mirrors the `getDreamDiscussResponse` / `getDiscussResponse` pattern — it injects the caller-supplied numerology context into the system prompt and supports full multi-turn conversation. The cancelled-flag pattern is now documented as a codebase standard in `setup/agents.md` with an annotated TypeScript example. Build verified zero errors.

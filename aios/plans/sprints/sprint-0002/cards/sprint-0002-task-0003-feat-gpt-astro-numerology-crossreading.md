@@ -59,3 +59,9 @@ New user-visible capability: a personalized synthesis card that didn't exist in 
    - Render cross-reading skeleton + result card (conditional on chartData existing)
    - Remove `buildChartCrossRef`, `buildPersonalYearCrossRef`, and the static Cosmic Connections section
 2. Visual treatment: cross-reading card gets slightly different border color (purple/celestial blue tint) to distinguish it from the numerology narrative (gold tint)
+
+---
+
+## Outcome
+
+`generateAstroNumerologyCrossReading` was added to `src/services/gptInterpretation.ts` and wired into `NumerologyPage.tsx` via a `useEffect` with the cancelled-flag pattern to prevent state updates on unmounted components. The static `buildChartCrossRef`, `buildPersonalYearCrossRef`, and `ordinal` helpers were removed along with their `useMemo` calls, and the old "Cosmic Connections" section was replaced with a new GPT cross-reading card that shows a gold-shimmer skeleton while loading, the live personalized synthesis when complete, a human-friendly retry prompt on error, and graceful no-data notes when chart data or API key are absent. Build passes with zero TypeScript errors.

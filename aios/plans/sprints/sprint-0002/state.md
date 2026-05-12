@@ -8,9 +8,9 @@
 
 | Task | Status |
 |------|--------|
-| sprint-0002-task-0001-issue-numerology-cosmic-connections-static | pending |
-| sprint-0002-task-0002-code-abort-controller-numerology-gpt | pending |
-| sprint-0002-task-0003-feat-gpt-astro-numerology-crossreading | pending |
-| sprint-0002-task-0004-feat-gpt-numerology-narrative | pending |
-| sprint-0002-task-0005-feat-advanced-numerology-layers | pending |
-| sprint-0002-task-0006-feat-numerology-chat | pending |
+| sprint-0002-task-0001-issue-numerology-cosmic-connections-static | done |
+| sprint-0002-task-0002-code-abort-controller-numerology-gpt | done |
+| sprint-0002-task-0003-feat-gpt-astro-numerology-crossreading | done |
+| sprint-0002-task-0004-feat-gpt-numerology-narrative | done |
+| sprint-0002-task-0005-feat-advanced-numerology-layers | done |
+| sprint-0002-task-0006-feat-numerology-chat | done |

@@ -55,3 +55,9 @@ Adds a new category of user-visible output (GPT-powered personal reading) that d
 2. `src/components/results/NumerologyPage.tsx` — add loading state, skeleton card, GPT narrative card
 3. Skeleton component: pulsing gold-tinted shimmer lines, same padding/border-radius as number cards, no layout shift when content arrives
 4. `useEffect` fires GPT call on mount; `AbortController` cleans up on unmount to prevent state updates on unmounted component
+
+---
+
+## Outcome
+
+Added `generateNumerologyNarrative` to `src/services/gptInterpretation.ts` — a single GPT call using all four numbers and the user's name, with number archetypes mapped inline and wrapped in `retryWithBackoff`. In `src/components/results/NumerologyPage.tsx`, added a narrative section between the number cards and Cosmic Connections: a `NarrativeSkeleton` shimmer component pulses with gold-tinted shimmer lines while loading, then fades to the narrative card with split-paragraph rendering; no-API-key and error/retry states are handled. Build passes with zero TypeScript errors.

@@ -82,3 +82,9 @@ New calculation capabilities, new interpretation data, and new UI sections. This
    - Add Soul Urge card (conditional on name being provided, shown near Expression Number)
    - Add Personal Month card (auto, shown near Personal Year)
    - Add Karmic Debt badge or card where applicable
+
+---
+
+## Outcome
+
+Implemented Soul Urge, Karmic Debt detection, and Personal Month across all three layers. The engine gained `reduceWithIntermediate`, `calculateSoulUrge` (vowels only, Y as consonant), `detectKarmicDebt` (returns 13/14/16/19 or null from the Life Path intermediate sum), and `calculatePersonalMonth`; the `NumerologyReading` interface was extended accordingly. Interpretation data was expanded with 12 Soul Urge entries (1–9 + master numbers), 4 Karmic Debt entries (13/14/16/19) with appropriate gravity, and 9 Personal Month entries (brief essence-only notes). The UI renders a distinct amber-tinted `KarmicDebtCard` (⚖ glyph) below Life Path when applicable, a Personal Month card with month/year badge below Personal Year, and Soul Urge alongside Expression Number — all conditionally and with the existing design language. Build passes with zero TypeScript errors.

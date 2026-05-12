@@ -45,3 +45,9 @@ This is not adding new capability — it's removing a defective existing behavio
    - Remove `buildPersonalYearCrossRef` function (lines 105–148)
    - Remove `lifepathCrossRef` and `personalYearCrossRef` useMemo calls
    - Remove the "✦ Cosmic Connections" section in JSX (including its `chartData &&` conditional wrapper)
+
+---
+
+## Outcome
+
+Removed `buildChartCrossRef`, `buildPersonalYearCrossRef`, `ordinal`, `getChartData`, their associated useMemo declarations, the "✦ Cosmic Connections" JSX block, and the now-unused `ChartData`/`calculateChart` imports from `NumerologyPage.tsx` — a net deletion of 196 lines. The four number cards (Life Path, Birthday, Personal Year, Expression) and the name input section remain fully intact. Build passes with zero TypeScript errors.
