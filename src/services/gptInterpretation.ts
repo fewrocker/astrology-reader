@@ -141,6 +141,55 @@ export async function getDreamDiscussResponse(
   return result || 'Unable to generate a response.'
 }
 
+const NUMEROLOGY_ARCHETYPES: Record<number, string> = {
+  1: 'The Pioneer',
+  2: 'The Diplomat',
+  3: 'The Creative',
+  4: 'The Builder',
+  5: 'The Free Spirit',
+  6: 'The Nurturer',
+  7: 'The Seeker',
+  8: 'The Achiever',
+  9: 'The Humanitarian',
+  11: 'The Illuminator',
+  22: 'The Master Builder',
+  33: 'The Master Teacher',
+}
+
+export async function generateNumerologyNarrative(
+  numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number },
+  userName: string | undefined,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const nameIntro = userName ? `The person's name is ${userName}.` : ''
+  const archetype = (n: number) => NUMEROLOGY_ARCHETYPES[n] ?? String(n)
+
+  const numberLines = [
+    `Life Path ${numbers.lifePath} (${archetype(numbers.lifePath)})`,
+    `Birthday Number ${numbers.birthdayNumber} (${archetype(numbers.birthdayNumber)})`,
+    `Personal Year ${numbers.personalYear} (${archetype(numbers.personalYear)})`,
+    ...(numbers.expressionNumber != null
+      ? [`Expression Number ${numbers.expressionNumber} (${archetype(numbers.expressionNumber)})`]
+      : []),
+  ].join('\n')
+
+  const userPrompt = `${nameIntro ? nameIntro + '\n\n' : ''}Here are this person's numerological numbers:\n\n${numberLines}\n\nWrite a flowing 3-paragraph personal reading that treats these numbers as a single integrated portrait. Show where the numbers reinforce each other and where they create productive tension. What does this specific combination reveal about who this person is right now? Speak directly to the person in second person. Be specific — every sentence should feel like it's about exactly this combination of numbers, not a generic description of any one number in isolation.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content:
+          'You are a master numerologist who reads the full numerological profile as a single, integrated portrait. You identify where numbers reinforce each other and where they create productive tension. You are personal, direct, and specific — every reading sounds like it\'s about this exact person.',
+      },
+      { role: 'user', content: userPrompt },
+    ], { temperature: 0.85, max_tokens: 1200 })
+  )
+  return result || 'Unable to generate your reading.'
+}
+
 export async function getDailySnapshotInterpretation(
   prompt: string,
   apiKey: string,
