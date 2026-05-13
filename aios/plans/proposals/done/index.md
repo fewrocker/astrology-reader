@@ -1,5 +1,19 @@
 # Done Proposals
 
+## Sprint 0007 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-backend-down-graceful-fallback](issue-backend-down-graceful-fallback.md) | Issue Fix | ✅ merged sprint-0007 |
+| [issue-jwt-secret-env-guard](issue-jwt-secret-env-guard.md) | Issue Fix | ✅ merged sprint-0007 |
+| [issue-login-rate-limiting](issue-login-rate-limiting.md) | Issue Fix | ✅ merged sprint-0007 |
+| [code-vite-api-proxy-and-reducer-action](code-vite-api-proxy-and-reducer-action.md) | Code Enhancement | ✅ merged sprint-0007 |
+| [feat-auth-frontend-experience](feat-auth-frontend-experience.md) | Feature | ✅ merged sprint-0007 |
+| [feat-backend-monolith-express-sqlite](feat-backend-monolith-express-sqlite.md) | Feature | ✅ merged sprint-0007 |
+| [feat-gpt-server-proxy](feat-gpt-server-proxy.md) | Feature | ✅ merged sprint-0007 |
+| [feat-localstorage-migration-flow](feat-localstorage-migration-flow.md) | Feature | ✅ merged sprint-0007 |
+| [feat-optimistic-journal-save](feat-optimistic-journal-save.md) | Feature | ✅ merged sprint-0007 |
+
 ## Sprint 0006 — Completed
 
 | Proposal | Type | Delivered |
