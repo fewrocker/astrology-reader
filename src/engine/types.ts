@@ -76,4 +76,5 @@ export interface ChartData {
   houses: HouseCusp[]
   angles: ChartAngles
   unknownTime: boolean
+  houseSystem: 'placidus' | 'whole-sign'
 }

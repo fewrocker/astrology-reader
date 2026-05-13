@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { ChartData } from '../../engine/types'
 import { ZODIAC_GLYPHS } from '../../engine/types'
-import { calculateCurrentPositions, calculateTransitAspects } from '../../engine/transits'
-import type { TransitAspect } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, computeEnergyRating } from '../../engine/transits'
+import type { TransitAspect, EnergyRating } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
 import { calculatePersonalDay } from '../../engine/numerology'
+import { isQuotaError } from '../../utils/storage'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -17,28 +18,6 @@ const PHASE_EMOJIS: Record<string, string> = {
   'Waning Gibbous': '🌖',
   'Last Quarter': '🌗',
   'Waning Crescent': '🌘',
-}
-
-interface EnergyRating {
-  label: string
-  score: number
-  dotColor: string
-  textColor: string
-}
-
-function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
-  const top = aspects.slice(0, 8)
-  const score = top.reduce((acc, a) => {
-    if (a.nature === 'harmonious') return acc + 1
-    if (a.nature === 'challenging') return acc - 1
-    return acc
-  }, 0)
-
-  if (score >= 3) return { label: 'Highly Favorable', score: 5, dotColor: 'bg-emerald-400', textColor: 'text-emerald-400' }
-  if (score >= 1) return { label: 'Favorable', score: 4, dotColor: 'bg-green-400', textColor: 'text-green-400' }
-  if (score === 0) return { label: 'Mixed', score: 3, dotColor: 'bg-yellow-400', textColor: 'text-yellow-400' }
-  if (score >= -2) return { label: 'Tense', score: 2, dotColor: 'bg-orange-400', textColor: 'text-orange-400' }
-  return { label: 'Demanding', score: 1, dotColor: 'bg-red-400', textColor: 'text-red-400' }
 }
 
 function buildSnapshotPrompt(chart: ChartData, moon: CurrentMoonPhase, aspects: TransitAspect[]): string {
@@ -155,8 +134,10 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
           setText(result)
           try {
             localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
-          } catch {
-            // ignore cache write errors
+          } catch (e) {
+            if (isQuotaError(e)) {
+              console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+            }
           }
         }
       } catch (err) {

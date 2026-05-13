@@ -1,5 +1,16 @@
 # Done Proposals
 
+## Sprint 0006 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [feat-cosmic-journal](feat-cosmic-journal.md) | Feature | ✅ merged sprint-0006 |
+| [issue-localstorage-quota-guard](issue-localstorage-quota-guard.md) | Issue Fix | ✅ merged sprint-0006 |
+| [issue-numerology-engine-historical-date](issue-numerology-engine-historical-date.md) | Issue Fix | ✅ merged sprint-0006 |
+| [issue-placidus-polar-latitude-failure](issue-placidus-polar-latitude-failure.md) | Issue Fix | ✅ merged sprint-0006 |
+| [issue-transit-historical-date-parameter](issue-transit-historical-date-parameter.md) | Issue Fix | ✅ merged sprint-0006 |
+| [code-energy-rating-deduplication](code-energy-rating-deduplication.md) | Code Enhancement | ✅ merged sprint-0006 |
+
 ## Sprint 0005 — Completed
 
 | Proposal | Type | Delivered |

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import StorageWarningBanner from './components/StorageWarningBanner'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -15,6 +16,7 @@ import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
+import CosmicJournalPage from './components/journal/CosmicJournalPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -100,6 +102,26 @@ function CachedDataLanding() {
                 }}
               >
                 Today ✦
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'journal' })}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(201,168,76,0.12)',
+                  border: '1px solid rgba(201,168,76,0.35)',
+                  color: '#c9a84c',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
+                }}
+              >
+                Journal ✦
               </button>
               <button
                 type="button"
@@ -441,6 +463,7 @@ function AppContent() {
           houses: [] as import('./engine/types').HouseCusp[],
           angles: synastryData.compositeChart.angles as import('./engine/types').ChartAngles,
           unknownTime: true,
+          houseSystem: 'placidus' as const,
         }
         const transitData = calculateTransits(compositeChartData, state.synastryTransitPeriod!, state.synastryTransitTargetMonth ?? undefined)
 
@@ -524,6 +547,11 @@ function AppContent() {
     <div className={`min-h-screen bg-mystic-bg flex flex-col items-center px-4 relative ${isLandingPage && showCachedLanding ? 'py-6 lg:py-8' : 'py-12'}`}>
       <div className="starfield" aria-hidden="true" />
       <div className="relative z-10 w-full flex flex-col items-center">
+        {state.storageWarning && (
+          <div className="w-full max-w-2xl mb-4">
+            <StorageWarningBanner />
+          </div>
+        )}
         <header className={`text-center ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'}`}>
           <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
           <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
@@ -576,6 +604,9 @@ function AppContent() {
         {state.view === 'solar-return' && <SolarReturnPage />}
         {state.view === 'today' && (
           <TodayPage chartData={state.chartData} birthDate={state.birthData.date} />
+        )}
+        {state.view === 'journal' && (
+          <CosmicJournalPage chartData={state.chartData} birthData={state.birthData} />
         )}
       </div>
     </div>
