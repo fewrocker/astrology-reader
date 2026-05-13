@@ -16,6 +16,7 @@ import DailySnapshotCard from './components/reading/DailySnapshotCard'
 import DreamModal from './components/dream/DreamModal'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
+import CosmicJournalPage from './components/journal/CosmicJournalPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -101,6 +102,26 @@ function CachedDataLanding() {
                 }}
               >
                 Today ✦
+              </button>
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'SET_VIEW', view: 'journal' })}
+                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
+                style={{
+                  background: 'rgba(201,168,76,0.12)',
+                  border: '1px solid rgba(201,168,76,0.35)',
+                  color: '#c9a84c',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
+                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
+                }}
+              >
+                Journal ✦
               </button>
               <button
                 type="button"
@@ -583,6 +604,9 @@ function AppContent() {
         {state.view === 'solar-return' && <SolarReturnPage />}
         {state.view === 'today' && (
           <TodayPage chartData={state.chartData} birthDate={state.birthData.date} />
+        )}
+        {state.view === 'journal' && (
+          <CosmicJournalPage chartData={state.chartData} birthData={state.birthData} />
         )}
       </div>
     </div>

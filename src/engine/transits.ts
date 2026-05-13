@@ -388,7 +388,7 @@ export function buildTransitPrompt(
 /**
  * Return the tightest active transit aspects for a natal chart at the given moment.
  * Sorted by orb ascending. Useful for capturing sky context at a specific point in time.
- * @param date optional date to compute positions for; defaults to now (current callers unaffected)
+ * @param date Optional date for historical sky lookup; defaults to now (current callers unaffected)
  */
 export function getTopActiveTransits(
   chartData: ChartData,
@@ -411,6 +411,7 @@ export interface EnergyRating {
 /**
  * Compute an energy rating from the top 8 transit aspects.
  * Harmonious aspects add +1, challenging aspects subtract 1.
+ * Shared utility used by DailySnapshotCard, TodayPage, and JournalEntryCard.
  */
 export function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
   const top = aspects.slice(0, 8)

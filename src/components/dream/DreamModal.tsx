@@ -12,9 +12,10 @@ import { getCurrentMoonPhase } from '../../engine/lunar'
 import { getMoonSignAndPhase } from '../../engine/astronomy'
 import type { ChartData, PlanetPosition } from '../../engine/types'
 import { isQuotaError } from '../../utils/storage'
+import { getDreamSessionKey } from '../../context/appState'
 
 const todayKey = new Date().toISOString().slice(0, 10)
-const DREAM_SESSION_KEY = `dream-session-${todayKey}`
+const DREAM_SESSION_KEY = getDreamSessionKey(todayKey)
 
 interface SkyContext {
   moonSign: string
@@ -58,6 +59,7 @@ interface DreamModalProps {
   open: boolean
   onClose: () => void
   chartData?: ChartData | null
+  initialSessionKey?: string | null
 }
 
 type Stage = 'input' | 'loading-sky' | 'loading-dream' | 'chat'
@@ -100,7 +102,7 @@ function buildNatalContext(chart: ChartData, birthDate: string): string {
   return ctx
 }
 
-export default function DreamModal({ open, onClose, chartData: chartDataProp }: DreamModalProps) {
+export default function DreamModal({ open, onClose, chartData: chartDataProp, initialSessionKey }: DreamModalProps) {
   const { state } = useApp()
   const { birthData } = state
   const chartData = chartDataProp ?? state.chartData
@@ -124,8 +126,11 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
     setError(null)
     setChatInput('')
 
+    // Use initialSessionKey if provided (e.g. from journal cross-reference), otherwise use today's session
+    const sessionKeyToLoad = initialSessionKey ?? DREAM_SESSION_KEY
+
     try {
-      const saved = localStorage.getItem(DREAM_SESSION_KEY)
+      const saved = localStorage.getItem(sessionKeyToLoad)
       if (saved) {
         const session = JSON.parse(saved) as DreamSession
         setMessages(session.messages)
@@ -148,7 +153,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
     setDreamContext('')
     setSkyContext(undefined)
     setTimeout(() => inputRef.current?.focus(), 120)
-  }, [open])
+  }, [open, initialSessionKey])
 
   // Persist session to localStorage whenever messages or context update
   useEffect(() => {
