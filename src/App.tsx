@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
-<<<<<<< HEAD
-=======
 import MigrationBanner from './components/auth/MigrationBanner'
->>>>>>> sprint-0007-task-0008-feat-localstorage-migration-flow
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'

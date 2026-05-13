@@ -8,7 +8,7 @@ import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransit
 import type { TransitAspect } from '../../engine/transits'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getInterpretation } from '../../data/numerologyInterpretations'
-import { generateJournalEntryAnnotation, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateJournalEntryAnnotation } from '../../services/gptInterpretation'
 import { useAuth } from '../../context/AuthContext'
 import { syncJournalEntry } from '../../services/entrySync'
 import DreamModal from '../dream/DreamModal'
