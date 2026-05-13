@@ -107,6 +107,12 @@ export type AppAction =
   | { type: 'SET_STORAGE_WARNING'; message: string }
   | { type: 'CLEAR_STORAGE_WARNING' }
   | { type: 'LOAD_BIRTH_DATA_FROM_SERVER'; data: BirthData }
+  | { type: 'SET_TRANSIT_DATA'; transitData: TransitData; transitPeriod: TransitPeriod; transitTargetMonth: string | null }
+  | { type: 'SET_TRANSIT_INTERPRETATION'; interpretation: string }
+  | { type: 'SET_SYNASTRY_DATA'; partnerChartData: ChartData; partnerAspects: Aspect[]; synastryData: SynastryData }
+  | { type: 'SET_SYNASTRY_INTERPRETATION'; interpretation: string }
+  | { type: 'SET_SOLAR_RETURN_DATA'; data: SolarReturnData; targetYear: number }
+  | { type: 'SET_SOLAR_RETURN_INTERPRETATION'; interpretation: string }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -363,6 +369,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, storageWarning: null }
     case 'LOAD_BIRTH_DATA_FROM_SERVER':
       return { ...state, birthData: action.data }
+    case 'SET_TRANSIT_DATA':
+      return { ...state, view: 'transit-results', transitData: action.transitData, transitPeriod: action.transitPeriod, transitTargetMonth: action.transitTargetMonth, transitInterpretation: null, transitLoading: false }
+    case 'SET_TRANSIT_INTERPRETATION':
+      return { ...state, transitInterpretation: action.interpretation }
+    case 'SET_SYNASTRY_DATA':
+      return { ...state, view: 'synastry-results', partnerChartData: action.partnerChartData, partnerAspects: action.partnerAspects, synastryData: action.synastryData, synastryInterpretation: null, synastryError: null }
+    case 'SET_SYNASTRY_INTERPRETATION':
+      return { ...state, synastryInterpretation: action.interpretation }
+    case 'SET_SOLAR_RETURN_DATA':
+      return { ...state, view: 'solar-return', solarReturnData: action.data, solarReturnTargetYear: action.targetYear, solarReturnInterpretation: null, solarReturnError: null }
+    case 'SET_SOLAR_RETURN_INTERPRETATION':
+      return { ...state, solarReturnInterpretation: action.interpretation }
     default:
       return state
   }

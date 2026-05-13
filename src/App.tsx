@@ -551,15 +551,18 @@ function AppContent() {
 
         if (!chart) throw new Error('Unable to calculate natal chart')
 
-        // Calculate transits
+        // Calculate transits synchronously and transition to results immediately
         const transitData = calculateTransits(chart, state.transitPeriod!, state.transitTargetMonth ?? undefined)
+        if (!cancelled) {
+          dispatch({ type: 'SET_TRANSIT_DATA', transitData, transitPeriod: state.transitPeriod!, transitTargetMonth: state.transitTargetMonth })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_TRANSIT_RESULTS', transitData, interpretation })
+          dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Transit calculation error:', e)
@@ -601,15 +604,18 @@ function AppContent() {
         )
         const aspects2 = calculateAspects(chart2.planets)
 
-        // Calculate synastry
+        // Calculate synastry synchronously and transition to results immediately
         const synData = calculateSynastry(chart1, chart2)
+        if (!cancelled) {
+          dispatch({ type: 'SET_SYNASTRY_DATA', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildSynastryPrompt(chart1, chart2, synData, birthData.date, partnerBirthData.date)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_SYNASTRY_RESULTS', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData, interpretation })
+          dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Synastry calculation error:', e)
@@ -691,15 +697,18 @@ function AppContent() {
 
         if (!chart) throw new Error('Unable to calculate natal chart')
 
-        // Calculate solar return
+        // Calculate solar return synchronously and transition to results immediately
         const srData = calculateSolarReturn(chart, birthData.date, birthData.city!.lat, birthData.city!.lng, state.solarReturnTargetYear ?? undefined)
+        if (!cancelled) {
+          dispatch({ type: 'SET_SOLAR_RETURN_DATA', data: srData, targetYear: srData.targetYear })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_SOLAR_RETURN_RESULTS', data: srData, interpretation })
+          dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Solar return error:', e)
@@ -748,8 +757,8 @@ function AppContent() {
         {state.view === 'transit-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">☽</div>
-            <p className="text-mystic-purple font-heading text-xl animate-pulse">Reading the transits...</p>
-            <p className="text-mystic-muted text-sm mt-2">Consulting the stars for your {state.transitPeriod} guidance</p>
+            <p className="text-mystic-purple font-heading text-xl animate-pulse">Consulting the stars...</p>
+            <p className="text-mystic-muted text-sm mt-2">Mapping the sky for your chart...</p>
           </div>
         )}
         {state.view === 'transit-results' && <TransitReadingPage />}
@@ -757,8 +766,8 @@ function AppContent() {
         {state.view === 'synastry-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">♡</div>
-            <p className="text-pink-400 font-heading text-xl animate-pulse">Analyzing compatibility...</p>
-            <p className="text-mystic-muted text-sm mt-2">Comparing the celestial blueprints of two souls</p>
+            <p className="text-pink-400 font-heading text-xl animate-pulse">Reading your celestial bond...</p>
+            <p className="text-mystic-muted text-sm mt-2">Aligning two cosmic blueprints...</p>
           </div>
         )}
         {state.view === 'synastry-results' && <SynastryPage />}
@@ -775,8 +784,8 @@ function AppContent() {
         {state.view === 'solar-return-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s', color: '#e8a830' }} aria-hidden="true">☀</div>
-            <p className="font-heading text-xl animate-pulse" style={{ color: '#e8a830' }}>Calculating your solar return...</p>
-            <p className="text-mystic-muted text-sm mt-2">Finding the exact moment the Sun returns to your natal position</p>
+            <p className="font-heading text-xl animate-pulse" style={{ color: '#e8a830' }}>Tracking the Sun's return...</p>
+            <p className="text-mystic-muted text-sm mt-2">Calculating your solar threshold...</p>
           </div>
         )}
         {state.view === 'solar-return' && <SolarReturnPage />}
