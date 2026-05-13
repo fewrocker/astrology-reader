@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
+import NetworkWarningBanner from './components/NetworkWarningBanner'
+import AuthModal from './components/auth/AuthModal'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -25,7 +28,172 @@ import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
 import { getGptInterpretation, getStoredApiKey } from './services/gptInterpretation'
 
-function CachedDataLanding() {
+const NUDGE_DISMISS_KEY = 'auth-nudge-dismissed-at'
+const JOURNAL_KEY = 'cosmic-journal-entries'
+
+function getJournalCount(): number {
+  try {
+    const raw = localStorage.getItem(JOURNAL_KEY)
+    if (!raw) return 0
+    const entries = JSON.parse(raw)
+    return Array.isArray(entries) ? entries.length : 0
+  } catch {
+    return 0
+  }
+}
+
+function getNudgeDismissedCount(): number {
+  try {
+    return parseInt(localStorage.getItem(`${NUDGE_DISMISS_KEY}-count`) ?? '0', 10) || 0
+  } catch {
+    return 0
+  }
+}
+
+function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
+  const { isAuthenticated, displayName, logout } = useAuth()
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  if (!isAuthenticated) {
+    return (
+      <button
+        type="button"
+        onClick={onOpenAuth}
+        className="absolute right-0 top-1/2 -translate-y-1/2 text-xl transition-colors"
+        style={{ color: 'rgba(201,168,76,0.3)', lineHeight: 1 }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.65)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.3)')}
+        aria-label="Sign in"
+        title="Sign in"
+      >
+        ✦
+      </button>
+    )
+  }
+
+  return (
+    <div ref={ref} className="absolute right-0 top-1/2 -translate-y-1/2">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="text-xl transition-colors"
+        style={{ color: '#c9a84c', lineHeight: 1, filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.5))' }}
+        aria-label="Account menu"
+        title={displayName}
+      >
+        ✦
+      </button>
+      {open && (
+        <div
+          className="absolute right-0 top-8 z-50 min-w-[160px] rounded-xl overflow-hidden"
+          style={{
+            background: 'linear-gradient(160deg, rgba(22,16,8,0.98) 0%, rgba(15,11,5,0.99) 100%)',
+            border: '1px solid rgba(201,168,76,0.28)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+          }}
+        >
+          <div
+            className="px-4 py-3 text-xs font-heading border-b"
+            style={{ color: '#c9a84c', borderColor: 'rgba(201,168,76,0.15)' }}
+          >
+            {displayName}
+          </div>
+          <button
+            type="button"
+            onClick={async () => { setOpen(false); await logout() }}
+            className="w-full text-left px-4 py-3 text-xs transition-colors"
+            style={{ color: 'rgba(201,168,76,0.6)' }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#c9a84c')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.6)')}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CachedDataNudge({ onOpenAuth }: { onOpenAuth: () => void }) {
+  const { isAuthenticated } = useAuth()
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    const journalCount = getJournalCount()
+    const dismissedCount = getNudgeDismissedCount()
+
+    if (dismissedCount > 0 && journalCount < dismissedCount + 10) return
+
+    if (journalCount > 0) {
+      setVisible(true)
+      return
+    }
+
+    try {
+      const raw = localStorage.getItem('astral-chart-birth-data')
+      if (!raw) return
+      const parsed = JSON.parse(raw) as { createdAt?: string }
+      if (!parsed.createdAt) {
+        setVisible(true)
+        return
+      }
+      const daysSince = (Date.now() - new Date(parsed.createdAt).getTime()) / (1000 * 60 * 60 * 24)
+      if (daysSince > 7) setVisible(true)
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  if (isAuthenticated || !visible) return null
+
+  const handleDismiss = () => {
+    const count = getJournalCount()
+    localStorage.setItem(NUDGE_DISMISS_KEY, Date.now().toString())
+    localStorage.setItem(`${NUDGE_DISMISS_KEY}-count`, count.toString())
+    setVisible(false)
+  }
+
+  return (
+    <div
+      className="mt-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg"
+      style={{ borderTop: '1px solid rgba(201,168,76,0.12)' }}
+    >
+      <button
+        type="button"
+        onClick={onOpenAuth}
+        className="text-xs transition-colors text-left"
+        style={{ color: 'rgba(201,168,76,0.5)' }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.8)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.5)')}
+      >
+        ✦ Protect your cosmic record
+      </button>
+      <button
+        type="button"
+        onClick={handleDismiss}
+        className="flex-shrink-0 text-xs transition-colors"
+        style={{ color: 'rgba(201,168,76,0.25)' }}
+        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.6)')}
+        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.25)')}
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
+function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
   const { state, dispatch } = useApp()
   const { birthData } = state
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
@@ -212,6 +380,8 @@ function CachedDataLanding() {
                 Enter New Birth Data
               </button>
             </div>
+
+            <CachedDataNudge onOpenAuth={onOpenAuth} />
           </div>
         </div>
 
@@ -316,6 +486,13 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
+  const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
+
+  const openAuth = (tab: 'login' | 'register' = 'login') => {
+    setAuthModalTab(tab)
+    setAuthModalOpen(true)
+  }
 
   // Run calculation when entering loading view
   useEffect(() => {
@@ -552,12 +729,16 @@ function AppContent() {
             <StorageWarningBanner />
           </div>
         )}
-        <header className={`text-center ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'}`}>
+        <div className="w-full max-w-2xl mb-2">
+          <NetworkWarningBanner />
+        </div>
+        <header className={`text-center relative ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'} w-full max-w-2xl`}>
           <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
           <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
+          <SessionBadge onOpenAuth={() => openAuth('login')} />
         </header>
 
-        {state.view === 'form' && (showCachedLanding ? <CachedDataLanding /> : <FormWizard />)}
+        {state.view === 'form' && (showCachedLanding ? <CachedDataLanding onOpenAuth={() => openAuth('register')} /> : <FormWizard />)}
         {state.view === 'loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">✦</div>
@@ -609,6 +790,12 @@ function AppContent() {
           <CosmicJournalPage chartData={state.chartData} birthData={state.birthData} />
         )}
       </div>
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        initialTab={authModalTab}
+      />
     </div>
   )
 }
@@ -617,7 +804,9 @@ function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <AppContent />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </AppProvider>
     </ErrorBoundary>
   )
