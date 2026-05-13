@@ -399,6 +399,32 @@ export function getTopActiveTransits(
   return aspects.filter(a => a.orb <= maxOrbDegrees).slice(0, maxCount)
 }
 
+export interface EnergyRating {
+  label: string
+  score: number
+  dotColor: string
+  textColor: string
+}
+
+/**
+ * Compute an energy rating from the top 8 transit aspects.
+ * Harmonious aspects add +1, challenging aspects subtract 1.
+ */
+export function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
+  const top = aspects.slice(0, 8)
+  const score = top.reduce((acc, a) => {
+    if (a.nature === 'harmonious') return acc + 1
+    if (a.nature === 'challenging') return acc - 1
+    return acc
+  }, 0)
+
+  if (score >= 3) return { label: 'Highly Favorable', score: 5, dotColor: 'bg-emerald-400', textColor: 'text-emerald-400' }
+  if (score >= 1) return { label: 'Favorable', score: 4, dotColor: 'bg-green-400', textColor: 'text-green-400' }
+  if (score === 0) return { label: 'Mixed', score: 3, dotColor: 'bg-yellow-400', textColor: 'text-yellow-400' }
+  if (score >= -2) return { label: 'Tense', score: 2, dotColor: 'bg-orange-400', textColor: 'text-orange-400' }
+  return { label: 'Demanding', score: 1, dotColor: 'bg-red-400', textColor: 'text-red-400' }
+}
+
 /**
  * Main function: calculate transit data for a given period.
  * @param targetMonth optional "YYYY-MM" for a specific future month
