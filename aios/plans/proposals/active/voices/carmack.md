@@ -1,159 +1,147 @@
-# John Carmack — Sprint 0007 Proposal Voice
+# John Carmack — Voice Analysis
 
-Sprint 0006 shipped cleanly. The Cosmic Journal is live, the sky computation is correct for historical dates, the energy rating deduplication is done, and the localStorage guard exists. Good. Now sprint-0007 introduces a backend for the first time, and this is where architectural decisions made in a hurry will haunt you for the life of the product. Let me be precise about what the actual hard problems are.
-
----
-
-## Architecture: What to Actually Build
-
-The vision correctly lands on a Node.js/Express monolith. That's the right call. Don't second-guess it. One process, one port, one deploy, `dist/` served statically by Express, `/api/*` handled by Express routes. This is not a microservices problem. It's a small personal app that needs user accounts and a database. Keep it simple.
-
-**SQLite vs PostgreSQL:** Go SQLite with `better-sqlite3` for v1. The vision hedges on this and it shouldn't. The app runs on a single-server VPS. SQLite on a single machine outperforms PostgreSQL for simple read/write workloads when there's no horizontal scale requirement. `better-sqlite3` is synchronous by design — no async/await surface, no connection pool to manage, no separate process, no network socket. The migration path to PostgreSQL is straightforward if you ever need it: the schema is tiny and the queries are simple. Starting with PostgreSQL because "production" adds operational complexity for zero benefit at this scale. Pick SQLite. Make it a conscious decision, document it, move on.
-
-**JWT secret management:** This is the first place this sprint can go badly. The JWT secret must come from an environment variable (`JWT_SECRET`). If it's hardcoded anywhere — even in a comment, even in a `.env.example` — someone will copy it into production. The server startup should fail loudly if `JWT_SECRET` is not set and `NODE_ENV !== 'development'`. In dev, generate a random secret at startup and log a warning. Do not use a hardcoded fallback in any code path that runs in production. This is non-negotiable.
-
-**Token expiry:** 30 days is fine. Use `jsonwebtoken` with `{ expiresIn: '30d' }`. The `/api/auth/me` endpoint validates the token on every request — that's the right model. Don't store tokens server-side (no session table). The token is the session.
-
-**Password hashing:** `bcrypt` with cost factor 12. Not 10 (too fast on modern hardware), not 14 (too slow for a responsive login). 12 is the current production default. The hash lives in the `users.password_hash` column, never in a log, never in an error message, never returned in an API response.
+Sprint-0007 landed correctly: the backend monolith, JWT auth, GPT proxy, and entry sync all shipped. The architectural decisions I pushed for in 0007 held — the app has real accounts, real persistence, and no API keys in the browser. Good. Now sprint-0008 is a UI/UX sprint. That's fine. These sprints are necessary. But every UI/UX sprint has hidden technical work that determines whether the thing ships cleanly or accumulates debt. Let me be precise about what that technical work actually is.
 
 ---
 
-## The Real Technical Risks
+## Technical Diagnosis
 
-### Risk 1: The localStorage-to-Server Migration Will Destroy Data If You Get the Order Wrong
+### The Real Problem Is Not the Button List
 
-The vision describes the migration flow correctly at a high level, but the implementation has a subtle failure mode that will burn users. Here's the sequence that kills data:
+The vision correctly identifies that ten equal-weight buttons are bad navigation. But the root cause is simpler than it looks: the `CachedDataLanding` component in `App.tsx` is doing three jobs — birth data display, navigation menu, and daily snapshot host — in a single 220-line inline function with no extraction. Every change to the home screen requires editing `App.tsx`, which is already 847 lines and growing. The button proliferation is a symptom of having no component boundary that forces the question "does this belong here?"
 
-1. User logs in
-2. Frontend detects local journal entries
-3. User clicks "Upload"
-4. Frontend batch-POSTs entries to `/api/entries`
-5. **Server returns 201**
-6. **Frontend clears localStorage** — this is the only safe moment to clear
+The fix is architectural, not cosmetic. The home screen needs to be a composed component with clear ownership, not an ever-expanding anonymous function inside the app shell.
 
-The failure mode: if step 6 happens before step 5 confirms, or if the frontend clears on any network response (including 4xx/5xx), the data is gone. The `_synced: true` marker approach in the vision is better than clearing, but it has its own problem: if the marker write fails (quota error), you get duplicate entries on the next sync attempt. 
+### The Loading State Pattern Is the Real Performance Bug
 
-The correct implementation: don't clear localStorage on upload success. Instead, mark each entry with `_synced: true` server-side UUID (the ID assigned by the server). On future loads, when authenticated, load from the server and use server IDs as the source of truth. Let localStorage atrophy naturally — it becomes stale read-only backup. Only clear it on explicit user action ("Clear local data") after verifying the server has everything. This is more conservative than the vision's approach but eliminates the data loss failure mode entirely.
+The current architecture for AI-driven screens has a fundamental structural flaw: **computation and GPT are coupled in the same effect loop in `App.tsx`.** Look at `runTransit` (lines 544-584): it calculates transits synchronously, then `await`s the GPT call, then dispatches `SET_TRANSIT_RESULTS` which simultaneously sets the data AND transitions the view from `transit-loading` to `transit-results`. The page doesn't render at all until GPT returns.
 
-Also: the batch upload endpoint must be idempotent. If the client retries (network timeout between POST and 201 response), you must not create duplicates. Use the client-generated UUID (`id` field in `JournalEntry`) as the deduplication key on the server — `INSERT OR IGNORE` in SQLite, `INSERT ... ON CONFLICT DO NOTHING` in the schema. This makes retries safe.
+This is not a loading copy problem. This is not a spinner design problem. This is a sequencing problem. The data is computed in ~5ms. GPT takes 2-10 seconds. The user sees nothing for the full 2-10 seconds. The same pattern exists for synastry (`runSynastry`, lines 595-634) and solar return (`runSolarReturn`, lines 684-725).
 
-### Risk 2: The OpenAI API Key Is Currently Exposed on the Client
+The correct fix requires changing what `SET_TRANSIT_RESULTS` and the view state transitions mean. Right now `transit-loading` → `transit-results` is a single atomic transition that requires both data AND interpretation. It needs to become two transitions:
+1. `transit-loading` → `transit-results` fires when data is computed (milliseconds)
+2. `SET_TRANSIT_INTERPRETATION` fires when GPT resolves (seconds later)
 
-`src/services/gptInterpretation.ts` stores the OpenAI API key in localStorage and calls `api.openai.com` directly from the browser. This is a known limitation of a frontend-only app. But now that a backend exists, this is the sprint to fix it. Every GPT call should go through the backend:
+`TransitReadingPage.tsx` already has the conditional `{transitInterpretation && <TransitInterpretation ... />}` — the page component already knows how to render without the interpretation. The issue is that it never gets a chance to render without it because the view transition is gated on GPT completing. The page is architecturally ready for split-render. Only `App.tsx` needs to change.
 
-1. Client calls `POST /api/gpt/interpret` with the prompt payload
-2. Server holds `OPENAI_API_KEY` in environment variable
-3. Server proxies to OpenAI and returns the result
+### The View State Enum Has Become a Mess
 
-The client never touches the OpenAI key. The API key storage in localStorage, the `getStoredApiKey()` function, the key setup UI — all of this goes away. Users no longer need to supply their own API key. The server owns the key.
+`AppView` in `appState.ts` currently has 17 possible values:
+`'form' | 'loading' | 'results' | 'transit-select' | 'transit-loading' | 'transit-results' | 'partner-form' | 'synastry-loading' | 'synastry-results' | 'synastry-transit-select' | 'synastry-transit-loading' | 'synastry-transit-results' | 'numerology' | 'solar-return-loading' | 'solar-return' | 'today' | 'journal'`
 
-This is not explicitly in the sprint vision but it's the natural completion of introducing a backend. Shipping a backend that still requires users to paste in their OpenAI API key is a missed opportunity and leaves a security-unfriendly pattern (localStorage key storage) intact. This is the clean break point.
+The `*-loading` variants exist solely as signals to `useEffect` hooks in `App.tsx` to trigger computation. They are not really views — no user ever intentionally navigates to `synastry-loading`. They're an implementation detail of the computation pipeline being expressed as view state. If the split-render refactor is done correctly (computation and GPT decoupled), the `-loading` intermediate views for synastry and solar-return can be either eliminated or collapsed to millisecond-duration transitions that are imperceptible to users. `transit-loading` becomes just a route to `transit-results` with a brief flash.
 
-If cost is a concern, rate-limit GPT endpoints per user on the server side — simple in-memory counter per `user_id` per day is enough for v1.
+The `transit-select` view is also redundant after the readings modal is introduced: if transit period is passed directly from the modal (`START_TRANSIT` with `period: 'daily'` directly), `transit-select` becomes an intermediate step that adds no value. It can survive as a fallback for navigation from within transit-results ("Choose Another Reading"), but it should not be a required stop in the happy path.
 
-### Risk 3: The `dreamRef` Field Couples Journal to localStorage Dream Sessions
+### `App.tsx` Is Doing Too Much
 
-`JournalEntry.dreamRef` stores a localStorage key (`dream-session-YYYY-MM-DD`). When journal entries migrate to the server, `dreamRef` becomes a dangling reference to a localStorage key that may or may not still exist on the current device. If the user logs in on a new device, all `dreamRef` links are broken — silently, because the code just checks `localStorage.getItem(dreamRef)` and returns null on miss.
+The 847-line `App.tsx` contains:
+- `SessionBadge` component (73 lines)
+- `CachedDataNudge` component (68 lines)
+- `CachedDataLanding` component (222 lines)
+- `TransitSelectScreen` component (30 lines)
+- `SynastryTransitSelectScreen` component (36 lines)
+- `AppContent` routing function (280 lines) with five inline `useEffect` calculation hooks
+- `MigrationGate` wrapper (21 lines)
+- `App` root (13 lines)
 
-The correct fix during this sprint: dream sessions need to move to the `entries` table with `kind = 'dream'`. The `dreamRef` field on journal entries should become a UUID reference to the dream entry's server-side ID, not a localStorage key string. During migration, when uploading dream sessions, generate a UUID for each and update the corresponding journal entries' `dreamRef` to point to the new UUID.
+This is a file that will keep growing every sprint. The calculation effects (`runTransit`, `runSynastry`, `runSolarReturn`) are especially misplaced here — they are business logic disguised as React lifecycle code. They belong in a service or hook layer, not inline in the app shell. Moving them out would also eliminate the `// eslint-disable-line react-hooks/exhaustive-deps` suppressions on lines 535, 585, 635, and 725, which exist because the dependency arrays are intentionally incomplete to avoid retriggering calculations on every state change. That's a code smell that signals the computation logic is in the wrong place.
 
-If dream session migration is out of scope for this sprint (it's complex), at minimum: change `dreamRef` to store `{ type: 'localStorage', key: string } | { type: 'server', id: string }` so the field format is forward-compatible when dream sessions do migrate. A stringly-typed localStorage key baked into every server-side journal entry is a schema smell that will require a migration later.
+### Inline Styles Are Inconsistent and Accumulating
 
-### Risk 4: AppState.ts Is Now Two Different Things
+The codebase uses Tailwind for most styling but falls back to inline `style={{}}` objects for colors that aren't in the Tailwind theme — particularly the gold variants (`rgba(201,168,76,...)`) at different opacity levels, the amber solar return color (`#e8a830`, `rgba(232,168,48,...)`), and pink synastry colors. `CachedDataLanding` alone has 14 inline style objects for hover states (lines 264-270, 280-286, 323-332, 342-354, 359-372) that duplicate `onMouseEnter`/`onMouseLeave` handlers to replicate hover behavior that Tailwind handles declaratively. This pattern is fragile — you have to update three places (default style, mouseEnter, mouseLeave) to change one button's hover state. When `ReadingsModal.tsx` is created, this pattern should not be inherited.
 
-`src/context/appState.ts` currently handles two concerns: (1) birth data persistence to localStorage and (2) app view state/reducer. When auth is introduced, birth data has a new source of truth (the server), but the reducer still writes to localStorage on `UPDATE_BIRTH_DATA` → `saveBirthData()`. The sequence during login will be ambiguous: does birth data come from the server response or from localStorage? Which wins if they differ?
+### The SolarReturnPage Has a Silent GPT Wait
 
-The answer needs to be explicit in code: on login, server birth data overwrites localStorage. The `SET_AUTH_USER` action (new) should accept `{ user, birthData }` and dispatch a `LOAD_BIRTH_DATA_FROM_SERVER` action that replaces `state.birthData` without writing to localStorage. The `saveBirthData()` function in localStorage should only be called when the user is not authenticated (localStorage fallback path) or when explicitly told to sync to localStorage as backup.
-
-Right now this coupling is implicit. Making it explicit before writing 2000 lines of backend code will prevent a class of "my profile shows wrong data" bugs.
-
----
-
-## Existing Code Smells That Will Cause Problems
-
-**1. No fetch abstraction.** The frontend currently has zero `fetch()` calls — all computation is local. `authService.ts` will be the first place network requests appear. Don't scatter raw `fetch()` calls across authService. Build a thin `apiClient.ts` that handles: base URL resolution (localhost:3001 in dev, `/api` in prod), JWT Authorization header injection from the stored token, timeout (important for offline tolerance — the vision requires graceful degradation), and standardized error shapes. Every endpoint in authService goes through this client. This pays for itself immediately when you need to add request logging or handle 401s globally (token expired → force logout).
-
-**2. The `saveEntries` function in `CosmicJournalPage.tsx` re-implements quota error detection.** Lines 48-50 catch `QuotaExceededError` by string matching on `e.message` instead of using the `isQuotaError()` utility already in `src/utils/storage.ts`. This is exactly the pattern sprint-0006 created `isQuotaError()` to eliminate. Fix it in the same PR as the backend work — it's a one-line import change.
-
-**3. The PatternPanel computes transit aspects live for historical entries.** `PatternPanel.tsx` calls `getTopActiveTransits(chartData, 20, 10, entryDate)` per entry in the `processNext` loop (line 185). This was an architectural concern I flagged in sprint-0006 analysis: recomputing sky snapshots from stored entries at read time instead of storing them at write time. For 50+ entries, this is 50 × 10 planet position lookups running via `requestAnimationFrame` — it works, but it means the pattern panel's accuracy depends on the runtime engine state rather than the stored snapshot. When entries live on the server, this computation happens on the client against the live engine, which is correct — but it means the pattern data is only as good as the browser's IANA timezone database for historical dates. Consider storing the top transit aspects in `metadata` JSONB at write time and reading from stored data in PatternPanel. This makes patterns deterministic and server-renderable.
-
-**4. `buildInitialState()` runs synchronous localStorage reads at module load time.** Lines 278-309 in `appState.ts` call `loadCachedBirthData()`, `loadCachedChartResults()`, `loadCachedTransitResults()`, and `loadCachedSynastryResults()` synchronously before any React tree renders. When the app is authenticated, the initial state should load from the server — but the current pattern has `initialState` as a module-level constant populated synchronously. You can't `await` a server fetch at module load time. The fix: make `buildInitialState()` return a promise or move to an async initialization hook. For sprint-0007, the practical path is: load from localStorage first (as today), then dispatch `LOAD_BIRTH_DATA_FROM_SERVER` after the auth token is validated, overwriting the initial state. Two-phase initialization is fine for a personal app. Just make it explicit.
+`SolarReturnPage.tsx` line 211: `{solarReturnInterpretation ? (<>...<SRReading .../></>) : (<div className="text-center py-8 text-mystic-muted">Loading reading...</div>)}`. This is the exact problem the vision targets — generic "Loading reading..." text blocking the reading tab while GPT resolves. The page already has all the non-GPT data available (`KeyPlacements`, the year selector, the bi-wheel chart in the Chart tab), but the Reading tab is a dead end until GPT returns. Same structural fix applies as transit: render the page structure immediately, render the GPT slot as a skeleton or themed pulse.
 
 ---
 
-## Dev Setup: The Vite Proxy Is Missing
+## The Clean Path
 
-`vite.config.ts` has `server.allowedHosts: ['.ngrok-free.app']` but no `server.proxy` configuration. The vision correctly identifies that dev needs `/api/*` proxied to `http://localhost:3001`. Without this, every `fetch('/api/auth/login')` from the Vite dev server on port 5173 hits the wrong host. Add:
+### 1. Decouple Computation from GPT in App.tsx Effects
 
-```ts
-server: {
-  allowedHosts: ['.ngrok-free.app'],
-  proxy: {
-    '/api': {
-      target: 'http://localhost:3001',
-      changeOrigin: true,
-    },
-  },
-},
+The correct split for `runTransit`:
+
+```
+Step 1 (sync, ~5ms):
+  - calculate transitData
+  - dispatch { type: 'SET_TRANSIT_DATA', transitData }  ← new action
+  - view transitions to 'transit-results' immediately
+
+Step 2 (async, 2-10s):
+  - await getGptInterpretation(prompt)
+  - dispatch { type: 'SET_TRANSIT_INTERPRETATION', interpretation }
 ```
 
-This is a 5-line addition that unblocks all local development of the backend. It's easy to forget and will cause confusing CORS errors when the first backend route is tested.
+`AppView` loses `transit-loading` as a meaningful state. The `transit-results` view renders immediately with computed data. The interpretation card uses `NarrativeSkeleton` (already built in `NumerologyPage.tsx`) until GPT resolves. Same pattern for synastry and solar return.
+
+This is ~60 lines of changes in `App.tsx` and ~30 lines adding new actions to `appState.ts`. The component pages require no changes because they already conditionally render the GPT slots.
+
+New actions needed:
+- `SET_TRANSIT_DATA` (sets transitData, transitions view to transit-results)
+- `SET_TRANSIT_INTERPRETATION` (sets transitInterpretation only)
+- `SET_SYNASTRY_DATA` (same pattern)
+- `SET_SYNASTRY_INTERPRETATION` (same pattern)
+- `SET_SOLAR_RETURN_DATA` (same pattern)
+- `SET_SOLAR_RETURN_INTERPRETATION` (same pattern)
+
+### 2. Extract a `useCalculations` Hook
+
+Move the five `useEffect` computation hooks from `AppContent` into `src/hooks/useCalculations.ts`. This hook takes `state` and `dispatch` and owns all computation side effects. `App.tsx` becomes a router. The hook becomes testable. The `eslint-disable` suppressions go away because the dependency arrays can be correct once the logic is not entangled with view rendering.
+
+### 3. `ReadingsModal.tsx` Must Use Tailwind-Only Styling
+
+When building `src/components/navigation/ReadingsModal.tsx`, do not inherit the `onMouseEnter`/`onMouseLeave` inline style pattern from `CachedDataLanding`. Use Tailwind `hover:` variants throughout. The existing color tokens (`mystic-gold`, `mystic-purple`, `mystic-surface`, etc.) in `tailwind.config.ts` are sufficient. The only inline styles that belong in new components are those using CSS custom properties or values that genuinely cannot be expressed in the Tailwind config (which should be none for a modal).
+
+### 4. Form Completion Landing Change Is Low-Risk
+
+The change in `FormWizard.tsx` `handleNext()` from `dispatch({ type: 'SET_VIEW', view: 'loading' })` to `dispatch({ type: 'SET_VIEW', view: 'form' })` is a one-line change. The `showCachedLanding` condition in `AppContent` — `state.view === 'form' && hasCachedBirthData() && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city` — already handles this correctly. After the final step, birth data is cached, `formStep` is still 2, but `SET_STEP: 0` would need to be dispatched or `showCachedLanding` would need to relax the `formStep === 0` check. The cleanest path: after form submission, dispatch `{ type: 'SET_VIEW', view: 'form' }` AND `{ type: 'SET_STEP', step: 0 }`. The landing condition already works. Zero new logic required.
 
 ---
 
-## Database Schema: One Fix
+## Proposals I'm Making
 
-The vision's schema is correct. One addition: add a unique constraint on `(user_id, id)` for the entries table, and use the client-generated UUID as the primary key (already in the vision). Also add an index on `(user_id, kind, date)` — you will query entries by user + kind + date range, and without an index on a table that could have thousands of rows, that's a full table scan. SQLite will handle it fine for hundreds of rows, but adding the index costs nothing and the query pattern is obvious from day one.
+### proposal-split-render-decouple-gpt
 
-```sql
-CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date 
-  ON entries(user_id, kind, date DESC);
-```
+**What:** Split the `runTransit`, `runSynastry`, and `runSolarReturn` computation effects in `App.tsx` into two phases: (1) synchronous calculation that immediately transitions the view to the results page, and (2) async GPT call that dispatches only the interpretation when it resolves.
+
+**Why it's right:** The user has zero reason to see a loading screen for data that was computed in 5ms. The loading screen exists because computation and GPT are coupled in the same async chain. Decoupling them is the minimal correct fix. No new dependencies, no new components — just splitting one async chain into two dispatch calls. The result pages already handle `null` interpretation with conditional rendering.
+
+**New actions required:** `SET_TRANSIT_DATA`, `SET_TRANSIT_INTERPRETATION`, `SET_SYNASTRY_DATA`, `SET_SYNASTRY_INTERPRETATION`, `SET_SOLAR_RETURN_DATA`, `SET_SOLAR_RETURN_INTERPRETATION`. These replace the combined `SET_TRANSIT_RESULTS`, `SET_SYNASTRY_RESULTS`, `SET_SOLAR_RETURN_RESULTS` actions (or supplement them — keep the combined actions for backward compatibility with localStorage cache hydration where both data and interpretation are available simultaneously).
+
+**Scope:** `src/context/appState.ts` (new actions + reducer cases), `src/App.tsx` (split the three effects). ~90 lines total. No component changes needed.
+
+### proposal-readings-modal-clean-component
+
+**What:** Build `src/components/navigation/ReadingsModal.tsx` as a self-contained component that receives `onSelect: (action: AppAction) => void` and `onClose: () => void` props. It renders three groups with Tailwind-only styling. No inline style objects.
+
+**Why it's right:** This is new code. Starting it clean sets the pattern for all future navigation components. If the readings modal uses the same `onMouseEnter`/`onMouseLeave` inline style pattern as `CachedDataLanding`, that pattern becomes entrenched. Writing it with `hover:` Tailwind variants instead demonstrates the right approach and makes `CachedDataLanding`'s inline styles look like what they are — a refactor target.
+
+**Note on the DreamModal integration:** `DreamModal` is currently opened by local state in `CachedDataLanding` (`const [dreamOpen, setDreamOpen] = useState(false)`). When Dream Interpretation moves to the readings modal, the dream open state needs to live either in `CachedDataLanding` (passed down) or in `ReadingsModal` itself (cleaner — modal closes, then DreamModal opens). Choosing at design time avoids prop-drilling a boolean three levels deep.
+
+### proposal-home-screen-extract-component
+
+**What:** Extract `CachedDataLanding` from `App.tsx` into `src/components/home/HomeScreen.tsx`. Extract `SessionBadge` and `CachedDataNudge` into `src/components/auth/SessionBadge.tsx` and `src/components/auth/AuthNudge.tsx`.
+
+**Why it's right:** `App.tsx` is already too long and every sprint adds to it. The home screen redesign in this sprint will add `ReadingsModal` state, the `DailySnapshotCard` embed, the new CTA button, and the "Save your readings" auth nudge. If all of that stays in `App.tsx`, the file will exceed 1000 lines. Extract before adding, not after.
+
+### proposal-numerology-skeleton-reuse
+
+**What:** `NumerologyPage.tsx` already has a production-quality `NarrativeSkeleton` component (lines 238-266) with shimmer animation for GPT loading states. The transit, synastry, and solar return reading pages should import and reuse this skeleton pattern (or a shared version in `src/components/ui/GptSkeleton.tsx`) rather than each implementing their own.
+
+**Why it's right:** The skeleton shimmer animation is implemented twice already (once in `NumerologyPage.tsx`, once inline in the sky reading section of the same file). The transit and synastry pages will need a third and fourth version if they each implement it. Extract once, use everywhere. The animation itself — gradient bars pulsing at staggered intervals — is the right ambient animation for "the sky is thinking." A shared `GptSkeleton` component with a `label` prop for the themed copy ("Consulting the stars...", "Reading your celestial bond...") is 30 lines and eliminates duplication.
 
 ---
 
-## Proposals
+## What I'd Simplify
 
-### feat-backend-monolith-express-sqlite
-**Type:** feat  
-Introduce the `server/` directory with Express + better-sqlite3: entry point, DB init with schema, auth routes (register/login/logout/me), profile routes (get/put birth data), entries routes (get/post/delete). One `npm start` runs the server that also serves the built React app from `dist/`. Includes `tsconfig.server.json` for separate server compilation to `dist-server/`.
+**Eliminate the `onMouseEnter`/`onMouseLeave` inline style hover pattern.** There are 14 instances in `CachedDataLanding` alone. Every one of them can be replaced with Tailwind `hover:` variants on the existing color tokens. This is dead code in the sense that it accomplishes nothing that Tailwind can't do declaratively. The new `ReadingsModal` and `HomeScreen` components should set the pattern. The `CachedDataLanding` refactor that happens as part of this sprint is the opportunity to remove it there too.
 
-### feat-auth-context-jwt
-**Type:** feat  
-Create `src/context/AuthContext.tsx` with `useAuth()` hook, holding `{ user, token }`. JWT persisted to localStorage under a dedicated key. Provides `login()`, `register()`, `logout()` functions that call `authService.ts`. On mount, validates stored token against `/api/auth/me` and dispatches `LOAD_BIRTH_DATA_FROM_SERVER` if valid. Session expiry and 401 responses trigger automatic logout.
+**The `transit-select` intermediate screen for the happy path.** With the readings modal, direct dispatch of `START_TRANSIT` with a period means users never need to see the period selection screen when entering from the modal. `TransitSelectScreen` should remain for the "Choose Another Reading" back-navigation from inside `TransitReadingPage`, but it should not be a required step in the forward path. Similarly, `transit-loading` as a full-screen view can be reduced to a transient state that resolves in ~50ms (just the sync calculation time) before the results page appears.
 
-### feat-auth-modals-login-register
-**Type:** feat  
-Minimal `LoginModal.tsx` and `RegisterModal.tsx`: email + password fields, validation, submit to authService, error display. A "Save to account ✦" badge appears in `CachedDataLanding` for unauthenticated users with local data. Auth is additive — no feature gating, no required login. Logout clears token from localStorage but does not clear birth data or journal entries from localStorage (offline path stays intact).
+**The `transitLoading` boolean in `AppState`.** It exists alongside `view === 'transit-loading'` and they track the same thing. One source of truth is enough. If the view state is `transit-loading`, loading is in progress. The `transitLoading: boolean` field in `AppState` (line 63 of `appState.ts`) can be removed. It appears to be unused in the current rendering logic anyway — no component reads `state.transitLoading` directly for rendering decisions.
 
-### feat-gpt-proxy-server-side
-**Type:** feat  
-Move all OpenAI API calls from client-side `gptInterpretation.ts` to server-side `/api/gpt/*` endpoints. Server holds `OPENAI_API_KEY` in environment. Client calls `/api/gpt/interpret` with prompt payload; server proxies to OpenAI and returns result. Remove `getStoredApiKey()`, `storeApiKey()`, and the API key UI from the frontend. Add per-user rate limiting (simple in-memory counter, 20 GPT calls/day/user). Unauthenticated users get a lower limit or a prompt to create an account.
+**The 400ms setTimeout before chart calculation.** In `App.tsx` line 529-533, there's a `setTimeout(() => { ... }, 400)` before running the natal chart calculation "so the loading spinner renders first." With the split-render approach, this reason no longer applies — the results page renders immediately. The 300ms setTimeout before transit/synastry/solar calculations (lines 583, 631, 723) similarly exists to allow a spinner to render before computation blocks the thread. If split-render is implemented, these delays can be reduced to 0 or eliminated entirely, making the perceived performance genuinely faster, not just cosmetically faster.
 
-### feat-localstorage-migration-upload-flow
-**Type:** feat  
-On first login in a browser with existing local data, detect unsynced journal entries, dream sessions, and birth data. Show a non-blocking banner: "Upload your history to your account?" with Upload and Skip buttons. Batch-POST entries using client UUIDs as idempotent deduplication keys (`INSERT OR IGNORE`). PUT birth data to `/api/profile`. Never clear localStorage on upload — only mark entries with their server-assigned confirmation (server echoes back the UUID). If upload fails, keep localStorage intact and show error. Dream sessions upload as `kind = 'dream'` entries.
-
-### feat-api-client-fetch-abstraction
-**Type:** feat  
-Create `src/services/apiClient.ts`: thin wrapper around `fetch` that injects the Authorization header from the stored JWT, resolves the correct base URL (empty string in prod, `http://localhost:3001` in dev via Vite proxy), enforces a 10-second timeout via `AbortController`, and returns typed error objects instead of thrown exceptions. All `authService.ts` methods go through this client. Catches offline/unreachable states and returns a typed `{ ok: false, error: 'offline' }` result so components can fall back to localStorage without crashing.
-
-### issue-dream-ref-forward-compatible-format
-**Type:** issue  
-`JournalEntry.dreamRef` currently stores a raw localStorage key string (`dream-session-YYYY-MM-DD`). When dream sessions migrate to the server, this field becomes a dangling reference. Change the type to `{ type: 'local', key: string } | { type: 'server', id: string } | null` before entries reach the server. Existing localStorage entries get `{ type: 'local', key: '...' }` during the migration upload. New entries on authenticated sessions get `{ type: 'server', id: '...' }`. This is a 20-line change that prevents a schema migration later.
-
-### issue-journal-save-entries-uses-wrong-quota-guard
-**Type:** issue  
-`saveEntries()` in `CosmicJournalPage.tsx` (lines 44-52) catches `QuotaExceededError` by checking `e.name` and `e.message` with string matching — bypassing the `isQuotaError()` utility already in `src/utils/storage.ts`. Replace with `import { isQuotaError } from '../../utils/storage'` and call it. This is a one-line fix that makes quota detection consistent across all save sites.
-
-### code-vite-proxy-api-dev
-**Type:** code  
-Add `server.proxy` configuration to `vite.config.ts` routing `/api/*` to `http://localhost:3001`. Without this, all backend API calls from the Vite dev server fail with connection refused or CORS errors. Required prerequisite for any local backend development. Also add `build.outDir: 'dist'` explicitly (it's the default but making it explicit prevents confusion when the server references it).
-
-### code-birth-data-server-overwrite-path
-**Type:** code  
-Add a `LOAD_BIRTH_DATA_FROM_SERVER` action to `appReducer` in `appState.ts` that sets `state.birthData` without triggering the `saveBirthData()` localStorage write. Currently `UPDATE_BIRTH_DATA` always saves to localStorage. When authenticated, birth data loaded from the server must overwrite the reducer state without re-persisting to localStorage (which could create a stale localStorage copy that wins on next cold load if the server is unreachable). Explicit action, explicit intent, no ambiguity.
-
-### code-entries-db-index
-**Type:** code  
-Add `CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date ON entries(user_id, kind, date DESC)` to `server/db.ts` schema initialization. The entries table will be queried by user + kind + date range on every journal and dream page load. Index it from day one rather than adding it as a "performance fix" when the table has 10,000 rows and query time becomes visible.
+**The `showCachedLanding` conditional logic in `AppContent`.** The condition `state.view === 'form' && hasCachedBirthData() && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city` on line 727 calls `hasCachedBirthData()` which reads `localStorage` on every render. This is a synchronous localStorage read in a hot render path. The result should be computed once on mount and stored in a ref or state, not called in JSX on every render cycle.

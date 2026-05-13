@@ -1,186 +1,83 @@
-# Steve Jobs — Sprint 7 Proposal Voice
+# Steve Jobs — Voice Analysis
 
-Sprint 6 delivered the Cosmic Journal. The app now has a heartbeat — it accumulates meaning, not just readings. When the Pattern Panel has enough data to speak, the product becomes something genuinely different from every astrology app on earth.
+## The Experience Problem
 
-But sprint 6 also surfaced the existential risk hidden inside everything we built: all of it lives in localStorage. One browser clear. One device switch. One user who finally gets passionate about the journal after 40 entries and then formats their laptop. Gone. That is not a storage problem. That is a product betrayal.
+Seven sprints have produced a genuinely impressive product on the inside. The astronomy engine is real. The GPT interpretations are personal. The Cosmic Journal accumulates meaning. But the first thing a returning user sees after logging in is a panel of nine buttons with equal visual weight — "Read My Chart", "Today", "Journal", "Daily / Weekly / Monthly Reading", "Couple Synastry", "Year Ahead", "Dream Interpretation", "Numerology", "Enter New Birth Data" — listed vertically like a settings screen. It is a drawer of silverware, not a front door.
 
-Sprint 7 fixes the betrayal. And I want to talk about exactly how to do it without creating a new one.
+There are two specific experience failures here that need to be named clearly.
 
----
+**The home screen communicates nothing about who the user is.** The birth details block is there — place, time, date — but they sit above the button wall as though apologizing for themselves. There is no sense that this is *your* app. The Daily Snapshot, which is the richest ambient feature in the product — moon phase, energy score, personalized GPT briefing — is rendered *below* the fold on desktop and squeezed as an afterthought on mobile. The product's best daily experience is hidden from the user on their most important screen. That is backwards.
 
-## The Only Thing That Matters in This Sprint
+**The loading states feel like the browser is broken.** When a user clicks "Couple Synastry" or "Weekly Reading", the entire screen goes blank and a spinner appears. For a product built around mystery and the cosmic, that is precisely the wrong emotional signal. Staring at a spinning glyph while nothing is visible communicates: something is wrong, please wait. The reality is: most of the data — the chart positions, the compatibility scores, the aspect tables — was computed in milliseconds. Only the GPT narrative takes time. But the user is being made to wait for everything as though it all takes equally long. That is not a performance problem. It is an honesty problem.
 
-Here is the question I would ask every engineer on this team, every day of this sprint: **Does this make the user feel more trusted, or less?**
-
-Adding authentication to a product is a minefield. Every authentication system ever built starts with the same good intention — "we need to save user data" — and ends with the same failures — "the user couldn't get in, lost their data, or never bothered to register because the wall felt too high." Those are not technical failures. They are failures of trust architecture.
-
-This product has built something precious: it does not require a login. The user arrives, enters their birth data, and the cosmos opens. That experience is the foundation of everything. If we introduce authentication carelessly, we turn that arrival into an interrogation. The stars now want credentials.
-
-We cannot do that.
+The third failure is subtler but important: after a new user enters their birth data for the first time and clicks through the form wizard, they land on their birth chart — a complex visual with twelve houses, ten planets, and dozens of aspect lines. It is impressive. It is also overwhelming as a first impression. A user who just entered their birthday, time, and city does not know what they are looking at yet. The home screen — grounded in their birth details, showing today's sky, offering a clear path to explore — would serve a first-time user far better than dropping them into the most complex screen in the product.
 
 ---
 
-## The Auth UX Must Feel Like Recognition, Not Registration
+## What Would Make Someone Love This
 
-Every corporate app introduces a login modal the same way: "Create Account" at the top, white form fields, a password strength meter, a "By signing up you agree to our Terms of Service" paragraph in 9px gray text. That experience communicates: "You are a user to be managed."
+A user should open this app in the morning and immediately feel oriented. The home screen should say: *here is who you are, here is what the sky looks like right now, here is the path forward*. That is three things, clearly separated, beautifully weighted.
 
-A mystical astrology app must communicate something completely different: "We want to keep your story safe."
+When they tap "Get Your Readings" — and there should be exactly one such button, prominent and inviting — a menu should open that feels like a beautiful menu at a restaurant you trust. Not a settings panel. Not a list of checkboxes. Three clearly named categories, each with a one-line description, each item carrying its own glyph, arranged with real visual hierarchy. They should be able to find what they want in two seconds.
 
-This distinction is not aesthetic. It changes every copy choice, every interaction, every flow.
+When they click into a reading, the screen should appear *immediately*. The chart is there. The aspect table is there. The planet positions are there. And then — in the space where the interpretation will live — a soft ambient animation: "Consulting the stars..." or "Reading your celestial bond..." with a breathing glyph. Not a full-page block. Not a spinner that hides everything. A specific named slot that is thinking, while everything else is already showing. That is the difference between a product that respects your time and one that treats you as a passenger.
 
-When a user who has been using the app for two months — who has 30 journal entries, a full dream log, a birth chart they trust — first encounters the auth prompt, they should feel: "Yes. I want my data to live somewhere safer than my browser." They should not feel: "Here we go, another account to manage."
+The Daily Snapshot should live *inside* the left panel — not below it, not between panels on mobile, not as an optional scroll. It is the most relevant, most personal content the app has for any given day. It belongs at the center of the home screen, visible without scrolling, as part of the dashboard.
 
-What this means concretely:
-
-**The prompt in `CachedDataLanding` must be about the user's data, not about the app's features.** Not "Sign up to unlock cloud sync" — that is marketing language. The copy should be: "Save your journal to your account — it follows you across devices." The emphasis is on what they already have and what they might lose, not on what we're offering.
-
-**The register/login modal must open like a chamber, not a drawer.** On a mystical dark app, a standard Bootstrap-style white modal with a login form is a complete tonal collapse. The modal background should be deep charcoal, the input borders should be gold at focus, the call-to-action should speak in the product's voice. "Begin ✦" or "Enter ✦" as the register button, not "Create Account."
-
-**First-time registration should ask only for email and password.** Not name, not birthday (we already have it), not "how did you hear about us." Two fields. If we already know their name from the numerology `userName` field, prefill a greeting using it.
-
-**The "Log In" vs "Register" distinction should be minimal.** A single toggle beneath the form fields: "First time? / Already have an account." Not two separate modals. One clean surface that transforms.
+The auth entry point — the `✦` glyph — is invisible to 95% of users. A soft "Save your readings ✦" text link near the birth info block, visible only to unauthenticated users, costs nothing and surfaces the product's persistence layer at exactly the right moment.
 
 ---
 
-## The Unauthenticated Path: The Wall We Must Not Build
+## Proposals I'm Making
 
-The sprint vision says "unauthenticated path stays intact." I agree — and I want to go further. The unauthenticated path must stay delightful, not just intact.
+### Proposal 1 — Home Screen Redesign: Dashboard, Not a Directory
 
-Here is the UX risk: the moment we add an auth prompt, human psychology shifts. Users who previously enjoyed the app without friction now feel they are missing something. The "Save to account ✦" prompt in `CachedDataLanding` must be additive and optional — it must not feel like a nag. This means:
+The `CachedDataLanding` component needs to become a genuine personal dashboard. The left panel should contain: the birth details block, a "Change birth information" link (replacing the "Enter New Birth Data" button), the `DailySnapshotCard` embedded inside the panel at full width, a soft auth nudge line ("Save your readings ✦") for unauthenticated users, and a single large "Get Your Readings ✦" CTA at the bottom. The nine individual navigation buttons are removed entirely. The right panel — the `SkyTodayChart` — stays exactly as it is, because it is beautiful.
 
-One prompt. Not recurring. If the user dismisses it, it does not come back until they have meaningfully more data (say, 10 more journal entries). The app remembers the dismissal in localStorage. We do not guilt them every session.
+This matters because the home screen is the emotional center of the product. A user who opens the app every morning needs to feel like they are walking into their own space. Right now they walk into an admin panel. The DailySnapshotCard is the heartbeat — it needs to be where the heart is, not relegated to a footnote.
 
-The prompt's visual weight must be subordinate to the main actions. It should not compete with "Read My Chart ✦" or "Journal ✦" for attention. A single soft line at the bottom of the menu panel, not a banner, not a card, not a persistent footer. Something like: "✦ Save your chart to your account" rendered in `text-mystic-muted/50` — visible if you look, invisible if you don't.
+### Proposal 2 — "Get Your Readings" Modal: A Menu Worth Opening
 
-Never gate any feature behind auth. The Cosmic Journal, the Dream Journal, transits, synastry — all of it remains accessible without a login. Auth is a preservation mechanism, not a feature gate.
+A new `ReadingsModal.tsx` component, triggered by the single CTA button on the home screen. Three named groups — "You" (Birth Chart, Numerology), "Transits" (Daily, Weekly, Monthly Reading, Year Ahead, Couple Synastry), "Journals" (Cosmic Journal, Dream Interpretation, Today) — each item with its glyph and a one-line descriptor. The modal closes when a selection is made.
 
----
+Design imperative: the groups must feel like three chapters in the same book, not three separate boxes. The modal should open like a chamber — using the same dark-mystic palette, gold accents, serif group headers, and subtle dividers the rest of the product uses. It must be scrollable at 375px. It should feel as considered as the AuthModal does.
 
-## The Data Migration: The Moment of Welcome, Not of Warning
+This matters because discoverability is currently broken. A returning user who wants their weekly reading must scan nine equal-weight buttons to find it. Grouping by conceptual category — who you are vs. what's happening now vs. what you contribute daily — gives the user a mental model that makes every feature more findable and the product more coherent.
 
-When a user logs in for the first time in a browser that has local data — journal entries, dream sessions, birth data — they will see a migration prompt. The sprint vision calls for an "Upload my existing data" flow.
+### Proposal 3 — Post-Form Landing: Home Screen First, Not Birth Chart
 
-This moment has the potential to be either profoundly welcoming or profoundly alarming. The difference is entirely in the language and design.
+After the FormWizard completes, `handleNext()` on the final step should dispatch `SET_VIEW: 'form'` instead of `SET_VIEW: 'loading'`. The user lands on the home screen dashboard, not the birth chart. The birth chart becomes a deliberate choice — "Birth Chart ✦" in the "You" group of the readings modal.
 
-**What the alarming version looks like:** A modal that says "We found local data. Upload it to your account? [Upload] [Skip]." The word "upload" sounds technical. The word "Skip" sounds like you might lose something if you don't act. The user feels a low-grade panic.
+This matters because a first-time user who just entered their birthday, time, and city is not ready for a twelve-house natal chart. They need orientation first. The home screen grounds them — their details confirmed, today's sky visible, a clear path to explore. The birth chart becomes a discovery, not a default.
 
-**What the welcoming version looks like:** A warm, expansive surface — not a warning dialog — that says: "Your cosmic record is here — 30 journal entries, 12 dream sessions, your chart." Then: "We'll carry it to your account now." One action: "Bring it with me ✦." A secondary option, styled very quietly: "Start fresh instead." Nothing about HTTP calls, batch operations, or localStorage keys.
+### Proposal 4 — Split-Render Pattern for All AI-Driven Screens
 
-The words "upload" and "sync" should not appear in any user-facing copy. "Carry," "bring," "keep" — these are the words. They communicate continuity, not technical operations.
+Every screen currently guarded by a full-page loading spinner — `transit-loading`, `synastry-loading`, `solar-return-loading` — should instead render its computed data immediately and then populate the GPT interpretation slot asynchronously. `TransitReadingPage`, `SynastryPage`, `SolarReturnPage`, `TodayPage`, and `NumerologyPage` all contain data that is computed synchronously in under a second (transit aspects, compatibility scores, planet positions, personal numbers). Only the GPT narrative is slow. The two should never have been coupled.
 
-The migration must happen visibly but not anxiously. A simple progress note: "Carrying your journal..." with a slow celestial animation — the same spinning ✦ we use on the chart loading screen. Not a progress bar with percentages. Not a spinning loader. The same visual language the app already uses for moments of computation.
+The GPT slot on each of these screens should display a themed ambient animation: "Consulting the stars...", "Reading your celestial bond...", "Tracking the Sun's return...", "Decoding your frequencies..." — rendered as a breathing shimmer where the interpretation text will land. Not a spinner. Not "Loading...". A named, intentional placeholder that communicates *the sky is thinking about you specifically*, not *please wait*.
 
-If the migration fails, the copy is important: "We couldn't reach the server — your data is still safe here." Not "Upload failed." Not "Error 503." The user should feel that nothing was lost, not that something broke.
+This matters because the current loading pattern is the single biggest UX failure in the product. It is viscerally wrong. The user has chosen a reading, the computation is done, and then they are made to stare at a blank screen for the duration of a GPT call. The perception of speed is the reality of speed for a user. A screen that shows real content immediately — even without the narrative — feels fast. A blank screen with a spinner for four seconds feels broken, even when nothing is broken.
 
----
+### Proposal 5 — Themed Ambient Loading Copy: Audit Every Instance
 
-## The Session Display: A Name, Not a Status Indicator
+Every instance of "Loading...", "Calculating...", "Reading the transits..." (the generic versions) across all affected components should be replaced with themed phrases. These are not cosmetic changes — they are the product's voice speaking during a moment of waiting, which is one of the highest-leverage moments in any product interaction. The copy choices in `App.tsx` loading states, `DailySnapshotCard`, `TodayPage`, `TransitReadingPage`, `SynastryPage`, `SolarReturnPage`, and `NumerologyPage` should all be audited against the vision document's specified strings.
 
-Once logged in, the app should acknowledge the user's presence in the header — but with extraordinary restraint. Not a user avatar, not a dropdown menu, not a "Signed in as user@email.com" line. A single small element: their first name (or the `userName` from numerology if available) and a gold ✦. Like a signature, not an account status.
+### Proposal 6 — Auth Nudge Surface: "Save Your Readings ✦"
 
-Example: "Felipe ✦" rendered in `text-mystic-muted text-xs` at the top right of the header. Clicking it opens a minimal panel: "Sign Out" and nothing else for this sprint. No account settings, no email management, no password change. Those belong in a later sprint when we have a clear need.
+For unauthenticated users on `CachedDataLanding`, a small text link — "Save your readings ✦" — should appear near the birth info block, above or below the daily snapshot. This is not the existing `CachedDataNudge` at the bottom of the panel (which is good but easy to miss). It should be positioned where the user's eye already goes — next to their birth details — and styled softly so it does not compete with the primary CTA. It opens the register modal.
 
-This minimal presence communicates: "We know who you are, and we don't need to make a big deal of it."
-
----
-
-## The CLEAR_CACHE Risk
-
-The current `CLEAR_CACHE` action in `appState.ts` clears all localStorage data and resets the app to the empty form. When the user is authenticated, `CLEAR_CACHE` must also call the backend logout endpoint.
-
-But there is a subtler UX risk here: the "Enter New Birth Data" button in `CachedDataLanding` currently destroys all the user's local data. If the user is authenticated, clicking this should ask what they want to do — clear the local device cache (while keeping server data), or actually start over with a new chart (which should prompt: "This will update your birth data on your account — are you sure?"). These are two completely different intentions hiding behind one button.
-
-The authenticated and unauthenticated versions of "Enter New Birth Data" have different consequences and need different confirmation language.
+This matters because the current `✦` glyph in the header is invisible as an auth entry point. Most users never notice it. Auth has real value to this product — it is the mechanism by which their journal, their dreams, and their birth data are preserved. That value deserves to be gently surfaced at the right moment, not hidden behind a 30%-opacity icon in the corner.
 
 ---
 
-## The FormWizard Completion: Silent Save
+## What I'd Cut
 
-When an authenticated user completes the birth data form wizard and hits calculate, their birth data should be saved to their backend profile silently. No confirmation prompt, no "Saved ✦" toast. Just: we have it now. The same way a trusted bank saves your transaction without asking you to confirm the save operation.
+**All nine individual navigation buttons from the home screen.** They serve the same purpose as the readings modal, but worse. There is no reason to have both.
 
-The only exception: if the save fails due to network error, a single non-blocking notification — "Couldn't save to your account — local copy is safe." Then disappear after 4 seconds.
+**The `DailySnapshotCard` rendering below the fold on desktop.** The current pattern — two panels side-by-side, daily snapshot below — buries the most personally relevant content at the bottom of the page. The snapshot moves inside the left panel, period.
 
----
+**The label "Enter New Birth Data".** It is not what the user is thinking. They are thinking "change my birth information" or "use different data". The action becomes "Change birth information" rendered as a small secondary link, not a button with equal visual weight to "Couple Synastry". The current visual hierarchy implies all nine actions are equally important. They are not.
 
-## What This Sprint Is Not About (But Someone Will Try)
+**The "Loading moon data..." text in TodayPage.** This should either compute instantly (it can — moon phase is synchronous) or render the emoji placeholder immediately. The phrase "Loading moon data..." is technically inaccurate and breaks the product's voice. Moon data is not loaded from a server. It is calculated.
 
-**Social features.** Someone will want to add "who else has this placement" or "share your chart" once user accounts exist. Block it. Hard. Not this sprint, not the next sprint. The user data is private and the app's entire emotional proposition is personal.
-
-**Profile editing.** The question will arise: "Now that we have accounts, can users edit their birth data from a settings page?" Not this sprint. Birth data is updated by re-entering it through the existing form wizard. Accounts are for data persistence, not for adding new management surfaces.
-
-**Password reset.** The vision correctly defers this. Do not ship email delivery in sprint 7. But the "Forgot your password?" link must be present and must show a clear, honest message: "Password reset will be available soon — contact us at [email] if you need immediate help." No dead links. No empty states. An honest placeholder.
-
-**Merging synastry partner data to the server.** This is a tempting scope addition. Partner birth data lives in localStorage too. Don't migrate it in sprint 7. The user's own data — journal, dreams, birth data — is the core. Partner data is temporary and session-specific by nature.
-
----
-
-## Three Things This Sprint Must Absolutely Nail
-
-**1. The transition from localStorage-world to server-world must be invisible to users who don't choose to authenticate.** Open the app, everything works, nothing changed, no prompts unless you have data to protect and you're paying attention to the soft prompt.
-
-**2. The migration flow must complete without losing a single journal entry.** If one entry fails to upload, the entire migration should halt, report the partial state, and leave all local data intact. No "most of your data was saved" halfway states. All or nothing, with a safe fallback.
-
-**3. The auth modals must not look like they were dropped in from a different product.** They must use the same dark background, gold focus states, serif heading font, and celestial copy voice as everything else in the app. If you open the modal and it looks like a SaaS login screen dropped into an astrology app, we have failed.
-
----
-
-## Proposals
-
-### Proposal 1 — feat: auth-modal-as-ceremony
-
-**Type:** feat  
-**Description:** The login/register modals (`LoginModal.tsx`, `RegisterModal.tsx`) should be designed as a single unified modal with a tab-toggle, not two separate components. They use the app's full dark-mystic theme — no white backgrounds, gold-accented focus rings, serif headings. Registration reads "Open Your Account ✦" as the heading, login reads "Return ✦". The submit button for registration says "Begin ✦", for login it says "Enter ✦". Password field shows a minimal gold eye-icon toggle for visibility. These words cost nothing to change and everything to get right.
-
----
-
-### Proposal 2 — feat: migration-welcome-flow
-
-**Type:** feat  
-**Description:** The first-login migration experience in `authService.ts` should not be a warning dialog. It should surface as a warm "your record" panel that lists what's waiting to be carried over — entry count, dream session count, chart status — and uses celestial copy throughout. The action is "Bring it with me ✦", not "Upload". Progress uses the existing ✦ spinner, not a progress bar. Failure state says "Your data is still safe here" without technical jargon. If migration succeeds, localStorage is only cleared after HTTP 200/201 confirmations, never before.
-
----
-
-### Proposal 3 — feat: unauthenticated-nudge-with-restraint
-
-**Type:** feat  
-**Description:** In `CachedDataLanding`, add a single soft auth prompt visible only to unauthenticated users who have meaningful data (journal entries > 0, or app usage > 7 days based on birth data creation date). The prompt is a single muted line at the bottom of the nav panel — below all the main action buttons — that reads "✦ Protect your cosmic record" and opens the register modal. It is dismissed persistently with a small ✕ and does not return until the user has logged 10 more journal entries. No banner, no modal, no floating CTA. The main experience is not interrupted.
-
----
-
-### Proposal 4 — issue: clear-cache-auth-fork
-
-**Type:** issue  
-**Description:** The `CLEAR_CACHE` reducer action in `appState.ts` and the "Enter New Birth Data" button in `CachedDataLanding` must behave differently for authenticated vs unauthenticated users. Authenticated users should see a confirmation that distinguishes between "sign out and clear this device" (keeps server data) and "start over with new birth data" (updates account). The reducer must call the backend logout endpoint when authenticated. The current single-button behavior is a data-loss risk for logged-in users.
-
----
-
-### Proposal 5 — feat: session-badge-not-account-menu
-
-**Type:** feat  
-**Description:** Once authenticated, display the user's first name (or `userName` from numerology if set) plus a ✦ in the app header as a small muted text element — not a menu, not an avatar, not a dropdown. Clicking it shows a minimal inline panel with only "Sign Out" for this sprint. The presence should feel like a quiet signature, not an account management surface. Styled in `text-mystic-muted text-xs`, positioned at the top-right of the header alongside the existing "Astral Chart" title.
-
----
-
-### Proposal 6 — code: authService-offline-fallback
-
-**Type:** code  
-**Description:** All API calls in `authService.ts` must implement a 5-second timeout with an `AbortController` and fall back to the localStorage path on timeout or network error. The error should dispatch a `SET_NETWORK_WARNING` action (analogous to `SET_STORAGE_WARNING` introduced in sprint 6) that renders a soft, dismissible banner: "Could not reach the server — your data is safe locally." The app must never hang or show a spinning state indefinitely due to backend unreachability. Every API call is wrapped, every failure is caught, every fallback is the unauth path.
-
----
-
-### Proposal 7 — code: formwizard-silent-profile-save
-
-**Type:** code  
-**Description:** In `FormWizard.tsx`, on the final step completion (when `SET_VIEW loading` is dispatched), if an `authUser` is present in context, silently POST the birth data to `/api/profile` via `authService.ts`. No confirmation dialog, no success toast on the happy path. On failure: a single non-blocking 4-second notification rendered via the existing `StorageWarningBanner` infrastructure: "Couldn't save to your account — local copy is safe." This keeps the form wizard's existing UX intact while adding server persistence as a transparent layer.
-
----
-
-## What Success Looks Like
-
-Sprint 7 succeeds when a user who has been journaling for two months can log into the app on a new laptop and see all 40 of their entries waiting. When that moment happens, the product graduates from a clever browser tool to something they would pay to keep.
-
-That moment cannot be earned with engineering alone. Every interaction between now and that moment — the first time they see the auth prompt, the migration flow, the session badge — must build trust incrementally. If any one of those interactions feels corporate or clinical, we have broken the spell that the app has spent six sprints casting.
-
-The one-sentence story of this sprint: **Your story is safe now.**
-
-Everything else is in service of making the user feel that, and believe it.
+**Any full-page spinner that persists for more than 400ms.** The vision document states the limit clearly. Every screen in the app should be held to that standard. If the calculation itself takes longer, the results page renders with whatever is ready and fills in progressively. Users should never see a blank white screen or a full-page spinner for the duration of a GPT call. That is the single most important experience standard for this sprint.
