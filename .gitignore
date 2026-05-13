@@ -5,8 +5,12 @@ node_modules/
 
 # Build output
 dist/
+dist-server/
 build/
 .next/
+
+# SQLite database
+data/
 
 # Environment
 .env
