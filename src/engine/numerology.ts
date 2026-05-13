@@ -66,12 +66,12 @@ export function calculatePersonalMonth(personalYear: number, currentMonth?: numb
 // Personal Day = reduce(birthMonth + birthDay + universalDay)
 // Universal Day = reduce(sum of all individual digits in current YYYY-MM-DD)
 // Master numbers (11, 22, 33) are preserved at every reduction step.
-export function calculatePersonalDay(birthDate: string): number {
+export function calculatePersonalDay(birthDate: string, targetDate?: Date): number {
   const [, birthMonthStr, birthDayStr] = birthDate.split('-')
   const birthMonth = parseInt(birthMonthStr, 10)
   const birthDay = parseInt(birthDayStr, 10)
 
-  const now = new Date()
+  const now = targetDate ?? new Date()
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
   const universalDaySum = dateStr.split('').reduce((acc, d) => acc + Number(d), 0)
   const universalDay = reduceToSingleDigit(universalDaySum)

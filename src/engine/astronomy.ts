@@ -406,7 +406,7 @@ export function getMoonSignAndPhase(date: Date): { sign: string; phase: string; 
 /**
  * Resolve a local date/time + IANA timezone to a UTC Date.
  */
-function resolveToUTC(
+export function resolveToUTC(
   year: number,
   month: number,
   day: number,

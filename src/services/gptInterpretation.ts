@@ -1,4 +1,6 @@
 import type { ChartData } from '../engine/types'
+import type { JournalEntry, JournalTag } from '../components/journal/types'
+import type { TransitAspect } from '../engine/transits'
 
 const API_KEY_STORAGE = 'astral-chart-openai-key'
 const API_URL = 'https://api.openai.com/v1/chat/completions'
@@ -465,4 +467,141 @@ export async function getDiscussResponse(
     ], { temperature: 0.8, max_tokens: 1500 })
   )
   return result || 'Unable to generate a response.'
+}
+
+/**
+ * Generate a single-sentence cosmic annotation for a newly saved journal entry.
+ * Called once on first save; result is stored permanently in entry.gptAnnotation.
+ */
+export async function generateJournalEntryAnnotation(
+  entry: JournalEntry,
+  topTransits: TransitAspect[],
+  moonPhase: string,
+  moonSign: string,
+  chartData: ChartData,
+  apiKey: string,
+): Promise<string> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const sun = chartData.planets.find(p => p.name === 'Sun')
+  const moon = chartData.planets.find(p => p.name === 'Moon')
+  const asc = chartData.angles?.ascendant
+
+  const natalContext = [
+    sun ? `Sun in ${sun.sign}` : '',
+    moon ? `Moon in ${moon.sign}` : '',
+    asc ? `Ascendant in ${asc.sign}` : '',
+  ].filter(Boolean).join(', ')
+
+  const transitLines = topTransits.slice(0, 3).map(t =>
+    `${t.transitPlanet} ${t.symbol} natal ${t.natalPlanet} (${t.orb.toFixed(1)}° orb, ${t.nature})`
+  ).join('\n') || 'No tight transit aspects active.'
+
+  const bodyContext = entry.body.trim()
+    ? `Entry text: "${entry.body.slice(0, 300)}"`
+    : 'No text recorded — moment only.'
+
+  const prompt = `Date: ${entry.date}
+Time: ${entry.time}
+Personal Day: ${entry.numerologicalDay}
+Moon: ${moonPhase} in ${moonSign}
+
+Natal chart: ${natalContext}
+
+Active transits at this moment:
+${transitLines}
+
+${bodyContext}
+
+Write one sentence (20-30 words) naming the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'Write one sentence (20-30 words) that names the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 80 })
+  )
+  return result.trim() || 'The sky held a particular arrangement at this moment.'
+}
+
+export interface PatternSummary {
+  tagGroup: JournalTag
+  dominantPlanets: string[]
+  dominantPhases: string[]
+  dominantPersonalDays: number[]
+  sampleSize: number
+  entryDates: string[]
+}
+
+export interface PatternReading {
+  tagGroup: JournalTag
+  heading: string
+  body: string
+}
+
+/**
+ * Synthesize aggregated journal pattern data into named pattern cards with human-voiced text.
+ * Called once per session on first panel expand.
+ */
+export async function generateCosmicPatternReading(
+  patterns: PatternSummary[],
+  chartData: ChartData,
+  totalEntryCount: number,
+  apiKey: string,
+): Promise<PatternReading[]> {
+  if (!apiKey) throw new Error('OpenAI API key is required.')
+
+  const sun = chartData.planets.find(p => p.name === 'Sun')
+  const moon = chartData.planets.find(p => p.name === 'Moon')
+  const asc = chartData.angles?.ascendant
+
+  const natalContext = [
+    sun ? `Sun in ${sun.sign}` : '',
+    moon ? `Moon in ${moon.sign}` : '',
+    asc ? `Ascendant in ${asc.sign}` : '',
+  ].filter(Boolean).join(', ')
+
+  const patternLines = patterns.map(p => {
+    const dates = p.entryDates.slice(0, 5).join(', ')
+    return `Category: ${p.tagGroup} (${p.sampleSize} entries, dates: ${dates})
+Dominant planets: ${p.dominantPlanets.join(', ') || 'none identified'}
+Dominant moon phases: ${p.dominantPhases.join(', ') || 'none identified'}
+Dominant personal days: ${p.dominantPersonalDays.join(', ') || 'none identified'}`
+  }).join('\n\n')
+
+  const prompt = `Total journal entries: ${totalEntryCount}
+Natal chart: ${natalContext}
+
+Patterns identified across life events:
+
+${patternLines}
+
+For each event category listed, write one named pattern with a 3-5 word heading and 1-2 sentences. Return your response as a JSON array with objects: { "tagGroup": "...", "heading": "...", "body": "..." }
+
+Do not speak statistically. Speak in present tense. Name the pattern as a quality of this person — not as a count of data points. Use mirror-language: state what the pattern reveals about who this person is, not what their data shows. Do not use the word "data", "pattern", or "trend". Do not hedge. Write as though you have known this person for years.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI(apiKey, [
+      {
+        role: 'system',
+        content: 'You are reading a person\'s longitudinal life record through the cosmos. For each event category listed, write one named pattern with a 3-5 word heading and 1-2 sentences. Do not speak statistically. Speak in present tense. Name the pattern as a quality of this person — not as a count of data points. Use mirror-language: state what the pattern reveals about who this person is, not what their data shows. Do not use the word "data", "pattern", or "trend". Do not hedge. Write as though you have known this person for years. Return valid JSON array only.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 800 })
+  )
+
+  try {
+    const cleaned = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    return JSON.parse(cleaned) as PatternReading[]
+  } catch {
+    // Fallback: return pattern readings with the raw text
+    return patterns.map(p => ({
+      tagGroup: p.tagGroup,
+      heading: `${p.tagGroup.charAt(0).toUpperCase() + p.tagGroup.slice(1)} at Your Thresholds`,
+      body: result.slice(0, 200),
+    }))
+  }
 }

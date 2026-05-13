@@ -38,6 +38,13 @@ export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'trans
   | 'numerology'
   | 'solar-return-loading' | 'solar-return'
   | 'today'
+  | 'journal'
+
+export const DREAM_SESSION_KEY_PREFIX = 'dream-session-'
+
+export function getDreamSessionKey(date: string): string {
+  return `${DREAM_SESSION_KEY_PREFIX}${date}`
+}
 
 export interface AppState {
   view: AppView
