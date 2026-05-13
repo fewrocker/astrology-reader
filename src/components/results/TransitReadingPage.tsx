@@ -336,10 +336,10 @@ export default function TransitReadingPage() {
           Discuss ✦
         </button>
         <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'transit-select' })}
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
           className="px-6 py-3 bg-mystic-purple/10 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/20 transition-colors"
         >
-          ← Choose Another Reading
+          ← Home
         </button>
         <button
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'results' })}

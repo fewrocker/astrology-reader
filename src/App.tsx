@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
 import AuthModal from './components/auth/AuthModal'
+import ReadingsModal from './components/navigation/ReadingsModal'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -198,6 +199,7 @@ function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
   const { state, dispatch } = useApp()
   const { birthData } = state
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const [readingsOpen, setReadingsOpen] = useState(false)
   const [dreamOpen, setDreamOpen] = useState(false)
 
   const formatDate = (d: string) => {
@@ -227,12 +229,12 @@ function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
   return (
     <div className="w-full max-w-7xl mx-auto">
       <div className="flex flex-col lg:flex-row items-center lg:items-stretch gap-8 lg:gap-0">
-        {/* Left: Menu — 40% */}
+        {/* Left: Identity + Snapshot + CTA — 40% */}
         <div className="w-full lg:w-[40%] flex flex-col justify-center px-2 lg:pr-8">
           <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 glow-gold">
             <p className="text-mystic-muted text-xs uppercase tracking-widest mb-4">Welcome back</p>
             <h2 className="font-heading text-2xl text-mystic-gold mb-6">Your Birth Details</h2>
-            <div className="space-y-2 text-sm mb-8">
+            <div className="space-y-2 text-sm mb-4">
               <p className="text-mystic-text">
                 <span className="text-mystic-purple">Place:</span> {cityLabel}
               </p>
@@ -244,154 +246,32 @@ function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
                 <span className="text-mystic-purple">Date:</span> {formatDate(birthData.date)}
               </p>
             </div>
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'loading' })}
-                className="w-full px-6 py-3 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors"
-              >
-                Read My Chart ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.12)',
-                  border: '1px solid rgba(201,168,76,0.35)',
-                  color: '#c9a84c',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
-                }}
-              >
-                Today ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'journal' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.12)',
-                  border: '1px solid rgba(201,168,76,0.35)',
-                  color: '#c9a84c',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
-                }}
-              >
-                Journal ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!state.chartData) {
-                    dispatch({ type: 'SET_VIEW', view: 'loading' })
-                    dispatch({ type: 'PENDING_TRANSIT' })
-                  } else {
-                    dispatch({ type: 'SET_VIEW', view: 'transit-select' })
-                  }
-                }}
-                className="w-full px-6 py-3 bg-mystic-purple/20 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/30 transition-colors"
-              >
-                Daily / Weekly / Monthly Reading ☽
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'partner-form' })}
-                className="w-full px-6 py-3 bg-pink-900/20 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/30 transition-colors"
-              >
-                Couple Synastry ♡
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'START_SOLAR_RETURN' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.08)',
-                  border: '1px solid rgba(201,168,76,0.22)',
-                  color: 'rgba(201,168,76,0.75)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.16)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.40)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.08)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.22)'
-                }}
-              >
-                Year Ahead ☀
-              </button>
-              <button
-                type="button"
-                onClick={() => setDreamOpen(true)}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(109, 40, 217, 0.15)',
-                  border: '1px solid rgba(139, 92, 246, 0.28)',
-                  color: 'rgba(196, 181, 253, 0.85)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.25)'
-                  e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.42)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.15)'
-                  e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.28)'
-                }}
-              >
-                Dream Interpretation ☽
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'numerology' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.1)',
-                  border: '1px solid rgba(201,168,76,0.25)',
-                  color: 'rgba(201,168,76,0.85)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.18)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.45)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.1)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.25)'
-                }}
-              >
-                Numerology ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'CLEAR_CACHE' })}
-                className="w-full px-6 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
-              >
-                Enter New Birth Data
-              </button>
-            </div>
+
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'CLEAR_CACHE' })}
+              className="text-xs text-mystic-muted hover:text-mystic-text transition-colors underline underline-offset-2 mb-6 block"
+            >
+              Change birth information
+            </button>
+
+            {chartData && (
+              <div className="mb-6">
+                <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setReadingsOpen(true)}
+              className="w-full px-6 py-3 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors"
+            >
+              Get Your Readings ✦
+            </button>
 
             <CachedDataNudge onOpenAuth={onOpenAuth} />
           </div>
         </div>
-
-        {/* Mobile-only: Daily Snapshot between menu and sky */}
-        {chartData && (
-          <div className="w-full lg:hidden">
-            <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
-          </div>
-        )}
 
         {/* Right: Today's Sky — 60% */}
         <div className="w-full lg:w-[60%] flex flex-col items-center justify-center relative min-h-[400px] lg:min-h-[600px]">
@@ -406,12 +286,12 @@ function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
         </div>
       </div>
 
-      {/* Desktop-only: Daily Snapshot below the two panels */}
-      {chartData && (
-        <div className="mt-8 hidden lg:block">
-          <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
-        </div>
-      )}
+      <ReadingsModal
+        isOpen={readingsOpen}
+        onClose={() => setReadingsOpen(false)}
+        onSelect={action => dispatch(action)}
+        onOpenDream={() => setDreamOpen(true)}
+      />
 
       <DreamModal open={dreamOpen} onClose={() => setDreamOpen(false)} chartData={chartData} />
     </div>
