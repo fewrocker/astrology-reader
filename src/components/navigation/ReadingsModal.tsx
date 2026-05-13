@@ -1,147 +1,126 @@
 import { useEffect, useRef } from 'react'
-import { useApp } from '../../context/AppContext'
+import type { AppAction } from '../../context/appState'
 
 interface ReadingsModalProps {
   isOpen: boolean
   onClose: () => void
-  onDreamOpen: () => void
-  triggerRef?: React.RefObject<HTMLButtonElement>
+  onSelect: (action: AppAction) => void
+  onOpenDream: () => void
 }
 
-interface ReadingItem {
+interface ModalItem {
   glyph: string
   label: string
   descriptor: string
-  action: () => void
+  action?: AppAction
+  isDream?: boolean
 }
 
-interface ReadingGroup {
-  id: string
-  title: string
-  items: ReadingItem[]
+interface ModalGroup {
+  heading: string
+  items: ModalItem[]
 }
 
-export default function ReadingsModal({ isOpen, onClose, onDreamOpen, triggerRef }: ReadingsModalProps) {
-  const { dispatch } = useApp()
+const GROUPS: ModalGroup[] = [
+  {
+    heading: 'You',
+    items: [
+      {
+        glyph: '✦',
+        label: 'Birth Chart',
+        descriptor: 'Your natal positions, decoded once and kept forever',
+        action: { type: 'SET_VIEW', view: 'loading' },
+      },
+      {
+        glyph: '✦',
+        label: 'Numerology',
+        descriptor: 'Your life numbers and what they say about your path',
+        action: { type: 'SET_VIEW', view: 'numerology' },
+      },
+    ],
+  },
+  {
+    heading: 'Transits',
+    items: [
+      {
+        glyph: '☀',
+        label: 'Daily Reading',
+        descriptor: 'What the sky is doing to your chart right now, today',
+        action: { type: 'START_TRANSIT', period: 'daily' },
+      },
+      {
+        glyph: '✦',
+        label: 'Weekly Reading',
+        descriptor: 'This week\'s planetary influence — themes, communication, energy',
+        action: { type: 'START_TRANSIT', period: 'weekly' },
+      },
+      {
+        glyph: '☽',
+        label: 'Monthly Reading',
+        descriptor: 'Slow-moving planets, retrogrades, and deeper currents this month',
+        action: { type: 'START_TRANSIT', period: 'monthly' },
+      },
+      {
+        glyph: '☀',
+        label: 'Year Ahead',
+        descriptor: 'Your solar return chart — the sky on your next birthday',
+        action: { type: 'START_SOLAR_RETURN' },
+      },
+      {
+        glyph: '♡',
+        label: 'Couple Synastry',
+        descriptor: 'Two charts overlaid — where you align and where you stretch',
+        action: { type: 'SET_VIEW', view: 'partner-form' },
+      },
+    ],
+  },
+  {
+    heading: 'Journals',
+    items: [
+      {
+        glyph: '✦',
+        label: 'Cosmic Journal',
+        descriptor: 'Your annotated sky record — entries, tags, and reflections',
+        action: { type: 'SET_VIEW', view: 'journal' },
+      },
+      {
+        glyph: '☽',
+        label: 'Dream Interpretation',
+        descriptor: 'Symbols from your sleep, read through your natal chart',
+        isDream: true,
+      },
+      {
+        glyph: '✦',
+        label: 'Today',
+        descriptor: 'Moon phase, personal day number, and a reading for this exact day',
+        action: { type: 'SET_VIEW', view: 'today' },
+      },
+    ],
+  },
+]
+
+export default function ReadingsModal({ isOpen, onClose, onSelect, onOpenDream }: ReadingsModalProps) {
+  const firstItemRef = useRef<HTMLButtonElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-  const closeRef = useRef<HTMLButtonElement>(null)
-  const wasOpenRef = useRef(false)
 
-  const handleSelect = (action: () => void) => {
-    onClose()
-    action()
-  }
-
-  const handleDream = () => {
-    onClose()
-    onDreamOpen()
-  }
-
-  const groups: ReadingGroup[] = [
-    {
-      id: 'you',
-      title: 'You',
-      items: [
-        {
-          glyph: '✦',
-          label: 'Birth Chart',
-          descriptor: 'Your natal positions, decoded once and kept forever',
-          action: () => dispatch({ type: 'SET_VIEW', view: 'loading' }),
-        },
-        {
-          glyph: '✦',
-          label: 'Numerology',
-          descriptor: 'Your life path, personal year, and frequency decoded',
-          action: () => dispatch({ type: 'SET_VIEW', view: 'numerology' }),
-        },
-      ],
-    },
-    {
-      id: 'transits',
-      title: 'Transits',
-      items: [
-        {
-          glyph: '☀',
-          label: 'Daily Reading',
-          descriptor: 'What the sky is doing to your chart today',
-          action: () => dispatch({ type: 'START_TRANSIT', period: 'daily' }),
-        },
-        {
-          glyph: '✦',
-          label: 'Weekly Reading',
-          descriptor: 'Key themes, communication, and relationship energy this week',
-          action: () => dispatch({ type: 'START_TRANSIT', period: 'weekly' }),
-        },
-        {
-          glyph: '☽',
-          label: 'Monthly Reading',
-          descriptor: 'Slow planet transits, retrogrades, and major shifts this month',
-          action: () => dispatch({ type: 'START_TRANSIT', period: 'monthly' }),
-        },
-        {
-          glyph: '☀',
-          label: 'Year Ahead',
-          descriptor: 'Your solar return chart and the year\'s defining themes',
-          action: () => dispatch({ type: 'START_SOLAR_RETURN' }),
-        },
-        {
-          glyph: '♡',
-          label: 'Couple Synastry',
-          descriptor: 'Compare two charts and read your relationship\'s celestial blueprint',
-          action: () => dispatch({ type: 'SET_VIEW', view: 'partner-form' }),
-        },
-      ],
-    },
-    {
-      id: 'journals',
-      title: 'Journals',
-      items: [
-        {
-          glyph: '✦',
-          label: 'Cosmic Journal',
-          descriptor: 'Your personal archive of readings, reflections, and insights',
-          action: () => dispatch({ type: 'SET_VIEW', view: 'journal' }),
-        },
-        {
-          glyph: '☽',
-          label: 'Dream Interpretation',
-          descriptor: 'Decode last night\'s dream through your natal chart',
-          action: handleDream,
-        },
-        {
-          glyph: '✦',
-          label: 'Today',
-          descriptor: 'Moon phase, personal day number, and today\'s sky at a glance',
-          action: () => dispatch({ type: 'SET_VIEW', view: 'today' }),
-        },
-      ],
-    },
-  ]
-
-  // Focus trap + Escape key
+  // Escape key and focus trap
   useEffect(() => {
     if (!isOpen) return
 
     const modal = modalRef.current
-    if (!modal) return
-
-    const focusables = Array.from(
-      modal.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-    )
-    const first = focusables[0]
-    const last = focusables[focusables.length - 1]
-
-    // Move focus into modal
-    first?.focus()
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
         return
       }
-      if (e.key === 'Tab') {
+      if (e.key === 'Tab' && modal) {
+        const focusables = Array.from(
+          modal.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        )
+        const first = focusables[0]
+        const last = focusables[focusables.length - 1]
         if (focusables.length === 0) return
         if (e.shiftKey) {
           if (document.activeElement === first) {
@@ -161,86 +140,96 @@ export default function ReadingsModal({ isOpen, onClose, onDreamOpen, triggerRef
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
 
-  // Return focus to trigger only on close transition, not on initial mount
+  // Focus first item on open
   useEffect(() => {
-    if (!isOpen && wasOpenRef.current) {
-      triggerRef?.current?.focus()
+    if (isOpen) {
+      setTimeout(() => firstItemRef.current?.focus(), 50)
     }
-    wasOpenRef.current = isOpen
-  }, [isOpen, triggerRef])
+  }, [isOpen])
 
   if (!isOpen) return null
 
+  const handleItemClick = (item: ModalItem) => {
+    if (item.isDream) {
+      onOpenDream()
+    } else if (item.action) {
+      onSelect(item.action)
+    }
+    onClose()
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.75)' }}
+      className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 sm:items-center sm:pt-4"
+      style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      aria-hidden="false"
     >
       <div
         ref={modalRef}
+        className="relative w-full max-w-sm rounded-2xl overflow-hidden"
+        style={{
+          background: 'linear-gradient(160deg, rgba(22,16,8,0.98) 0%, rgba(15,11,5,0.99) 100%)',
+          border: '1px solid rgba(201,168,76,0.3)',
+          boxShadow: '0 0 48px rgba(201,168,76,0.08), 0 24px 64px rgba(0,0,0,0.7)',
+          animation: 'modal-in 150ms ease-out both',
+        }}
         role="dialog"
         aria-modal="true"
-        aria-label="Get Your Readings"
-        className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-6"
-        style={{
-          background: 'linear-gradient(160deg, rgba(18,14,6,0.98) 0%, rgba(12,9,4,0.99) 100%)',
-          border: '1px solid rgba(201,168,76,0.28)',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(201,168,76,0.08)',
-          animation: 'modal-in 180ms ease-out both',
-        }}
+        aria-label="Choose a reading"
       >
         {/* Close button */}
         <button
-          ref={closeRef}
           type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-mystic-muted hover:text-mystic-text transition-colors text-lg leading-none"
-          aria-label="Close readings menu"
+          className="absolute top-4 right-4 text-lg transition-colors z-10 hover:text-mystic-gold/75 text-mystic-gold/35"
+          aria-label="Close"
         >
-          ✕
+          ×
         </button>
 
-        <h2 className="font-heading text-2xl text-mystic-gold mb-1">Your Readings</h2>
-        <p className="text-mystic-muted text-xs mb-6 tracking-wide">Choose a path for your chart</p>
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4">
+          <h2 className="font-heading text-xl text-mystic-gold mb-1">Your Readings ✦</h2>
+          <p className="text-xs text-mystic-muted tracking-widest uppercase">What calls to you today</p>
+        </div>
 
-        <div className="space-y-6">
-          {groups.map((group, gi) => (
-            <div key={group.id} role="group" aria-labelledby={`group-${group.id}`}>
-              <h3
-                id={`group-${group.id}`}
-                className="font-heading text-base text-mystic-gold/60 uppercase tracking-widest mb-3 pb-2"
-                style={{ borderBottom: '1px solid rgba(201,168,76,0.12)' }}
-              >
-                {group.title}
-              </h3>
-              <div className="space-y-1">
-                {group.items.map(item => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => handleSelect(item.action)}
-                    className="w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors hover:bg-mystic-gold/8 group"
-                  >
-                    <span
-                      className="text-mystic-gold/50 text-base leading-none mt-0.5 flex-shrink-0 group-hover:text-mystic-gold/80 transition-colors"
-                      aria-hidden="true"
-                    >
-                      {item.glyph}
+        {/* Scrollable content */}
+        <div className="overflow-y-auto max-h-[70vh] px-6 pb-6">
+          {GROUPS.map((group, gi) => (
+            <div key={group.heading} className={gi > 0 ? 'mt-6' : ''}>
+              {gi > 0 && (
+                <div
+                  className="border-t mb-4"
+                  style={{ borderColor: 'rgba(201,168,76,0.15)' }}
+                />
+              )}
+              <p className="font-heading text-xs text-mystic-gold/60 tracking-widest uppercase mb-3">
+                {group.heading}
+              </p>
+
+              {group.items.map((item, ii) => (
+                <button
+                  key={item.label}
+                  ref={gi === 0 && ii === 0 ? firstItemRef : undefined}
+                  type="button"
+                  onClick={() => handleItemClick(item)}
+                  className={`w-full flex items-start gap-3 px-2 py-3 rounded-lg hover:bg-mystic-gold/5 transition-colors duration-150 text-left ${
+                    ii < group.items.length - 1 ? 'border-b border-mystic-border/30' : ''
+                  }`}
+                >
+                  <span className="w-8 text-right flex-shrink-0 text-mystic-gold/50 text-base leading-6 pt-0.5">
+                    {item.glyph}
+                  </span>
+                  <span className="flex flex-col min-w-0">
+                    <span className="font-heading text-base text-mystic-gold leading-tight">
+                      {item.label}
                     </span>
-                    <span className="flex flex-col min-w-0">
-                      <span className="font-heading text-mystic-text text-sm group-hover:text-mystic-gold transition-colors">
-                        {item.label}
-                      </span>
-                      <span className="text-xs text-mystic-muted leading-snug mt-0.5">
-                        {item.descriptor}
-                      </span>
+                    <span className="text-xs text-mystic-muted mt-0.5 leading-snug">
+                      {item.descriptor}
                     </span>
-                  </button>
-                ))}
-              </div>
-              {gi < groups.length - 1 && <div className="mt-4" />}
+                  </span>
+                </button>
+              ))}
             </div>
           ))}
         </div>

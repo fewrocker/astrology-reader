@@ -354,10 +354,10 @@ export default function SynastryPage() {
           Couple Transits ☽
         </button>
         <button
-          onClick={() => dispatch({ type: 'RESET' })}
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
           className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
         >
-          Back to Menu
+          ← Home
         </button>
       </div>
 

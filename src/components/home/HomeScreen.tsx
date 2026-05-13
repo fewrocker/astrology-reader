@@ -157,8 +157,8 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
       <ReadingsModal
         isOpen={readingsOpen}
         onClose={() => setReadingsOpen(false)}
-        onDreamOpen={() => setDreamOpen(true)}
-        triggerRef={ctaRef}
+        onSelect={action => dispatch(action)}
+        onOpenDream={() => setDreamOpen(true)}
       />
 
       <DreamModal
