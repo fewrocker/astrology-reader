@@ -29,8 +29,8 @@ export function calculateBirthdayNumber(birthDate: string): number {
   return reduceToSingleDigit(day)
 }
 
-export function calculatePersonalYear(birthDate: string, currentYear?: number): number {
-  const year = currentYear ?? new Date().getFullYear()
+export function calculatePersonalYear(birthDate: string, targetDate?: Date): number {
+  const year = targetDate ? targetDate.getFullYear() : new Date().getFullYear()
   const [, month, day] = birthDate.split('-')
   const digits = `${month}${day}${year}`.split('').map(Number)
   const sum = digits.reduce((acc, d) => acc + d, 0)
@@ -58,20 +58,20 @@ export function detectKarmicDebt(intermediate: number): number | null {
   return null
 }
 
-export function calculatePersonalMonth(personalYear: number, currentMonth?: number): number {
-  const month = currentMonth ?? (new Date().getMonth() + 1)
+export function calculatePersonalMonth(personalYear: number, targetDate?: Date): number {
+  const month = targetDate ? (targetDate.getMonth() + 1) : (new Date().getMonth() + 1)
   return reduceToSingleDigit(personalYear + month)
 }
 
 // Personal Day = reduce(birthMonth + birthDay + universalDay)
 // Universal Day = reduce(sum of all individual digits in current YYYY-MM-DD)
 // Master numbers (11, 22, 33) are preserved at every reduction step.
-export function calculatePersonalDay(birthDate: string): number {
+export function calculatePersonalDay(birthDate: string, targetDate?: Date): number {
   const [, birthMonthStr, birthDayStr] = birthDate.split('-')
   const birthMonth = parseInt(birthMonthStr, 10)
   const birthDay = parseInt(birthDayStr, 10)
 
-  const now = new Date()
+  const now = targetDate ?? new Date()
   const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
   const universalDaySum = dateStr.split('').reduce((acc, d) => acc + Number(d), 0)
   const universalDay = reduceToSingleDigit(universalDaySum)
@@ -90,18 +90,18 @@ export interface NumerologyReading {
   soulUrge?: number
 }
 
-export function calculateNumerology(birthDate: string, name?: string): NumerologyReading {
+export function calculateNumerology(birthDate: string, name?: string, targetDate?: Date): NumerologyReading {
   const digits = birthDate.replace(/-/g, '').split('').map(Number)
   const lifePathSum = digits.reduce((acc, d) => acc + d, 0)
   const { result: lifePath, intermediate } = reduceWithIntermediate(lifePathSum)
-  const personalYear = calculatePersonalYear(birthDate)
+  const personalYear = calculatePersonalYear(birthDate, targetDate)
 
   return {
     lifePath,
     birthdayNumber: calculateBirthdayNumber(birthDate),
     personalYear,
-    personalMonth: calculatePersonalMonth(personalYear),
-    personalDay: calculatePersonalDay(birthDate),
+    personalMonth: calculatePersonalMonth(personalYear, targetDate),
+    personalDay: calculatePersonalDay(birthDate, targetDate),
     karmicDebt: detectKarmicDebt(intermediate),
     expressionNumber: name ? calculateExpressionNumber(name) : undefined,
     soulUrge: name ? calculateSoulUrge(name) : undefined,
