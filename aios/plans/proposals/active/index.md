@@ -1,3 +1,3 @@
 # Active Proposals Index
 
-No active proposals. Sprint 0007 is complete.
+_No active proposals. All sprint-0008 proposals have been completed and moved to done._

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
-import { assignTransitHouses } from '../../engine/transits'
+import { assignTransitHouses, buildTransitPrompt } from '../../engine/transits'
 import { buildTransitTimeline } from '../../engine/transitTimeline'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
@@ -11,6 +11,9 @@ import TransitTimeline from '../reading/TransitTimeline'
 import AdvanceTab from '../reading/AdvanceTab'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
+import GptSkeleton from '../ui/GptSkeleton'
+import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
+import { getGptInterpretation } from '../../services/gptInterpretation'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 
@@ -184,6 +187,16 @@ export default function TransitReadingPage() {
   const { chartData, aspects, transitData, transitInterpretation, transitPeriod, birthData } = state
   const [discussOpen, setDiscussOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'reading' | 'timeline' | 'advance'>('reading')
+  const [retrying, setRetrying] = useState(false)
+
+  async function handleRetryGpt() {
+    if (!chartData || !transitData || !transitPeriod || retrying) return
+    setRetrying(true)
+    const prompt = buildTransitPrompt(chartData, transitData, birthData.date, transitPeriod, state.transitTargetMonth ?? undefined)
+    const interpretation = await getGptInterpretation(prompt)
+    dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
+    setRetrying(false)
+  }
 
   const housedTransitPlanets = useMemo(
     () => chartData && transitData ? assignTransitHouses(transitData.currentPlanets, chartData.houses) : [],
@@ -286,7 +299,20 @@ export default function TransitReadingPage() {
           <CurrentMoonWidget date={new Date(transitData.dateRange.start + 'T12:00:00')} />
 
           {/* GPT interpretation */}
-          {transitInterpretation && (
+          {transitInterpretation === null || retrying ? (
+            <GptSkeleton label="Consulting the stars..." accentColor="gold" />
+          ) : isGptError(transitInterpretation) ? (
+            <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3 mb-6">
+              <p className="text-mystic-muted text-sm">{getGptErrorMessage(transitInterpretation)}</p>
+              <button
+                type="button"
+                onClick={handleRetryGpt}
+                className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
+              >
+                ✦ Ask again
+              </button>
+            </div>
+          ) : (
             <TransitInterpretation text={transitInterpretation} />
           )}
 
@@ -329,17 +355,19 @@ export default function TransitReadingPage() {
 
       {/* navigation buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8 mb-12">
+        {transitInterpretation !== null && !isGptError(transitInterpretation) && (
+          <button
+            onClick={() => setDiscussOpen(true)}
+            className="px-6 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
+          >
+            Discuss ✦
+          </button>
+        )}
         <button
-          onClick={() => setDiscussOpen(true)}
-          className="px-6 py-3 bg-mystic-blue/10 border border-mystic-blue/30 text-mystic-blue font-heading rounded-lg hover:bg-mystic-blue/20 transition-colors"
-        >
-          Discuss ✦
-        </button>
-        <button
-          onClick={() => dispatch({ type: 'SET_VIEW', view: 'transit-select' })}
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
           className="px-6 py-3 bg-mystic-purple/10 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/20 transition-colors"
         >
-          ← Choose Another Reading
+          ← Home
         </button>
         <button
           onClick={() => dispatch({ type: 'SET_VIEW', view: 'results' })}

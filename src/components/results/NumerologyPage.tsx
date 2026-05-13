@@ -8,6 +8,7 @@ import { calculateChart } from '../../engine/astronomy'
 import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, generateNumerologySkyChartReading, getGptNudge } from '../../services/gptInterpretation'
 import NumerologyDiscussModal from './NumerologyDiscussModal'
 import NumerologySkyChart, { FrequencyBar } from '../chart/NumerologySkyChart'
+import GptSkeleton from '../ui/GptSkeleton'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -235,36 +236,6 @@ function KarmicDebtCard({ debtNumber }: { debtNumber: number }) {
   )
 }
 
-function NarrativeSkeleton() {
-  return (
-    <div className="bg-mystic-surface/50 border border-mystic-gold/25 rounded-xl p-6 md:p-8">
-      <div className="flex items-center gap-2 mb-5">
-        <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Your Reading</span>
-      </div>
-      <div className="space-y-3">
-        {[100, 90, 75, 100, 85, 60, 95, 80].map((w, i) => (
-          <div
-            key={i}
-            className="h-3 rounded-full"
-            style={{
-              width: `${w}%`,
-              background: 'linear-gradient(90deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.06) 100%)',
-              backgroundSize: '200% 100%',
-              animation: `shimmer 1.8s ease-in-out infinite ${i * 0.1}s`,
-            }}
-          />
-        ))}
-      </div>
-      <style>{`
-        @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
-    </div>
-  )
-}
-
 function CrossReadingSkeleton() {
   return (
     <div className="bg-mystic-surface/40 border border-purple-500/20 rounded-xl p-6 md:p-8">
@@ -273,7 +244,7 @@ function CrossReadingSkeleton() {
         <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Astrology & Numerology</span>
         <div className="h-px flex-1 bg-mystic-border" />
       </div>
-      <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Reading your chart connections…</p>
+      <p className="text-mystic-muted text-xs text-center mb-6 tracking-wide">Weaving your chart and numbers together...</p>
       <div className="space-y-3">
         <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.08)', width: '92%' }} />
         <div className="h-4 rounded-full animate-pulse" style={{ background: 'rgba(201,168,76,0.06)', width: '85%' }} />
@@ -427,26 +398,7 @@ export default function NumerologyPage() {
 
             {/* Sky chart GPT reading */}
             {skyReadingLoading ? (
-              <div className="bg-mystic-surface/50 border border-mystic-gold/20 rounded-xl p-6 md:p-8">
-                <div className="flex items-center gap-2 mb-5">
-                  <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Reading your sky…</span>
-                </div>
-                <div className="space-y-3">
-                  {[95, 85, 70, 100, 80, 65, 90].map((w, i) => (
-                    <div
-                      key={i}
-                      className="h-3 rounded-full"
-                      style={{
-                        width: `${w}%`,
-                        background: 'linear-gradient(90deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.14) 50%, rgba(201,168,76,0.06) 100%)',
-                        backgroundSize: '200% 100%',
-                        animation: `shimmer 1.8s ease-in-out infinite ${i * 0.1}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
-              </div>
+              <GptSkeleton label="Reading your sky in numbers..." accentColor="gold" lines={7} />
             ) : skyReadingError ? (
               <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
                 <p className="text-mystic-muted text-sm">The stars are quiet right now — try again in a moment.</p>
@@ -616,7 +568,7 @@ export default function NumerologyPage() {
           <div className="h-px flex-1 bg-mystic-border" />
         </div>
         {narrativeLoading ? (
-          <NarrativeSkeleton />
+          <GptSkeleton label="Decoding your frequencies..." accentColor="gold" />
         ) : narrativeError ? (
           <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
             <p className="text-mystic-muted text-sm">The stars are quiet right now — try again in a moment.</p>

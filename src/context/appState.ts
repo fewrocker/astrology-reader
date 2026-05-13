@@ -59,7 +59,6 @@ export interface AppState {
   transitPeriod: TransitPeriod | null
   transitData: TransitData | null
   transitInterpretation: string | null
-  transitLoading: boolean
   transitError: string | null
   // Synastry state
   partnerBirthData: BirthData
@@ -89,6 +88,7 @@ export type AppAction =
   | { type: 'SET_RESULTS'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'RESET' }
   | { type: 'CLEAR_CACHE' }
+  | { type: 'COMPLETE_FORM' }
   | { type: 'START_TRANSIT'; period: TransitPeriod; targetMonth?: string }
   | { type: 'PENDING_TRANSIT' }
   | { type: 'SET_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
@@ -107,6 +107,12 @@ export type AppAction =
   | { type: 'SET_STORAGE_WARNING'; message: string }
   | { type: 'CLEAR_STORAGE_WARNING' }
   | { type: 'LOAD_BIRTH_DATA_FROM_SERVER'; data: BirthData }
+  | { type: 'SET_TRANSIT_DATA'; transitData: TransitData; transitPeriod: TransitPeriod; transitTargetMonth: string | null }
+  | { type: 'SET_TRANSIT_INTERPRETATION'; interpretation: string }
+  | { type: 'SET_SYNASTRY_DATA'; partnerChartData: ChartData; partnerAspects: Aspect[]; synastryData: SynastryData }
+  | { type: 'SET_SYNASTRY_INTERPRETATION'; interpretation: string }
+  | { type: 'SET_SOLAR_RETURN_DATA'; data: SolarReturnData; targetYear: number }
+  | { type: 'SET_SOLAR_RETURN_INTERPRETATION'; interpretation: string }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -289,7 +295,6 @@ function buildInitialState(): AppState {
     transitPeriod: cachedTransit?.transitPeriod ?? null,
     transitData: cachedTransit?.transitData ?? null,
     transitInterpretation: cachedTransit?.transitInterpretation ?? null,
-    transitLoading: false,
     transitError: null,
     partnerBirthData: loadCachedPartnerData(),
     partnerChartData: cachedSynastry?.partnerChartData ?? null,
@@ -327,14 +332,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLEAR_CACHE':
       clearBirthDataCache()
       return { ...initialState, birthData: { ...initialBirthData } }
+    case 'COMPLETE_FORM':
+      return { ...state, view: 'form', formStep: 0 }
     case 'START_TRANSIT':
-      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null, transitLoading: true }
+      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null }
     case 'PENDING_TRANSIT':
       return { ...state, pendingTransit: true }
     case 'SET_TRANSIT_RESULTS':
-      return { ...state, view: 'transit-results', transitData: action.transitData, transitInterpretation: action.interpretation, transitLoading: false }
+      return { ...state, view: 'transit-results', transitData: action.transitData, transitInterpretation: action.interpretation }
     case 'SET_TRANSIT_ERROR':
-      return { ...state, transitError: action.error, transitLoading: false, view: 'transit-select' }
+      return { ...state, transitError: action.error, view: 'transit-select' }
     case 'CACHE_NATAL_CHART':
       return { ...state, chartData: action.chartData, aspects: action.aspects, reading: action.reading }
     case 'UPDATE_PARTNER_DATA':
@@ -363,6 +370,18 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, storageWarning: null }
     case 'LOAD_BIRTH_DATA_FROM_SERVER':
       return { ...state, birthData: action.data }
+    case 'SET_TRANSIT_DATA':
+      return { ...state, view: 'transit-results', transitData: action.transitData, transitPeriod: action.transitPeriod, transitTargetMonth: action.transitTargetMonth, transitInterpretation: null }
+    case 'SET_TRANSIT_INTERPRETATION':
+      return { ...state, transitInterpretation: action.interpretation }
+    case 'SET_SYNASTRY_DATA':
+      return { ...state, view: 'synastry-results', partnerChartData: action.partnerChartData, partnerAspects: action.partnerAspects, synastryData: action.synastryData, synastryInterpretation: null, synastryError: null }
+    case 'SET_SYNASTRY_INTERPRETATION':
+      return { ...state, synastryInterpretation: action.interpretation }
+    case 'SET_SOLAR_RETURN_DATA':
+      return { ...state, view: 'solar-return', solarReturnData: action.data, solarReturnTargetYear: action.targetYear, solarReturnInterpretation: null, solarReturnError: null }
+    case 'SET_SOLAR_RETURN_INTERPRETATION':
+      return { ...state, solarReturnInterpretation: action.interpretation }
     default:
       return state
   }

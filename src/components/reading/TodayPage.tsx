@@ -9,6 +9,7 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import GptSkeleton from '../ui/GptSkeleton'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -163,7 +164,7 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
             </div>
           </div>
         ) : (
-          <p className="text-mystic-muted text-sm">Loading moon data…</p>
+          <p className="text-mystic-muted text-sm">Reading the lunar sky…</p>
         )}
       </div>
 
@@ -223,10 +224,7 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
         <div className="border border-mystic-border rounded-xl bg-mystic-surface/50 p-6 mb-6">
           <p className="text-mystic-muted text-xs uppercase tracking-widest mb-4">Morning Synthesis</p>
           {gptLoading && !gptText && (
-            <div className="flex items-center gap-2 text-mystic-muted text-sm">
-              <span className="animate-pulse">✦</span>
-              <span>Weaving your morning reading…</span>
-            </div>
+            <GptSkeleton label="Reading today's sky for you..." accentColor="gold" lines={5} />
           )}
           {gptText && (
             <>

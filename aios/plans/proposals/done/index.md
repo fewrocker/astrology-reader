@@ -1,5 +1,14 @@
 # Done Proposals
 
+## Sprint 0008 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [code-app-tsx-extraction](code-app-tsx-extraction.md) | Code Enhancement | ✅ merged sprint-0008 |
+| [feat-home-screen-redesign](feat-home-screen-redesign.md) | Feature | ✅ merged sprint-0008 |
+| [feat-readings-navigation-modal](feat-readings-navigation-modal.md) | Feature | ✅ merged sprint-0008 |
+| [feat-split-render-ai-screens](feat-split-render-ai-screens.md) | Feature | ✅ merged sprint-0008 |
+
 ## Sprint 0007 — Completed
 
 | Proposal | Type | Delivered |

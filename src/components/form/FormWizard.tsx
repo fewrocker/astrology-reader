@@ -30,7 +30,7 @@ export default function FormWizard() {
     if (formStep < STEPS.length - 1) {
       dispatch({ type: 'SET_STEP', step: formStep + 1 })
     } else {
-      dispatch({ type: 'SET_VIEW', view: 'loading' })
+      dispatch({ type: 'COMPLETE_FORM' })
       if (isAuthenticated) {
         saveProfile(birthData).catch(() => {
           dispatch({ type: 'SET_STORAGE_WARNING', message: 'Birth data saved locally — could not sync to server.' })

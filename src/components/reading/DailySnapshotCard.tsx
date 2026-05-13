@@ -66,7 +66,7 @@ function getCacheKey(chart: ChartData): string {
   return `${CACHE_PREFIX}${sun?.longitude?.toFixed(0)}-${today}`
 }
 
-export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartData; birthDate?: string }) {
+export default function DailySnapshotCard({ chart, birthDate, embedded }: { chart: ChartData; birthDate?: string; embedded?: boolean }) {
   const personalDay = birthDate ? calculatePersonalDay(birthDate) : null
   const personalDayLabel = personalDay !== null ? personalDayArchetype(personalDay) : null
 
@@ -119,6 +119,11 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
         }
 
         const prompt = buildSnapshotPrompt(chart, currentMoon, aspects)
+        // Stagger GPT call on first mount to avoid colliding with concurrent transit/synastry calls
+        if (refreshTick === 0) {
+          await new Promise<void>(r => setTimeout(r, 500))
+          if (cancelled) return
+        }
         const result = await getDailySnapshotInterpretation(prompt)
 
         if (!cancelled) {
@@ -157,7 +162,7 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <div className="mb-8 border border-mystic-gold/30 rounded-xl overflow-hidden bg-gradient-to-b from-mystic-gold/5 to-transparent">
+    <div className={`${embedded ? 'mb-4' : 'mb-8'} border border-mystic-gold/30 rounded-xl overflow-hidden bg-gradient-to-b from-mystic-gold/5 to-transparent`}>
       {/* header bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-mystic-gold/15">
         <div className="flex items-center gap-2">
@@ -171,7 +176,7 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
             className="text-mystic-muted text-xs hover:text-mystic-gold transition-colors"
             title="Refresh snapshot"
           >
-            ↻ refresh
+            ↻ ask again
           </button>
         )}
       </div>

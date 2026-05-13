@@ -1,135 +1,122 @@
-# Nassim Taleb — Sprint 7 Proposal Voice
+# Nassim Taleb — Voice Analysis
 
-Sprint 6 delivered exactly what I warned about in sprint 5: a feature — the Cosmic Journal — that accumulates irreplaceable personal data and sits it on localStorage. The band-aid arrived one sprint too late for some users. Now sprint 7 proposes the cure: a real backend, JWT authentication, and a migration path. This is the right direction. But the proposal is optimistic about implementation details in ways that will produce new fragilities while eliminating old ones. Let me enumerate them.
-
----
-
-## Persona Perspective
-
-I study how systems fail under conditions their designers did not imagine. The sprint-0007 vision is a confidence document. It says: "secure auth, not toy auth." It says: "no data loss during migration." It says: "offline tolerance." These are commitments. Commitments made in architecture documents are cheap. What matters is whether the implementation can honor them when a malicious user probes the login endpoint from a botnet, when a user's localStorage has a partially-synced `_synced` flag from a connection dropout, when the backend is down at exactly the moment a user creates their first account. I will focus on those cases.
-
-The vision is also a monolith document, which is appropriate for this stage. I have no objection to the monolith. The objection I have is to the assumptions baked into the monolith that will make it fragile to extract later — not because extraction is needed now, but because the choices made today determine the cost of that extraction tomorrow.
+## Sprint 8 Focus: Navigation Redesign & Split-Render
 
 ---
 
-## Proposals
+## Fragility Audit
+
+### 1. The view-state machine has no escape hatch from orphaned states
+
+The `AppView` enum currently has 18 distinct states. Several of them are "loading" states that exist solely as a trigger for `useEffect` hooks in `AppContent`. The split-render proposal wants to eliminate or shorten `transit-loading`, `synastry-loading`, and `solar-return-loading` — but the mechanism is ambiguous. The vision says: "these loading views may be eliminated or reduced to a brief 200ms flash." Either path requires a decision.
+
+The fragile case: if the vision chooses to eliminate these loading view states but the `useEffect` hooks in `AppContent` still fire on `state.view === 'transit-loading'`, and then immediately transition the view to `transit-results`, you get a race condition. The page renders `TransitReadingPage` before `transitData` is populated in state. `TransitReadingPage` returns `null` at line 201 (`if (!chartData || !transitData || !transitPeriod) return null`) — so the user sees a blank screen briefly instead of a spinner. That blank screen is not obviously an error state. The user does not know whether to wait or click Back.
+
+The deeper fragility: `AppView` is flat. There is no concept of which views are valid transition targets from which source views. `dispatch({ type: 'SET_VIEW', view: 'transit-results' })` is legal from any view, including `form`, where `transitData` is null. The split-render refactor will require many more direct `SET_VIEW` jumps as GPT calls complete asynchronously — this increases the surface area of invalid state transitions. A typed state machine (even a simple transition table) would make invalid transitions impossible. What currently exists allows any view to go to any view at any time.
+
+### 2. The `showCachedLanding` condition is a compound boolean that breaks silently
+
+Line 727 in `App.tsx`:
+```
+const showCachedLanding = state.view === 'form' && hasCachedBirthData() && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city
+```
+
+This is four independent conditions ANDed together. The sprint changes how the app reaches `view === 'form'` after form submission — the proposal redirects `handleNext()` to dispatch `SET_VIEW: 'form'` instead of `SET_VIEW: 'loading'`. This will work correctly when the form wizard is on step 2 (the final step). But after that dispatch, `state.formStep` is still 2 — the wizard just finished. The condition requires `formStep === 0`. So `showCachedLanding` evaluates to `false` and the user sees the empty `FormWizard` at step 0 instead of the home screen.
+
+This is a concrete regression risk. The sprint vision describes the desired outcome but does not say which reducer action resets `formStep` to 0 when the form completes. `SET_VIEW` does not touch `formStep`. The `RESET` action resets everything including birth data. There is no action that simultaneously advances to home view and resets the form step. One needs to be added, or `showCachedLanding` needs to remove the `formStep === 0` condition, or the form completion path dispatches both `SET_VIEW` and `SET_STEP` — which is two dispatches in sequence, creating a flash render between them.
+
+### 3. Split-render introduces a new class of "stale interpretation" state
+
+The current loading pattern is synchronous from the user's perspective: they click a button, see a spinner, see the full page. The new split-render pattern shows computed data immediately and populates GPT text asynchronously. This introduces a state that does not currently exist: a page that shows partial data from a prior run while the new GPT call is in-flight.
+
+Concrete example: a user loads a Weekly Transit reading. The transit aspects table shows the current week's data immediately. Then they click "← Choose Another Reading", select Monthly, and the monthly transit aspects table shows immediately. But the GPT interpretation slot shows the weekly reading's text for several seconds while the monthly GPT call completes — because `transitInterpretation` in state was not cleared before dispatching `START_TRANSIT`. The reducer for `START_TRANSIT` does clear it (`transitInterpretation: null`) but only after the action fires. If the results page renders before the reducer clears the field, the old interpretation flashes on screen.
+
+The vision does not address the stale-interpretation flash. The split-render pattern from `DailySnapshotCard` avoids this because it manages all its state locally (local `useState`, not global `AppState`). The transit/synastry/solar-return pages read from global state, where the interpretation field persists until the next action clears it. The animated loading skeleton must appear immediately when a new reading is initiated — not after the old text disappears. This requires the interpretation field to be `null` during the transition, and the results page to check for null and render the skeleton rather than old text.
+
+### 4. The ReadingsModal adds a click to every navigation path
+
+The vision acknowledges this: "one extra click compared to direct buttons — that trade-off is acceptable only if the modal itself is fast to open and visually organized." The fragility is not the extra click in the happy path. It is what happens when the modal is open and the user presses Escape, taps the background, or uses the browser Back button.
+
+There is no URL routing in this app. Browser Back does not go to the previous view — it goes to the previous page in browser history, which is the blank app URL. A user who opens the modal and then presses Back loses the home screen and lands on a blank URL (or an empty FormWizard if the app reloads). This is the same regression that exists today for any navigation in the app, but the modal adds a new context where users instinctively press Escape or Back to close overlays. The app must handle `keydown` Escape to close the modal (expected by every user), and it must not let the modal's close action fight with any browser history event.
+
+### 5. The DailySnapshotCard embedded in the left panel changes its loading behavior
+
+Currently, `DailySnapshotCard` mounts once at page load and runs its GPT call. After the redesign, it will be embedded inside the left panel of `CachedDataLanding`. If the left panel is conditionally rendered (which it is — `showCachedLanding` gates it), the `DailySnapshotCard` will mount and unmount on every navigation cycle. Each mount triggers a fresh `useEffect` in `DailySnapshotCard` that checks localStorage cache first, then calls GPT if no cache exists.
+
+The cache key is `daily-snapshot-{sunLongitude}-{today}`. The sun longitude is taken from `chart.planets.find(p => p.name === 'Sun')?.longitude`. If the user navigates away and back to home multiple times in a session, the component mounts repeatedly but the cache prevents redundant GPT calls. This part is fine. The fragility is subtler: if the user clears the snapshot cache via the "↻ refresh" button, then navigates to a transit reading and back, the component remounts and immediately fires a GPT call — potentially during or shortly after another GPT call already in-flight from the transit reading. The app currently has no global GPT call queue. Multiple concurrent calls hit the rate limiter simultaneously and one of them gets a 429 error. The user sees "Rate limit reached" in the daily snapshot while the transit reading is still loading.
 
 ---
 
-### issue: jwt-secret-hardcoding-env-guard
+## What the Sprint Vision Is Missing
 
-**Type:** issue
+### Missing: A defined back-navigation strategy from deep views
 
-The vision says the JWT secret "must come from environment variables, never hardcoded." This is correct. But there is no proposed mechanism to enforce this at startup. The risk is that a developer writes `const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-fallback'` — which is a common pattern, appears harmless, and catastrophically undermines JWT security in any deployment where the environment variable is not set. A server running with `'dev-secret-fallback'` as the signing key will happily accept forged tokens signed with that string. The guard must be: if `process.env.JWT_SECRET` is absent or shorter than 32 characters, `server/index.ts` must refuse to start entirely. Fail loud at boot, not silently at runtime.
+The sprint redesigns the entry point into all features (the readings modal) but says nothing about the back buttons in deep views. Currently, `TransitReadingPage` has a button that dispatches `SET_VIEW: 'transit-select'`. After the sprint, `transit-select` is removed from the Home screen — it is accessed via the modal. So pressing "← Choose Another Reading" from within a transit reading now takes the user to the old `TransitSelectScreen`, not the home screen, not the modal. The user cannot get back to the modal without going back to home first and clicking "Get Your Readings" again. This doubles the navigation steps to switch reading types.
 
----
+The vision's "Get Your Readings" modal must have a defined answer for: what do the back buttons in result pages go to? If the answer is "home screen," all the result page back buttons need updating. If the answer is "re-open the modal," the modal needs to support being opened programmatically from within result pages. Neither of these is addressed in the vision.
 
-### issue: brute-force-login-no-rate-limiting
+### Missing: Mobile behavior of the embedded DailySnapshotCard
 
-**Type:** issue
+On mobile, `DailySnapshotCard` is currently rendered between the left panel and the sky chart (`lg:hidden` div). After the redesign, it is embedded inside the left panel for all screen sizes. The left panel on mobile is full-width. The `DailySnapshotCard` itself is a `mb-8` block with a gold border. Embedding it inside a panel that already has padding and a border creates a border-within-border visual on mobile — a nested box effect that will look cramped at 375px. The vision says "the DailySnapshotCard embedded inside the panel must carry its weight" and "the Home screen must feel complete, not stripped." These are subjective quality claims without a concrete mobile layout specification. A developer implementing this without detailed design direction will produce a visually degraded mobile experience.
 
-The proposed auth route (`POST /api/auth/login`) accepts an email and password and returns a JWT. There is no mention of rate limiting anywhere in the vision. Without rate limiting, the login endpoint accepts unlimited password attempts per second, per IP. The Cosmic Journal stores private personal life entries — grief, turning points, loves. These are exactly the kind of records an abusive ex-partner or stalker would want to access. A bcrypt hash with cost factor 10 slows verification to roughly 100ms per attempt on a modest server, but 100 parallel requests from a single IP still yield 600 attempts per minute. Implement `express-rate-limit` on `/api/auth/login` and `/api/auth/register` — 10 requests per IP per 15 minutes — before the first line of route code is written. The fix is 8 lines of middleware. The omission is a hostile surface area that requires no sophistication to exploit.
+### Missing: What happens when chartData is null during split-render
 
----
+`TransitReadingPage` at line 201: `if (!chartData || !transitData || !transitPeriod) return null`. Under the split-render pattern, the page is supposed to render immediately when transit aspects are computed, before GPT completes. But the page also renders the `ChartWheel` component, which requires `chartData`. If `chartData` is null for any reason (cold start, cache eviction, failed calculation), the early return fires and the user sees nothing. The split-render pattern as described in the vision assumes that computed data is always available. The `null` guard remains an invisible catch. The vision should either guarantee that `chartData` is always computed before the transit results view is entered, or the page should have a graceful degradation path that shows transit aspects without the chart wheel.
 
-### issue: migration-partial-sync-data-loss
+### Missing: GPT error state in split-render context
 
-**Type:** issue
+The current full-page loading pattern shows errors on the loading screen. Under split-render, when the GPT call fails after the page has already rendered with computed data, the interpretation slot must display a meaningful error state. The vision specifies ambient loading copy for the in-progress state but says nothing about the error state in the slot. Today, `getGptInterpretation` returns the error message string directly (it never throws — it catches internally and returns the error as text at line 73–76 of `gptInterpretation.ts`). This means the interpretation slot will display a raw error string like "Rate limit reached. Sign in to continue." inside a paragraph styled as a reading — no visual distinction from actual GPT text, no retry button, no fallback. The split-render architecture makes this worse because the user has already committed to reading the page.
 
-The data migration plan in the vision describes: detect local data, offer upload, batch-POST to server, mark `_synced: true` or clear. This flow contains a dangerous race condition. Consider: the user clicks "Upload my existing data." The batch POST begins. The server receives 47 of 50 journal entries and then the connection drops — a phone switching from WiFi to cellular, a server-side timeout, a Cloudflare reset. The migration promise rejects. The client was designed to "keep localStorage intact on upload failure." Good. But which entries made it to the server? The server has 47. localStorage has all 50. The client has no way to know. The next time the user tries to migrate, they will upload all 50 again. Three of the 47 that succeeded will now duplicate on the server unless the server handles idempotent upserts by client-generated UUID. The `entries` table schema uses `UUID PRIMARY KEY DEFAULT gen_random_uuid()` — server-generated, not client-generated. This means the server cannot deduplicate on re-upload. The fix: the client sends the entry's existing `id` (already a UUID v4, generated at save time in the localStorage model) as the primary key in the POST body, and the server's INSERT uses `ON CONFLICT (id) DO NOTHING`. This makes the migration batch operation idempotent — safe to retry any number of times without duplication.
+### Missing: The "Today" feature appears in two places with conflicting groupings
 
----
-
-### issue: localstorage-token-xss-exposure
-
-**Type:** issue
-
-The vision proposes: "Persists the JWT to localStorage so the session survives page refresh." This is the standard approach and the convenient one. It is also an approach that exposes the JWT to any JavaScript running on the page. The app already loads an OpenAI API key from localStorage (visible in `getStoredApiKey()` in `src/services/gptInterpretation.ts`). A single XSS vulnerability — in a third-party dependency, in a future markdown renderer for journal entries, in a GPT response rendered without sanitization — can extract both the OpenAI key and the JWT in the same payload. The lower-risk alternative is `HttpOnly` cookies for the JWT, which are inaccessible to JavaScript by definition. The tradeoff is CSRF exposure, which requires its own mitigation (SameSite=Strict or a CSRF token). For a single-origin monolith serving its own frontend, `SameSite=Strict` is sufficient. The vision's quality bar says "secure auth, not toy auth" — storing the JWT in localStorage, alongside a plaintext API key, is closer to toy than secure.
+The vision places "Today ✦" in Group 3 (Journals). The current code in `CachedDataLanding` has it as a standalone button. `TodayPage` is a hybrid — it shows moon phase, personal day number, sky highlights, and a GPT interpretation. It is not a journal. Users who think of "Today" as an ambient reading will look for it in Group 2 (Transits). Users who think of it as a daily note will look in Group 3. The feature does not have a natural category. Placing it in Journals alongside "Dream Interpretation" makes `TodayPage` feel like a journaling prompt rather than a reading — which changes user expectations and may reduce usage. The vision should state why Today belongs in Journals specifically, or reconsider the grouping.
 
 ---
 
-### issue: clear-cache-logout-coupling-silent-failure
+## Proposals I Am Making
 
-**Type:** issue
+### Proposal 1: Typed state transition guard
 
-In `src/context/appState.ts`, the `CLEAR_CACHE` reducer calls `clearBirthDataCache()` and resets state. The vision notes: "The `CLEAR_CACHE` action currently logs the user out; it must also call the backend logout endpoint." The failure mode: if the backend logout call is fire-and-forget (unawaited, no confirmation), the server-side session is not invalidated. If JWTs are stateless (no server-side revocation list), this does not matter — the JWT simply expires. But if the implementation later adds server-side session tracking or a token blocklist, a missed logout call leaves an active token floating. Worse: if the dispatch is synchronous (it is — reducers are synchronous in React) and the backend call is async, there will be a window where the local state is cleared but the JWT is still in localStorage and valid. Any code that reads the JWT before the async logout resolves will believe the user is still authenticated. The reducer must be extended with a `LOGOUT_START` / `LOGOUT_COMPLETE` action pair, and the UI must hold in a transitional state until the server confirms.
+**What it is:** A transition table that maps each `AppView` to its valid successor views, enforced at the point of `dispatch({ type: 'SET_VIEW' })`. Any illegal transition dispatched in development mode throws a console error. Production mode is unchanged.
 
----
+**Fragility addressed:** The view-state machine currently allows any view to dispatch to any view. The split-render refactor multiplies the number of `SET_VIEW` calls as GPT calls resolve asynchronously. Without a transition guard, a race condition between two concurrent async flows could leave the app in a view state that has null preconditions for its components. The guard makes these races visible during development rather than silent in production.
 
-### issue: unauthenticated-path-regression-risk-from-api-imports
+### Proposal 2: A single `COMPLETE_FORM` action that resets formStep
 
-**Type:** issue
+**What it is:** A new reducer action `COMPLETE_FORM` that simultaneously sets `view: 'form'`, resets `formStep: 0`, and leaves `birthData` intact. `FormWizard.handleNext()` dispatches this instead of `SET_VIEW: 'loading'` on the final step.
 
-The vision guarantees: "A user who does not log in must still get the full app experience." This is the most dangerous guarantee to make in an additive auth sprint, because it requires that every new import, every new context, every new `useEffect` that touches the auth layer does not conditionally crash when `user` is `null`. The typical failure mode is subtle: `AuthContext.tsx` is created, `useAuth()` is exported, a developer uses it in `CosmicJournalPage.tsx` to conditionally sync entries, and accidentally writes `const { user } = useAuth()` at the top of the component without null-checking before accessing `user.id`. The unauthenticated path throws a runtime error. Nobody catches it because the developer always tests with an account. The fix is structural: `AuthContext` must be designed with a strict null-default — `user` is `null` until proven otherwise, every consumer must handle null, and the TypeScript type must not permit `user.id` without a null guard. Additionally, the unauthenticated flow must be smoke-tested explicitly in the PR — load the app with no account, use every feature, confirm no console errors.
+**Fragility addressed:** The `showCachedLanding` compound condition requires `formStep === 0`. If form completion dispatches only `SET_VIEW: 'form'`, the formStep remains at 2 and the landing screen never renders. This is a concrete regression — the user submits their birth data and lands on the form wizard step 0 (blank) instead of the home screen. The `COMPLETE_FORM` action is the correct atomic unit.
 
----
+### Proposal 3: Stale-interpretation guard in the results pages
 
-### issue: dream-session-key-scope-bug-after-auth
+**What it is:** In `TransitReadingPage`, `SynastryPage`, `SolarReturnPage`, and `NumerologyPage`, the GPT interpretation section renders the skeleton animation when the interpretation field is `null`. Currently only `NumerologyPage` has a `NarrativeSkeleton` component. The other pages render nothing when interpretation is null, or render old text from a prior reading.
 
-**Type:** issue
+**Fragility addressed:** Under split-render, the user sees the page immediately with `transitInterpretation === null` (cleared by `START_TRANSIT`). The interpretation section must display the ambient loading state from that first render, not blank space or stale text from a prior reading. Every result page needs the same skeleton pattern that NumerologyPage already has.
 
-In `DreamModal.tsx`, line 17: `const DREAM_SESSION_KEY = getDreamSessionKey(todayKey)` — this is a module-level constant, evaluated once at import time. The key is `dream-session-YYYY-MM-DD` where the date is today at the time the module is first loaded. After authentication is added, dream sessions will be server-side entries associated with `user_id`. But the current localStorage key scheme uses date-based keys with no user identifier. If two users share a browser session (family computer), their dream sessions will collide — user A's `dream-session-2026-05-13` will be read by user B on the same date. The fix: once authenticated, dream session localStorage keys (if still used as a local cache) must be scoped to user ID: `dream-session-{userId}-{date}`. Or, more cleanly, dream sessions load exclusively from the server when authenticated, and localStorage is only the fallback for unauthenticated users.
+### Proposal 4: Stagger the DailySnapshotCard GPT call relative to other in-flight calls
 
----
+**What it is:** Add a short delay (500–800ms) to the `DailySnapshotCard` GPT call when it detects that the cache is empty. This delay is applied only on mount — cached loads are instant. The delay lets any concurrent GPT call from a result page complete or begin before the snapshot call fires.
 
-### issue: backend-down-blocking-app-boot
+**Fragility addressed:** The `DailySnapshotCard` will remount every time the user returns to the home screen. If the user navigated away to a transit reading (which fires a GPT call) and returns to home before that call completes, the snapshot call fires concurrently. Both calls hit the rate limiter simultaneously. The authenticated rate limit is presumably more generous than the unauthenticated one, but simultaneous requests from the same user ID still stack up on the backend. A 500ms stagger is imperceptible to the user and eliminates the collision.
 
-**Type:** issue
+### Proposal 5: Explicit "Home" as a named back target for all result pages
 
-The vision says "API calls from `authService.ts` must time out gracefully and fall back to the localStorage path." Good intent. The fragile implementation: if `AuthContext.tsx` calls `GET /api/auth/me` on mount to restore the session, and the backend is down, the app must not show a loading spinner indefinitely. There must be a hard timeout — 5 seconds maximum — after which the app assumes unauthenticated and loads from localStorage. Without this timeout, a backend outage (routine maintenance, deploy restart, server crash) renders the app unusable for all users, including users who do not care about their account and just want to read their chart. The unauthenticated path must be reachable without any backend round-trip. The auth check must be async, non-blocking, and resolved either with a session restoration or a definitive "unauthenticated" state within a bounded time window.
+**What it is:** Replace the various back buttons in result pages that currently dispatch to `transit-select`, `results`, or `form` with a consistent "← Home" button that dispatches `SET_VIEW: 'form'` (which resolves to the home screen when birth data is cached). Maintain feature-specific secondary buttons where useful (e.g., "← Another Reading" staying as-is).
 
----
-
-### feat: client-side-entry-id-as-server-primary-key
-
-**Type:** feat
-
-The current `JournalEntry` schema in `src/components/journal/types.ts` generates `id: crypto.randomUUID()` on the client at save time. The server schema in the vision uses `UUID PRIMARY KEY DEFAULT gen_random_uuid()` — server-generated. This divergence makes idempotent migration impossible (see migration partial-sync issue above) and also means the client cannot optimistically assign a permanent ID before a server round-trip. The correct design for a eventually-consistent local-first system: the client generates the UUID, it travels in the POST body, the server uses it as the primary key with `ON CONFLICT (id) DO NOTHING` for idempotency. This is a trivial schema change (`id UUID PRIMARY KEY` with no default, supplied by client) that eliminates an entire class of duplication and consistency bugs across the migration flow, offline writes, and future sync scenarios.
+**Fragility addressed:** After the navigation redesign, the transit select screen (`transit-select`) is no longer a primary surface — it is only reached through the readings modal. A back button that goes to `transit-select` leaves the user in a screen with no path back to the modal without navigating home. "← Home" is always unambiguous, always valid, and does not depend on which path the user took to reach the current view.
 
 ---
 
-### feat: password-strength-enforcement-server-side
+## What Everyone Is Ignoring
 
-**Type:** feat
+The split-render pattern is being discussed as a performance improvement. It is not. It is a state management redesign masquerading as a UX improvement.
 
-The vision describes register/login modals as "minimal modal forms: email + password." There is no mention of password policy. A user registering with password `1` will create an account with a bcrypt hash of `1`. This is not the user's fault — the app permitted it. Enforce a minimum length (12 characters) and reject common passwords server-side on `/api/auth/register`. Client-side hints are UX; server-side rejection is security. The rule must live on the server because client-side validation is trivially bypassed with a direct HTTP request.
+Here is what that means in practice: right now, the app has a clear invariant. When `state.view === 'transit-results'`, `state.transitData` is non-null and `state.transitInterpretation` is non-null. Both were set simultaneously by `SET_TRANSIT_RESULTS`. The result page can render all its content unconditionally. There is one loading state, one results state, and the transition between them is atomic.
 
----
+After split-render, this invariant is destroyed. `state.view === 'transit-results'` will be true while `state.transitInterpretation` is null. The result page now has to defensively render a skeleton for the interpretation field. But it also has to ensure it does not accidentally render an interpretation from a prior reading while the new one loads — because `transitInterpretation` is not cleared until `START_TRANSIT` fires, and if there is any latency between that dispatch and the page render, old text appears in the slot.
 
-### feat: export-all-data-authenticated-path
+The team is focused on the animated loading copy ("Consulting the stars...") and the skeleton shimmer. These are the visible cosmetics. The invisible structural change is that the invariant "interpretation is always non-null when the results page is visible" becomes "interpretation may be null, stale, or fresh depending on when you check." Three possible states instead of two — and two of those three states are silent failures that look like normal rendering.
 
-**Type:** feat
+Nobody has written down what the complete set of states for the interpretation slot is after sprint-8, or what visual treatment corresponds to each one. The vision specifies the loading state and the success state. It does not specify: what does the error state look like inside the slot? What does stale text from a prior reading look like (it looks identical to fresh text — this is the dangerous one)? What happens if GPT is rate-limited and interpretation never arrives — does the skeleton animate indefinitely?
 
-`src/utils/storage.ts` exports `exportAllLocalStorage()` — a JSON dump of everything in localStorage. After authentication, a significant portion of the user's data lives on the server, not in localStorage. The export function must be extended to include server-side data: journal entries and dream sessions fetched from `/api/entries`, birth data from `/api/profile`. The authenticated export should be a full account backup — not just whatever happens to be cached locally. This is especially important as an escape valve: a user who wants to delete their account must be able to download everything before deletion. Implement this before account deletion is added, not after.
-
----
-
-### feat: account-deletion-endpoint
-
-**Type:** feat
-
-The vision does not mention account deletion. This is a common omission in early auth implementations and an increasingly regulated one. The `users` table schema has `ON DELETE CASCADE` on the entries foreign key, which is correct. What is missing is a `DELETE /api/user` endpoint that removes the user row (cascading to entries) and invalidates the JWT. Without this endpoint, users who want to leave are stuck. In many jurisdictions (GDPR, CCPA), the absence of a delete mechanism is a legal exposure, not just a UX gap. The endpoint itself is 10 lines of SQL and one JWT invalidation. Build it now, surface it in settings later.
-
----
-
-### code: monolith-extract-boundary-preparation
-
-**Type:** code
-
-The vision describes a monolith: Express serves the static Vite build and all API routes from one process. This is the right choice for now. The fragility: if the backend code is written without clear module boundaries — if route handlers reach directly into DB connection objects, if business logic mixes with request parsing, if the server module exports are tangled — extraction to a separate service later costs 10x what it costs now. The fix is not to build microservices. It is to enforce a three-layer boundary in `server/`: routes (HTTP parsing only), services (business logic, no HTTP objects), and db (SQL only, no business logic). Routes call services. Services call db. This is 3 directories and a convention. It costs nothing to enforce now and buys significant flexibility later.
-
----
-
-### code: sqlite-to-postgres-divergence-prevention
-
-**Type:** code
-
-The vision offers SQLite for local development and PostgreSQL for production "to avoid divergence." Then it immediately says "SQLite-only is acceptable for v1." The problem: SQLite and PostgreSQL are not the same language. JSONB columns (used for `birth_place` and `metadata`) do not exist in SQLite — they are stored as TEXT. `gen_random_uuid()` does not exist in SQLite. `TIMESTAMPTZ` does not exist in SQLite. A developer who writes and tests against SQLite and then deploys to PostgreSQL will encounter schema and query failures at deploy time. The correct approach: pick one and use it everywhere. If cost is the concern, PostgreSQL is available free on Fly.io, Railway, and Supabase. The cost of running two database dialects in one codebase — even with an ORM abstracting them — is always paid in bugs that appear only in production.
-
----
-
-## Summary Assessment
-
-The sprint-0007 direction is correct. The fragility catalog above is not an argument against building the backend — it is a map of the failure modes that will manifest if the implementation is optimistic. The two highest-priority issues are the migration idempotency gap (journal entries will duplicate on retry without client-generated UUIDs as server primary keys) and the brute-force exposure on the login endpoint (no rate limiting on a form that guards private journal data). Both are easy to fix before any route code ships. The JWT storage question (localStorage versus HttpOnly cookie) is the most architecturally consequential decision and should be made deliberately, not by default.
-
-The unauthenticated path guarantee is the one commitment that will silently break if the auth layer is not developed with null-first discipline. Test it explicitly. Every PR that touches auth-adjacent code should include a test step: open the app without an account, use every feature, confirm no regressions.
+Until these questions are answered in writing before implementation begins, the split-render refactor will ship with at least one silent failure mode that appears only when a user switches between readings in rapid succession — exactly the behavior a curious user will do to explore the app for the first time.

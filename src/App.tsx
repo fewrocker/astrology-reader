@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import MigrationBanner from './components/auth/MigrationBanner'
@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
 import AuthModal from './components/auth/AuthModal'
-import { hasCachedBirthData } from './context/appState'
+import HomeScreen from './components/home/HomeScreen'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
 import PeriodSelectPanel, { type PeriodOption } from './components/form/PeriodSelectPanel'
@@ -15,9 +15,6 @@ import TransitReadingPage from './components/results/TransitReadingPage'
 import SynastryPage from './components/results/SynastryPage'
 import SynastryTransitPage from './components/results/SynastryTransitPage'
 import SolarReturnPage from './components/results/SolarReturnPage'
-import SkyTodayChart from './components/chart/SkyTodayChart'
-import DailySnapshotCard from './components/reading/DailySnapshotCard'
-import DreamModal from './components/dream/DreamModal'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
 import CosmicJournalPage from './components/journal/CosmicJournalPage'
@@ -28,28 +25,7 @@ import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
 import { getGptInterpretation } from './services/gptInterpretation'
-
-const NUDGE_DISMISS_KEY = 'auth-nudge-dismissed-at'
-const JOURNAL_KEY = 'cosmic-journal-entries'
-
-function getJournalCount(): number {
-  try {
-    const raw = localStorage.getItem(JOURNAL_KEY)
-    if (!raw) return 0
-    const entries = JSON.parse(raw)
-    return Array.isArray(entries) ? entries.length : 0
-  } catch {
-    return 0
-  }
-}
-
-function getNudgeDismissedCount(): number {
-  try {
-    return parseInt(localStorage.getItem(`${NUDGE_DISMISS_KEY}-count`) ?? '0', 10) || 0
-  } catch {
-    return 0
-  }
-}
+import { hasCachedBirthData } from './context/appState'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
   const { isAuthenticated, displayName, logout } = useAuth()
@@ -121,299 +97,6 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
           </button>
         </div>
       )}
-    </div>
-  )
-}
-
-function CachedDataNudge({ onOpenAuth }: { onOpenAuth: () => void }) {
-  const { isAuthenticated } = useAuth()
-  const [visible, setVisible] = useState(false)
-
-  useEffect(() => {
-    const journalCount = getJournalCount()
-    const dismissedCount = getNudgeDismissedCount()
-
-    if (dismissedCount > 0 && journalCount < dismissedCount + 10) return
-
-    if (journalCount > 0) {
-      setVisible(true)
-      return
-    }
-
-    try {
-      const raw = localStorage.getItem('astral-chart-birth-data')
-      if (!raw) return
-      const parsed = JSON.parse(raw) as { createdAt?: string }
-      if (!parsed.createdAt) {
-        setVisible(true)
-        return
-      }
-      const daysSince = (Date.now() - new Date(parsed.createdAt).getTime()) / (1000 * 60 * 60 * 24)
-      if (daysSince > 7) setVisible(true)
-    } catch {
-      // ignore
-    }
-  }, [])
-
-  if (isAuthenticated || !visible) return null
-
-  const handleDismiss = () => {
-    const count = getJournalCount()
-    localStorage.setItem(NUDGE_DISMISS_KEY, Date.now().toString())
-    localStorage.setItem(`${NUDGE_DISMISS_KEY}-count`, count.toString())
-    setVisible(false)
-  }
-
-  return (
-    <div
-      className="mt-4 flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg"
-      style={{ borderTop: '1px solid rgba(201,168,76,0.12)' }}
-    >
-      <button
-        type="button"
-        onClick={onOpenAuth}
-        className="text-xs transition-colors text-left"
-        style={{ color: 'rgba(201,168,76,0.5)' }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.8)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.5)')}
-      >
-        ✦ Protect your cosmic record
-      </button>
-      <button
-        type="button"
-        onClick={handleDismiss}
-        className="flex-shrink-0 text-xs transition-colors"
-        style={{ color: 'rgba(201,168,76,0.25)' }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.6)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.25)')}
-        aria-label="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  )
-}
-
-function CachedDataLanding({ onOpenAuth }: { onOpenAuth: () => void }) {
-  const { state, dispatch } = useApp()
-  const { birthData } = state
-  const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
-  const [dreamOpen, setDreamOpen] = useState(false)
-
-  const formatDate = (d: string) => {
-    const [y, m, day] = d.split('-')
-    return `${m}/${day}/${y}`
-  }
-
-  const formatTime24 = (t: string) => {
-    const [h, m] = t.split(':').map(Number)
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-  }
-
-  const chartData = useMemo(() => {
-    if (state.chartData) return state.chartData
-    const { city } = birthData
-    if (!city || !birthData.date) return null
-    try {
-      return calculateChart(birthData.date, birthData.time, city.lat, city.lng, city.tz, birthData.unknownTime)
-    } catch {
-      return null
-    }
-  }, [state.chartData, birthData])
-
-  const now = new Date()
-  const todayLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-
-  return (
-    <div className="w-full max-w-7xl mx-auto">
-      <div className="flex flex-col lg:flex-row items-center lg:items-stretch gap-8 lg:gap-0">
-        {/* Left: Menu — 40% */}
-        <div className="w-full lg:w-[40%] flex flex-col justify-center px-2 lg:pr-8">
-          <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 glow-gold">
-            <p className="text-mystic-muted text-xs uppercase tracking-widest mb-4">Welcome back</p>
-            <h2 className="font-heading text-2xl text-mystic-gold mb-6">Your Birth Details</h2>
-            <div className="space-y-2 text-sm mb-8">
-              <p className="text-mystic-text">
-                <span className="text-mystic-purple">Place:</span> {cityLabel}
-              </p>
-              <p className="text-mystic-text">
-                <span className="text-mystic-purple">Time:</span>{' '}
-                {birthData.unknownTime ? 'Unknown (solar noon)' : formatTime24(birthData.time)}
-              </p>
-              <p className="text-mystic-text">
-                <span className="text-mystic-purple">Date:</span> {formatDate(birthData.date)}
-              </p>
-            </div>
-            <div className="flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'loading' })}
-                className="w-full px-6 py-3 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors"
-              >
-                Read My Chart ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'today' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.12)',
-                  border: '1px solid rgba(201,168,76,0.35)',
-                  color: '#c9a84c',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
-                }}
-              >
-                Today ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'journal' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.12)',
-                  border: '1px solid rgba(201,168,76,0.35)',
-                  color: '#c9a84c',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.22)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'
-                }}
-              >
-                Journal ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!state.chartData) {
-                    dispatch({ type: 'SET_VIEW', view: 'loading' })
-                    dispatch({ type: 'PENDING_TRANSIT' })
-                  } else {
-                    dispatch({ type: 'SET_VIEW', view: 'transit-select' })
-                  }
-                }}
-                className="w-full px-6 py-3 bg-mystic-purple/20 border border-mystic-purple/30 text-mystic-purple font-heading rounded-lg hover:bg-mystic-purple/30 transition-colors"
-              >
-                Daily / Weekly / Monthly Reading ☽
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'partner-form' })}
-                className="w-full px-6 py-3 bg-pink-900/20 border border-pink-500/30 text-pink-400 font-heading rounded-lg hover:bg-pink-900/30 transition-colors"
-              >
-                Couple Synastry ♡
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'START_SOLAR_RETURN' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.08)',
-                  border: '1px solid rgba(201,168,76,0.22)',
-                  color: 'rgba(201,168,76,0.75)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.16)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.40)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.08)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.22)'
-                }}
-              >
-                Year Ahead ☀
-              </button>
-              <button
-                type="button"
-                onClick={() => setDreamOpen(true)}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(109, 40, 217, 0.15)',
-                  border: '1px solid rgba(139, 92, 246, 0.28)',
-                  color: 'rgba(196, 181, 253, 0.85)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.25)'
-                  e.currentTarget.style.borderColor = 'rgba(167, 139, 250, 0.42)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(109, 40, 217, 0.15)'
-                  e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.28)'
-                }}
-              >
-                Dream Interpretation ☽
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'SET_VIEW', view: 'numerology' })}
-                className="w-full px-6 py-3 font-heading rounded-lg transition-all"
-                style={{
-                  background: 'rgba(201,168,76,0.1)',
-                  border: '1px solid rgba(201,168,76,0.25)',
-                  color: 'rgba(201,168,76,0.85)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.18)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.45)'
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'rgba(201,168,76,0.1)'
-                  e.currentTarget.style.borderColor = 'rgba(201,168,76,0.25)'
-                }}
-              >
-                Numerology ✦
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'CLEAR_CACHE' })}
-                className="w-full px-6 py-3 bg-mystic-surface border border-mystic-border text-mystic-muted font-heading rounded-lg hover:border-mystic-gold/40 hover:text-mystic-text transition-colors"
-              >
-                Enter New Birth Data
-              </button>
-            </div>
-
-            <CachedDataNudge onOpenAuth={onOpenAuth} />
-          </div>
-        </div>
-
-        {/* Mobile-only: Daily Snapshot between menu and sky */}
-        {chartData && (
-          <div className="w-full lg:hidden">
-            <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
-          </div>
-        )}
-
-        {/* Right: Today's Sky — 60% */}
-        <div className="w-full lg:w-[60%] flex flex-col items-center justify-center relative min-h-[400px] lg:min-h-[600px]">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <SkyTodayChart />
-          </div>
-          {/* Label overlaid at the top */}
-          <div className="relative z-10 text-center mt-4 lg:mt-0">
-            <p className="text-mystic-muted/60 text-xs uppercase tracking-[0.25em] mb-1">The Sky Today</p>
-            <p className="text-mystic-gold/40 text-xs font-heading">{todayLabel}</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Desktop-only: Daily Snapshot below the two panels */}
-      {chartData && (
-        <div className="mt-8 hidden lg:block">
-          <DailySnapshotCard chart={chartData} birthDate={birthData.date} />
-        </div>
-      )}
-
-      <DreamModal open={dreamOpen} onClose={() => setDreamOpen(false)} chartData={chartData} />
     </div>
   )
 }
@@ -495,6 +178,17 @@ function AppContent() {
     setAuthModalOpen(true)
   }
 
+  const journalChartData = useMemo(() => {
+    if (state.chartData) return state.chartData
+    const { city } = state.birthData
+    if (!city || !state.birthData.date) return null
+    try {
+      return calculateChart(state.birthData.date, state.birthData.time, city.lat, city.lng, city.tz, state.birthData.unknownTime)
+    } catch {
+      return null
+    }
+  }, [state.chartData, state.birthData])
+
   // Run calculation when entering loading view
   useEffect(() => {
     if (state.view !== 'loading') return
@@ -551,15 +245,18 @@ function AppContent() {
 
         if (!chart) throw new Error('Unable to calculate natal chart')
 
-        // Calculate transits
+        // Calculate transits synchronously and transition to results immediately
         const transitData = calculateTransits(chart, state.transitPeriod!, state.transitTargetMonth ?? undefined)
+        if (!cancelled) {
+          dispatch({ type: 'SET_TRANSIT_DATA', transitData, transitPeriod: state.transitPeriod!, transitTargetMonth: state.transitTargetMonth })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_TRANSIT_RESULTS', transitData, interpretation })
+          dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Transit calculation error:', e)
@@ -601,15 +298,18 @@ function AppContent() {
         )
         const aspects2 = calculateAspects(chart2.planets)
 
-        // Calculate synastry
+        // Calculate synastry synchronously and transition to results immediately
         const synData = calculateSynastry(chart1, chart2)
+        if (!cancelled) {
+          dispatch({ type: 'SET_SYNASTRY_DATA', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildSynastryPrompt(chart1, chart2, synData, birthData.date, partnerBirthData.date)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_SYNASTRY_RESULTS', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData, interpretation })
+          dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Synastry calculation error:', e)
@@ -691,15 +391,18 @@ function AppContent() {
 
         if (!chart) throw new Error('Unable to calculate natal chart')
 
-        // Calculate solar return
+        // Calculate solar return synchronously and transition to results immediately
         const srData = calculateSolarReturn(chart, birthData.date, birthData.city!.lat, birthData.city!.lng, state.solarReturnTargetYear ?? undefined)
+        if (!cancelled) {
+          dispatch({ type: 'SET_SOLAR_RETURN_DATA', data: srData, targetYear: srData.targetYear })
+        }
 
-        // Get GPT interpretation
+        // Get GPT interpretation asynchronously
         const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
         const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
-          dispatch({ type: 'SET_SOLAR_RETURN_RESULTS', data: srData, interpretation })
+          dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
         }
       } catch (e) {
         console.error('Solar return error:', e)
@@ -713,7 +416,8 @@ function AppContent() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const showCachedLanding = state.view === 'form' && hasCachedBirthData() && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city
+  const [cachedBirthDataExists] = useState(() => hasCachedBirthData())
+  const showCachedLanding = state.view === 'form' && cachedBirthDataExists && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 
@@ -735,7 +439,7 @@ function AppContent() {
           <SessionBadge onOpenAuth={() => openAuth('login')} />
         </header>
 
-        {state.view === 'form' && (showCachedLanding ? <CachedDataLanding onOpenAuth={() => openAuth('register')} /> : <FormWizard />)}
+        {state.view === 'form' && (showCachedLanding ? <HomeScreen onOpenAuth={() => openAuth('register')} /> : <FormWizard />)}
         {state.view === 'loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">✦</div>
@@ -748,8 +452,8 @@ function AppContent() {
         {state.view === 'transit-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">☽</div>
-            <p className="text-mystic-purple font-heading text-xl animate-pulse">Reading the transits...</p>
-            <p className="text-mystic-muted text-sm mt-2">Consulting the stars for your {state.transitPeriod} guidance</p>
+            <p className="text-mystic-purple font-heading text-xl animate-pulse">Consulting the stars...</p>
+            <p className="text-mystic-muted text-sm mt-2">Mapping the sky for your chart...</p>
           </div>
         )}
         {state.view === 'transit-results' && <TransitReadingPage />}
@@ -757,8 +461,8 @@ function AppContent() {
         {state.view === 'synastry-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">♡</div>
-            <p className="text-pink-400 font-heading text-xl animate-pulse">Analyzing compatibility...</p>
-            <p className="text-mystic-muted text-sm mt-2">Comparing the celestial blueprints of two souls</p>
+            <p className="text-pink-400 font-heading text-xl animate-pulse">Reading your celestial bond...</p>
+            <p className="text-mystic-muted text-sm mt-2">Aligning two cosmic blueprints...</p>
           </div>
         )}
         {state.view === 'synastry-results' && <SynastryPage />}
@@ -775,16 +479,16 @@ function AppContent() {
         {state.view === 'solar-return-loading' && (
           <div className="text-center py-24" role="status" aria-live="polite">
             <div className="text-4xl mb-4 animate-spin" style={{ animationDuration: '3s', color: '#e8a830' }} aria-hidden="true">☀</div>
-            <p className="font-heading text-xl animate-pulse" style={{ color: '#e8a830' }}>Calculating your solar return...</p>
-            <p className="text-mystic-muted text-sm mt-2">Finding the exact moment the Sun returns to your natal position</p>
+            <p className="font-heading text-xl animate-pulse" style={{ color: '#e8a830' }}>Tracking the Sun's return...</p>
+            <p className="text-mystic-muted text-sm mt-2">Calculating your solar threshold...</p>
           </div>
         )}
         {state.view === 'solar-return' && <SolarReturnPage />}
         {state.view === 'today' && (
-          <TodayPage chartData={state.chartData} birthDate={state.birthData.date} />
+          <TodayPage chartData={journalChartData} birthDate={state.birthData.date} />
         )}
         {state.view === 'journal' && (
-          <CosmicJournalPage chartData={state.chartData} birthData={state.birthData} />
+          <CosmicJournalPage chartData={journalChartData} birthData={state.birthData} />
         )}
       </div>
 

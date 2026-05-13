@@ -4,9 +4,13 @@ import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
+import { buildSynastryPrompt } from '../../engine/synastry'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
+import GptSkeleton from '../ui/GptSkeleton'
+import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
+import { getGptInterpretation } from '../../services/gptInterpretation'
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -271,6 +275,16 @@ export default function SynastryPage() {
   const { state, dispatch } = useApp()
   const { chartData, aspects, birthData, partnerBirthData, partnerChartData, partnerAspects, synastryData, synastryInterpretation } = state
   const [discussOpen, setDiscussOpen] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+
+  async function handleRetryGpt() {
+    if (!chartData || !partnerChartData || !synastryData || retrying) return
+    setRetrying(true)
+    const prompt = buildSynastryPrompt(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date)
+    const interpretation = await getGptInterpretation(prompt)
+    dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
+    setRetrying(false)
+  }
 
   if (!chartData || !partnerChartData || !synastryData) return null
 
@@ -311,7 +325,20 @@ export default function SynastryPage() {
       <CurrentMoonWidget date={new Date()} />
 
       {/* GPT interpretation */}
-      {synastryInterpretation && (
+      {synastryInterpretation === null || retrying ? (
+        <GptSkeleton label="Reading your celestial bond..." accentColor="pink" />
+      ) : isGptError(synastryInterpretation) ? (
+        <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3 mb-6">
+          <p className="text-mystic-muted text-sm">{getGptErrorMessage(synastryInterpretation)}</p>
+          <button
+            type="button"
+            onClick={handleRetryGpt}
+            className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
+          >
+            ✦ Ask again
+          </button>
+        </div>
+      ) : (
         <InterpretationSection text={synastryInterpretation} />
       )}
 
@@ -354,10 +381,10 @@ export default function SynastryPage() {
           Couple Transits ☽
         </button>
         <button
-          onClick={() => dispatch({ type: 'RESET' })}
+          onClick={() => dispatch({ type: 'SET_VIEW', view: 'form' })}
           className="px-8 py-3 bg-mystic-gold/10 border border-mystic-gold/30 text-mystic-gold font-heading rounded-lg hover:bg-mystic-gold/20 transition-colors"
         >
-          Back to Menu
+          ← Home
         </button>
       </div>
 
