@@ -1,3 +1,3 @@
-# Active Proposals
+# Active Proposals Index
 
-No active proposals. Run `/propose` to generate the next sprint's proposals.
+No active proposals.
