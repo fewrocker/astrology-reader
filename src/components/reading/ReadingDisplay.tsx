@@ -423,6 +423,11 @@ export function HousesOverview({ chart }: { chart: ChartData }) {
       <p className="text-mystic-muted text-sm mb-4">
         The twelve houses represent different areas of life. The sign on each house cusp colors how you experience that domain.
       </p>
+      {chart.houseSystem === 'whole-sign' && (
+        <p className="text-mystic-muted/60 text-xs mb-4 italic">
+          House cusps use Whole Sign system (birth latitude above 60°N — Placidus undefined at this latitude)
+        </p>
+      )}
       {chart.houses.map(h => (
         <HouseCard
           key={h.house}

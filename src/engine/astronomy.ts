@@ -114,10 +114,25 @@ function calculateMidheaven(lstDeg: number, oblDeg: number): number {
 }
 
 /**
+ * Calculate Whole Sign house cusps.
+ * House 1 starts at 0° of the Ascendant's sign; each subsequent house is the next whole sign.
+ */
+function calculateWholeSignHouses(asc: number): number[] {
+  const ascSignStart = Math.floor(asc / 30) * 30
+  return Array.from({ length: 12 }, (_, i) => normalizeAngle(ascSignStart + i * 30))
+}
+
+/**
  * Calculate Placidus house cusps.
  * Houses 1 (ASC) and 10 (MC) are exact. Others are interpolated.
+ * Returns the cusp array and whether Placidus succeeded or fell back to Whole Sign.
  */
-function calculatePlacidusHouses(asc: number, mc: number, latDeg: number, oblDeg: number): number[] {
+function calculatePlacidusHouses(
+  asc: number,
+  mc: number,
+  latDeg: number,
+  oblDeg: number
+): { cusps: number[]; system: 'placidus' | 'whole-sign' } {
   const cusps: number[] = new Array(12)
   cusps[0] = asc           // 1st house = ASC
   cusps[9] = mc            // 10th house = MC
@@ -132,9 +147,20 @@ function calculatePlacidusHouses(asc: number, mc: number, latDeg: number, oblDeg
   // Houses 2, 3 (between ASC and IC going clockwise)
   const ramc = ascensionFromLongitude(mc, oblRad)
 
-  // Semi-arc method for Placidus
+  // Semi-arc method for Placidus — each may return null at high latitudes
+  let placidusOk = true
   for (const [houseIndex, fraction] of [[10, 1 / 3], [11, 2 / 3], [1, 1 / 3], [2, 2 / 3]] as [number, number][]) {
-    cusps[houseIndex] = placidusCusp(ramc, latRad, oblRad, fraction, houseIndex >= 10)
+    const result = placidusCusp(ramc, latRad, oblRad, fraction, houseIndex >= 10)
+    if (result === null) {
+      placidusOk = false
+      break
+    }
+    cusps[houseIndex] = result
+  }
+
+  // Fall back to Whole Sign houses when Placidus fails (e.g. latitudes above ~60°N)
+  if (!placidusOk) {
+    return { cusps: calculateWholeSignHouses(asc), system: 'whole-sign' }
   }
 
   // Opposite houses
@@ -143,7 +169,7 @@ function calculatePlacidusHouses(asc: number, mc: number, latDeg: number, oblDeg
   cusps[7] = normalizeAngle(cusps[1] + 180)   // 8th opposite 2nd
   cusps[8] = normalizeAngle(cusps[2] + 180)   // 9th opposite 3rd
 
-  return cusps
+  return { cusps, system: 'placidus' }
 }
 
 function ascensionFromLongitude(lonDeg: number, oblRad: number): number {
@@ -158,7 +184,7 @@ function placidusCusp(
   oblRad: number,
   fraction: number,
   aboveHorizon: boolean
-): number {
+): number | null {
   // Placidus cusps divide semi-arcs into thirds.
   // Diurnal semi-arc (above horizon): SA = 90° + AD
   // Nocturnal semi-arc (below horizon): SA = 90° - AD
@@ -173,7 +199,7 @@ function placidusCusp(
     const decl = Math.asin(Math.sin(oblRad) * Math.sin(lon * Astronomy.DEG2RAD))
     const ad = Math.asin(Math.tan(latRad) * Math.tan(decl))
 
-    if (!isFinite(ad)) break // polar regions
+    if (!isFinite(ad)) return null // polar regions — Placidus undefined at this latitude
 
     const adDeg = ad * Astronomy.RAD2DEG
     const newRA = aboveHorizon
@@ -271,8 +297,8 @@ export function calculateChart(
   const dscLon = normalizeAngle(ascLon + 180)
   const icLon = normalizeAngle(mcLon + 180)
 
-  // Calculate Placidus house cusps
-  const cuspLongitudes = calculatePlacidusHouses(ascLon, mcLon, lat, obliquity)
+  // Calculate Placidus house cusps (falls back to Whole Sign at high latitudes)
+  const { cusps: cuspLongitudes, system: houseSystem } = calculatePlacidusHouses(ascLon, mcLon, lat, obliquity)
 
   // Assign houses to planets
   for (const planet of planets) {
@@ -298,7 +324,7 @@ export function calculateChart(
     imumCoeli: longitudeToZodiac(icLon),
   }
 
-  return { planets, houses, angles, unknownTime }
+  return { planets, houses, angles, unknownTime, houseSystem }
 }
 
 /**
