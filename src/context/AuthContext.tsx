@@ -40,7 +40,15 @@ function serverProfileToBirthData(u: ServerUserProfile, existing: BirthData): Bi
     date: u.birthDate,
     time: u.birthTime ?? '12:00',
     unknownTime: !u.birthTime,
-    city: u.birthPlace,
+    city: {
+      name: u.birthPlace.name,
+      lat: u.birthPlace.lat,
+      lng: u.birthPlace.lng,
+      tz: u.birthPlace.tz,
+      country: u.birthPlace.country,
+      region: '',
+      pop: 0,
+    },
     focusAreas: existing.focusAreas,
     userName: u.fullName ?? existing.userName,
   }
