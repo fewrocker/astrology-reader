@@ -633,6 +633,17 @@ When a proposal is completed during a future sprint or enhancement workflow, mov
 
 Each voice independently analyzes the current state of the project and proposes improvements from their lens. They are in a meeting — they've used the product, reviewed the codebase, and now they're each presenting what they think should change next.
 
+**Each voice MUST be run as its own isolated subagent.** Spawn four separate subagents in parallel — one per voice. This prevents context pollution between voices: each subagent independently explores the codebase, reads the Sprint Vision (`sprints/sprint-XXXX/vision.md`) if it exists, reads the relevant planning artifacts, and forms its own opinion without seeing the other voices' work. Each subagent is told to fully adopt its persona and write its analysis to its respective file.
+
+Each subagent receives:
+- The voice persona definition (from this document)
+- The user guidance (if provided)
+- A pointer to `sprints/sprint-XXXX/vision.md` (if it exists — required when invoked from `/sprint`)
+- Permission to read the entire codebase and all planning artifacts
+- The output path it must write to
+
+The four voices and their output paths:
+
 - **Steve Jobs** (`proposals/active/voices/jobs.md`) — What experiences are mediocre that should be delightful? What features are cluttered or unfocused? What's missing that would make someone *love* this product? Where is the product trying to do too many things instead of nailing the core?
 
 - **John Carmack** (`proposals/active/voices/carmack.md`) — What's slow, fragile, or poorly architected? Where is technical debt accumulating? What performance problems exist or are brewing? What could be simplified or made more elegant? Where is the code over-engineered or under-engineered?
@@ -643,29 +654,76 @@ Each voice independently analyzes the current state of the project and proposes 
 
 If guidance was provided, each voice must consider it as part of their analysis — but they may also propose ideas outside the guidance if they see something important.
 
+Wait for all four voice subagents to finish before proceeding to aggregation.
+
 **3. Aggregate into Proposals**
 
-Read all four voice files. Synthesize into individual proposal documents:
+Proposals are generated in **two stages** to ensure features are deep, complete, and spec-driven — never a shallow speedrun.
+
+**Stage 1 — Draft the proposal list**
+
+Read all four voice files. Synthesize them into a short draft list of proposals:
 
 1. Identify where multiple voices flagged the same area — these are the strongest signals
 2. Classify every proposal as exactly one type: `feature`, `issue-fix`, or `code-enhancement`
 3. Deduplicate overlapping ideas into single proposals while preserving the strongest originating signals
-4. For each distinct proposal, write `proposals/active/<proposal-name>.md` with a filename prefix based on its type:
-   - `feat-<proposal-name>.md`
-   - `issue-<proposal-name>.md`
-   - `code-<proposal-name>.md`
-5. Each proposal file must include:
-   - **Type** — `Feature`, `Issue Fix`, or `Code Enhancement`
-   - **Originated by** — which voice(s) identified this (e.g., "Carmack + Taleb")
-   - User guidance (if provided, quoted verbatim)
-   - Problem or opportunity description
-   - Proposed solution (concise)
-   - Why this belongs in this type rather than the other two
-   - Impact (high/medium/low) and effort (high/medium/low) assessment
-   - Dependencies on existing features
-   - Implementation summary (key files and changes)
-6. Create `proposals/active/index.md` listing all active proposals grouped by type, then sorted within each type by impact-to-effort ratio, noting which voices originated each proposal
-7. If `proposals/done/index.md` exists, preserve it as the archive index of completed proposals. If it does not exist and there are completed proposals, create it.
+4. For each distinct proposal, create a **draft stub** containing only:
+   - Proposal name and type
+   - **Originated by** — which voice(s) identified this
+   - A single short paragraph stating what it is and the object of the proposal (the "what" and the "why it matters")
+
+Write the draft list to `proposals/active/_drafts.md`. This is the seed material for Stage 2.
+
+**Stage 2 — Expand each proposal into its final artifact**
+
+For every draft proposal, spawn a **dedicated subagent** that produces the complete proposal file. This avoids cross-contamination between proposals and ensures each one is fully explored on its own terms.
+
+Each subagent receives:
+- The draft stub for its assigned proposal
+- The voice files that originated the proposal
+- The Sprint Vision (`sprints/sprint-XXXX/vision.md`) if it exists
+- The user guidance (if provided)
+- Permission to read the entire codebase and all planning artifacts
+- The output filename it must write to:
+  - `proposals/active/feat-<proposal-name>.md`
+  - `proposals/active/issue-<proposal-name>.md`
+  - `proposals/active/code-<proposal-name>.md`
+
+The subagent's job is to dive deep — read the relevant code, understand the current behavior, study the surrounding systems, and produce a proposal artifact focused on **problem, opportunity, vision, and specs**. The proposal must NOT include a proposed solution, implementation summary, impact/effort grading, dependency list, or type-justification — those belong to later phases (`/enhance` or `/sprint`). The proposal is a spec, not a plan.
+
+Proposal artifact schema by type:
+
+**Feature proposals (`feat-*.md`) — must be deep, complete, and spec-driven.** A feature proposal must contain enough detail that an execution agent could not reasonably speedrun it. Required sections:
+  - **Type** — `Feature`
+  - **Originated by** — voice(s)
+  - **User guidance** — if provided, quoted verbatim
+  - **Problem / Opportunity** — what's missing or weak today, with concrete references to current product behavior and code (file paths)
+  - **Vision** — what the feature should feel like when it exists; the experience, the signature moments, the user's journey through it; the emotional and functional core
+  - **Specifications** — a thorough, numbered list of specs the implementation must fulfill. Cover: user-facing behavior, UI states (default, loading, empty, error, edge), data requirements, interaction rules, accessibility, performance expectations, edge cases, and acceptance-style checks. Specs must be precise enough to drive spec-driven development. Err on the side of more specs, not fewer — shallow spec lists produce shallow features.
+  - **Out of Scope** — explicit boundaries to prevent scope creep
+  - **Open Questions** — anything the subagent could not resolve and that must be answered during `/enhance`
+
+**Issue Fix proposals (`issue-*.md`) — kept simple.** Required sections:
+  - **Type** — `Issue Fix`
+  - **Originated by** — voice(s)
+  - **User guidance** — if provided, quoted verbatim
+  - **Problem** — the observable defect with reproduction notes and file references
+  - **Expected behavior** — what should happen instead
+
+**Code Enhancement proposals (`code-*.md`) — kept simple.** Required sections:
+  - **Type** — `Code Enhancement`
+  - **Originated by** — voice(s)
+  - **User guidance** — if provided, quoted verbatim
+  - **Problem / Opportunity** — what's weak about the current code with file references
+  - **Desired state** — what "better" looks like in qualitative terms (cleaner boundaries, fewer responsibilities, clearer naming, etc.)
+
+Wait for all Stage 2 subagents to finish before proceeding.
+
+**Stage 3 — Index and archive**
+
+1. Create `proposals/active/index.md` listing all active proposals grouped by type, noting which voices originated each proposal. Order within each type alphabetically.
+2. If `proposals/done/index.md` exists, preserve it as the archive index of completed proposals. If it does not exist and there are completed proposals, create it.
+3. Delete `proposals/active/_drafts.md` once all final proposals exist on disk.
 
 Type guidance for classification:
 
@@ -680,7 +738,7 @@ Present the proposals, leading with convergence:
 - "Carmack and Taleb both see [fragility] — this is a real risk."
 - "Jobs proposed [experience idea] that nobody else caught — worth considering."
 - Show the proposals divided by type: Features, Issue Fixes, and Code Enhancements
-- Highlight the top proposals by impact-to-effort ratio within each type
+- For features, briefly note the depth of the spec set so the user can see this is not a shallow proposal
 - Make the filename prefixes visible when presenting them so the user can refer to them precisely
 
 The user can then pick a proposal to implement via `/enhance proposal:<proposal-name>`, which triggers the full Enhancement Vision Workshop with all four voices analyzing the specific proposal in depth.
@@ -698,17 +756,38 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
 **2. Check the active proposal backlog**
 1. Inspect `proposals/active/` for active proposal files.
 2. Ignore `index.md`, `voices/`, and any non-proposal support files.
-3. If no active proposal files exist, run the full `/propose` workflow first.
-4. When triggering `/propose` from `/sprint`, pass the contents of `guidelines.md` as guidance so the generated proposals are shaped by the current product focus.
-5. After `/propose` finishes, re-scan `proposals/active/`.
-6. If the folder is still empty, STOP and report that no sprint can be created because no active proposals were produced.
+3. If active proposals already exist, skip the Sprint Vision Meeting and go straight to step 3.
+4. If no active proposal files exist, run the **Sprint Vision Meeting** (step 2a) before generating proposals.
+
+**2a. Sprint Vision Meeting**
+
+Before any proposal is generated, the sprint must know what it is about. The recent sprints have been shallow because proposals were generated without a shared sense of direction. This step fixes that.
+
+1. Create the next sprint folder now (do not wait until step 3) so the vision has a home. Determine the next sequential `sprint-XXXX` number using the rules in step 3, and create `sprints/sprint-XXXX/` with at least `vision.md` inside it.
+2. Spawn a dedicated subagent — the **Sprint Vision Agent** — whose single objective is to produce `sprints/sprint-XXXX/vision.md`.
+3. The Sprint Vision Agent must:
+   - Survey the current state of the application in depth: read the planning artifacts (`planning/concept.md`, `planning/vision.md`, `planning/define-product.md`, `documentation.md`), walk the source tree, and read enough code to genuinely understand what exists today
+   - Read `guidelines.md` at the AIOS root and treat it as the steering document for this sprint's direction
+   - Read prior sprint changelogs (`sprints/sprint-*/changelog.md`) to understand what has just shipped and what should not be repeated
+   - Read `proposals/done/` summaries if useful for recent context
+4. The agent must then produce `sprints/sprint-XXXX/vision.md` — a **concise but deep** sprint vision document. Concise in length, deep in insight. It must contain:
+   - **Sprint Focus** — a 1–3 sentence statement of what this sprint is about
+   - **Why now** — what about the current product state and guidelines makes this the right focus
+   - **Where to look** — the specific product surfaces, features, or code areas this sprint should target (with file paths)
+   - **Quality bar** — what "deep, not shallow" means for this particular sprint
+   - **What this sprint is NOT** — explicit anti-scope to prevent drift
+5. Wait for the Sprint Vision Agent to finish. Verify `sprints/sprint-XXXX/vision.md` exists and is non-empty.
+6. Run the full `/propose` workflow. Pass the contents of `guidelines.md` AND the path to `sprints/sprint-XXXX/vision.md` as guidance. Every voice subagent and every proposal subagent must read the sprint vision before forming its opinion.
+7. After `/propose` finishes, re-scan `proposals/active/`.
+8. If the folder is still empty, STOP and report that no sprint can be created because no active proposals were produced.
 
 **3. Create the next sprint**
 1. Ensure `sprints/` exists.
-2. Determine the next sequential sprint number from existing folders named `sprint-XXXX`.
+2. Determine the next sequential sprint number from existing folders named `sprint-XXXX`. If the Sprint Vision Meeting already created `sprints/sprint-XXXX/`, reuse that folder rather than creating a new one.
 3. If no sprint folders exist yet, create `sprints/sprint-0001/`.
 4. Otherwise create the next sequential folder (for example, after `sprint-0007/`, create `sprint-0008/`).
-5. Inside the sprint folder create:
+5. Inside the sprint folder ensure these exist (create any that are missing; keep `vision.md` if it was already produced):
+   - `vision.md` (from the Sprint Vision Meeting, if it ran)
    - `plan.md`
    - `cards/`
    - `changelog.md`
@@ -732,97 +811,93 @@ Execute the next autonomous sprint using the active proposal backlog as the sour
 2. If the branch already exists, resume it instead of creating a conflicting branch.
 3. Record the branch name in `sprints/sprint-XXXX/state.md`.
 
-**6. Execute each task via a separate claude CLI process**
+**6. Execute each task via a separate subagent**
+1. Spawn one separate subagent for **each** sprint card.
+2. Each subagent is responsible only for its assigned card.
+3. Before implementation, each subagent must create a dedicated git worktree named exactly after the task slug:
+   - `sprint-XXXX-task-YYYY-[TASK_NAME]`
+4. The worktree must check out a branch with the same name as the worktree.
+5. The subagent must:
+   - read the sprint card in full
+   - read `planning/design-guidelines.md` before touching any UI work
+   - for feature cards, treat the proposal's **Specifications** list as the implementation contract: **every numbered spec must be implemented and explicitly checked off** in the sprint card before the task can be marked done. Partial spec coverage is not acceptable — if a spec cannot be implemented, document why in the card and surface it as a failure rather than silently skipping it.
+   - develop and deliver the task end-to-end
+   - validate its changes appropriately
+   - update the card with outcome notes and the spec checklist
+   - signal the task done in `sprints/sprint-XXXX/state.md`
+6. The parent `/sprint` workflow must wait until every task subagent has finished before closing the sprint.
+7. If a task fails, mark it clearly in `sprints/sprint-XXXX/state.md` and do not silently drop it.
 
-Do NOT use the Agent tool. Each task must run as an independent OS-level `claude` process launched via the Bash tool. This prevents context window contamination across tasks and enables true parallelism.
+**7. Validate and repair the sprint (Sprint Consolidation Agent)**
 
-1. **Write a self-contained prompt file for each task** at `/tmp/sprint-XXXX-task-YYYY-[TASK_NAME]-prompt.txt`. The prompt must be fully self-contained — include the absolute project root path, the sprint card path, and all instructions the process needs to complete the task without any outside context:
+After all task subagents have finished, the parent `/sprint` workflow must **NOT** perform validation, merging, or conflict resolution itself. Instead, it spawns a **single dedicated subagent** — the **Sprint Consolidation Agent** — whose sole responsibility is to validate, consolidate, repair, and merge the sprint.
 
-   ```
-   Project root: <absolute path to project root>
-   Sprint card: <absolute path>/aios/plans/sprints/sprint-XXXX/cards/sprint-XXXX-task-YYYY-[TASK_NAME].md
+Isolating this work in its own subagent keeps the consolidation context clean and prevents the parent workflow's context (full of task spawning state) from interfering with careful merge and conflict resolution.
 
-   Read origin.md at the project root to understand conventions, then execute this task:
+The Sprint Consolidation Agent receives:
+- The sprint number and folder path (`sprints/sprint-XXXX/`)
+- The sprint branch name (`sprint-XXXX`)
+- The list of task branches/worktrees and their reported outcomes
+- Permission to read all sprint cards, the entire codebase, and all branches/worktrees
+- Permission to run build, lint, and test commands
+- Permission to perform git operations on the sprint branch and task branches (but NOT to push or to touch `master` — those happen in step 9)
 
-   1. The branch sprint-XXXX-task-YYYY-[TASK_NAME] already exists. Create a git worktree for it:
-      git -C <project root> worktree add /tmp/sprint-XXXX-task-YYYY-[TASK_NAME] sprint-XXXX-task-YYYY-[TASK_NAME]
+The Sprint Consolidation Agent must:
 
-   2. Work exclusively inside /tmp/sprint-XXXX-task-YYYY-[TASK_NAME] for all source code changes.
-
-   3. Read the sprint card and implement everything it describes, end-to-end.
-
-   4. Commit all changes inside the worktree.
-
-   5. In the MAIN repo (not the worktree), update <absolute path>/aios/plans/sprints/sprint-XXXX/state.md:
-      change this task's status from "pending" to "done".
-
-   6. Append a brief outcome summary to the sprint card file.
-   ```
-
-2. **Launch all task processes in parallel** using the Bash tool — start every background process before waiting for any:
-
-   ```bash
-   claude --dangerously-skip-permissions \
-     -p "$(cat /tmp/sprint-XXXX-task-0001-prompt.txt)" \
-     > /tmp/sprint-XXXX-task-0001.log 2>&1 &
-
-   claude --dangerously-skip-permissions \
-     -p "$(cat /tmp/sprint-XXXX-task-0002-prompt.txt)" \
-     > /tmp/sprint-XXXX-task-0002.log 2>&1 &
-
-   # ... one line per task ...
-
-   wait   # blocks until every background process exits
-   ```
-
-3. **After `wait` returns**, read each `/tmp/sprint-XXXX-task-YYYY.log` to determine success or failure. A task succeeded if the log shows no fatal errors and the worktree branch has at least one new commit beyond the sprint base.
-
-4. If a task failed, mark it as `failed` in `sprints/sprint-XXXX/state.md` and include a one-line reason extracted from its log.
-
-**7. Validate and repair the sprint**
-1. After all task processes have finished, do **not** consider the sprint complete yet.
-2. First verify sprint state integrity:
+1. **Verify sprint state integrity**
    - confirm every card has a terminal status
    - confirm every task branch/worktree produced a clear outcome
    - confirm unresolved failures are documented in `sprints/sprint-XXXX/state.md`
-3. Run project-level validation from the workspace root:
+2. **Run project-level validation from the workspace root** on the current branch state
    - run linters if the project has them
    - run the build
    - verify the app still compiles successfully
-4. Then validate the sprint **card by card**:
+3. **Validate the sprint card by card**
    - locate the implementation for each sprint card
    - verify the implementation matches the card's proposal content and claimed outcome
    - confirm the task actually delivered the promised feature, issue fix, or code enhancement
    - confirm any relevant files, tests, or documentation updates exist where expected
-5. If any validation issue is found, enter a repair loop:
+4. **Repair loop** — if any validation issue is found:
    - create or update a clear note in `sprints/sprint-XXXX/state.md` describing the issue
-   - fix the issue in the appropriate branch/worktree or in the sprint integration branch, whichever is safest and most traceable
+   - fix the issue in the appropriate task branch/worktree or in the sprint integration branch, whichever is safest and most traceable
    - rerun the narrowest relevant validation first
    - rerun project-level validation after repairs that affect shared code
-6. Continue the validation-and-repair loop until:
+5. Continue the validation-and-repair loop until:
    - lint/build checks pass, if applicable
    - every completed card is confirmed implemented correctly
    - any remaining non-complete cards are explicitly marked failed or deferred with a reason
-7. Only after all of the above is true may the sprint be considered finished.
+6. Only after all of the above is true may the sprint be considered finished. The Sprint Consolidation Agent then proceeds to step 8 and step 9.
 
-**8. Close the sprint**
+The parent `/sprint` workflow waits for the Sprint Consolidation Agent to report success or terminal failure before moving on to step 10.
+
+**8. Close the sprint** (performed by the Sprint Consolidation Agent)
 1. For each successfully delivered task, move its originating proposal file from `proposals/active/` to `proposals/done/`.
 2. Update `proposals/active/index.md` and `proposals/done/index.md` if they exist.
 3. Mark the sprint complete in `sprints/sprint-XXXX/state.md` only after the validation-and-repair loop passes.
 
-**9. Merge and push**
+**9. Merge and push** (performed by the Sprint Consolidation Agent)
+
+This step is where parallel sprint work gets unified. Because every task ran in its own worktree/branch, **merge conflicts are expected and normal** when multiple tasks touched the same files. The Sprint Consolidation Agent is responsible for resolving these conflicts — and the resolution rule is strict: **all sprint work must survive**.
+
 1. For each successfully completed task worktree branch (`sprint-XXXX-task-YYYY-[TASK_NAME]`), merge it into the sprint branch `sprint-XXXX`:
    - `git checkout sprint-XXXX`
    - `git merge --no-ff sprint-XXXX-task-YYYY-[TASK_NAME]`
-2. Resolve any merge conflicts before proceeding. If a conflict cannot be resolved cleanly, mark the affected task as failed in `sprints/sprint-XXXX/state.md` and skip merging that branch.
-3. Once all task branches are merged into `sprint-XXXX`, push the sprint branch to GitHub:
+2. **Conflict resolution policy.** Conflicts WILL happen. When a conflict occurs:
+   - Do NOT discard either side by default. Read both sides of the conflict, understand what each task was trying to deliver (consult the originating sprint card if needed), and produce a merged result that **preserves the intent and behavior of every task** involved.
+   - The goal is integration, not selection: the final code must reflect *all* the work from *all* successfully completed sprint cards. Dropping a task's changes to make a merge clean is not acceptable.
+   - If two tasks fundamentally contradict each other (e.g., one removes a function the other extends), reconcile them by combining their intent — refactor on the fly if necessary so both deliverables remain functional in the merged result.
+   - After resolving each conflict, rerun the build and any relevant validation on the merged sprint branch before merging the next task branch.
+   - Document every non-trivial conflict resolution in `sprints/sprint-XXXX/state.md` under a `## Conflict Resolutions` section: which branches conflicted, which files, and how both sides were preserved.
+   - Only if a conflict genuinely cannot be reconciled while keeping both tasks' work intact may a task be marked failed in `sprints/sprint-XXXX/state.md` — and this must be a last resort with a written justification, not a shortcut.
+3. Once all task branches are merged into `sprint-XXXX` and the merged branch builds and passes validation, push the sprint branch to GitHub:
    - `git push origin sprint-XXXX`
-4. Merge the sprint branch into `master`:
-   - `git checkout master`
+4. Merge the sprint branch into the repository's default branch (e.g., `main` or `master` — detect via `git symbolic-ref refs/remotes/origin/HEAD` or equivalent):
+   - `git checkout <default-branch>`
    - `git merge --no-ff sprint-XXXX`
-5. Push `master` to GitHub:
-   - `git push origin master`
-6. Record the merge and push outcome in `sprints/sprint-XXXX/state.md`.
+   - Apply the same conflict resolution policy if conflicts arise against the default branch.
+5. Push the default branch to GitHub:
+   - `git push origin <default-branch>`
+6. Record the merge and push outcome in `sprints/sprint-XXXX/state.md`, including a final note that all sprint work was preserved through conflict resolution.
 
 **10. Write the sprint changelog**
 1. Write `sprints/sprint-XXXX/changelog.md`.
