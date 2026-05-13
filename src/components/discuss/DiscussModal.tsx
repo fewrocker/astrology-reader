@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
-import { getDiscussResponse, getStoredApiKey, type ChatMessage } from '../../services/gptInterpretation'
+import { getDiscussResponse, type ChatMessage } from '../../services/gptInterpretation'
 import type { ChartData } from '../../engine/types'
 import type { FullReading } from '../../data/interpretations'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
@@ -335,9 +335,8 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
     setLoading(true)
 
     try {
-      const apiKey = getStoredApiKey()
       const context = buildContext()
-      const reply = await getDiscussResponse(context, newMessages, apiKey)
+      const reply = await getDiscussResponse(context, newMessages)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

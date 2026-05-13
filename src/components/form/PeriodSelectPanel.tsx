@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { type TransitPeriod } from '../../engine/transits'
-import { getStoredApiKey, storeApiKey } from '../../services/gptInterpretation'
 
 export interface PeriodOption {
   id: TransitPeriod
@@ -36,8 +35,6 @@ export default function PeriodSelectPanel({
   accentColor = 'gold',
   disabled,
 }: PeriodSelectPanelProps) {
-  const [apiKey, setApiKey] = useState(getStoredApiKey())
-  const [showKeyInput, setShowKeyInput] = useState(!getStoredApiKey())
   const now = new Date()
   const [selMonth, setSelMonth] = useState(String(now.getMonth() + 1))
   const [selYear, setSelYear] = useState(String(now.getFullYear()))
@@ -48,17 +45,10 @@ export default function PeriodSelectPanel({
   ]
   const years = Array.from({ length: 6 }, (_, i) => String(now.getFullYear() + i))
 
-  const isDisabled = disabled || !apiKey
+  const isDisabled = disabled ?? false
   const gold = accentColor === 'gold'
 
-  const handleSelect = (period: TransitPeriod) => {
-    if (apiKey) storeApiKey(apiKey)
-    onSelect(period)
-  }
-
   const handleCustomMonth = () => {
-    if (!apiKey) return
-    storeApiKey(apiKey)
     onCustomMonth(`${selYear}-${selMonth.padStart(2, '0')}`)
   }
 
@@ -83,7 +73,7 @@ export default function PeriodSelectPanel({
             <button
               key={p.id}
               type="button"
-              onClick={() => handleSelect(p.id)}
+              onClick={() => onSelect(p.id)}
               disabled={isDisabled}
               className={`w-full text-left px-5 py-4 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed group ${
                 gold
@@ -142,31 +132,6 @@ export default function PeriodSelectPanel({
               Read ☽
             </button>
           </div>
-        </div>
-
-        <div className="border-t border-mystic-border pt-4">
-          {showKeyInput ? (
-            <div className="space-y-2">
-              <label className="text-mystic-muted text-xs uppercase tracking-wider block text-left">OpenAI API Key</label>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={e => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full px-4 py-2 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none"
-              />
-              <p className="text-mystic-muted text-xs text-left">
-                Required for AI-powered interpretation.{gold && ' Key is stored locally in your browser.'}
-              </p>
-            </div>
-          ) : (
-            <button
-              onClick={() => setShowKeyInput(true)}
-              className="text-mystic-muted text-xs hover:text-mystic-text transition-colors"
-            >
-              Change API Key
-            </button>
-          )}
         </div>
 
         {error && (

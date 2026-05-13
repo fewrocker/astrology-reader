@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { getNumerologyDiscussResponse, getStoredApiKey, type ChatMessage } from '../../services/gptInterpretation'
+import { getNumerologyDiscussResponse, type ChatMessage } from '../../services/gptInterpretation'
 
 interface NumerologyDiscussModalProps {
   open: boolean
@@ -49,8 +49,7 @@ export default function NumerologyDiscussModal({ open, onClose, context, chips }
     setLoading(true)
 
     try {
-      const apiKey = getStoredApiKey()
-      const reply = await getNumerologyDiscussResponse(context, newMessages, apiKey)
+      const reply = await getNumerologyDiscussResponse(context, newMessages)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

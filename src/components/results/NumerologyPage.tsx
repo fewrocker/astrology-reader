@@ -5,7 +5,7 @@ import { buildNumerologyChartData } from '../../engine/numerologyChart'
 import { getInterpretation, type NumerologyCategory } from '../../data/numerologyInterpretations'
 import type { ChartData } from '../../engine/types'
 import { calculateChart } from '../../engine/astronomy'
-import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, generateNumerologySkyChartReading, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, generateNumerologySkyChartReading, getGptNudge } from '../../services/gptInterpretation'
 import NumerologyDiscussModal from './NumerologyDiscussModal'
 import NumerologySkyChart, { FrequencyBar } from '../chart/NumerologySkyChart'
 
@@ -306,8 +306,6 @@ export default function NumerologyPage() {
   const [skyReadingLoading, setSkyReadingLoading] = useState(false)
   const [skyReadingError, setSkyReadingError] = useState<string | null>(null)
 
-  const apiKey = getStoredApiKey()
-
   const chartData = useMemo(() => getChartData(state), [state.chartData, birthData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const skyChartData = useMemo(
@@ -322,12 +320,11 @@ export default function NumerologyPage() {
 
   // Narrative GPT call — fires in parallel with cross-reading
   useEffect(() => {
-    if (!apiKey) return
     let cancelled = false
     setNarrativeLoading(true)
     setNarrativeText(null)
     setNarrativeError(null)
-    generateNumerologyNarrative(reading, birthData.userName, apiKey)
+    generateNumerologyNarrative(reading, birthData.userName)
       .then(text => { if (!cancelled) setNarrativeText(text) })
       .catch(err => { if (!cancelled) setNarrativeError((err as Error).message) })
       .finally(() => { if (!cancelled) setNarrativeLoading(false) })
@@ -336,20 +333,20 @@ export default function NumerologyPage() {
 
   // Cross-reading GPT call — fires in parallel with narrative
   useEffect(() => {
-    if (!chartData || !apiKey) return
+    if (!chartData) return
     let cancelled = false
     setCrossReadingLoading(true)
     setCrossReadingError(null)
-    generateAstroNumerologyCrossReading(reading, chartData, birthData.userName, apiKey)
+    generateAstroNumerologyCrossReading(reading, chartData, birthData.userName)
       .then(text => { if (!cancelled) setCrossReadingText(text) })
       .catch(err => { if (!cancelled) setCrossReadingError(err.message) })
       .finally(() => { if (!cancelled) setCrossReadingLoading(false) })
     return () => { cancelled = true }
-  }, [chartData, reading, birthData.userName, apiKey, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chartData, reading, birthData.userName, retryCount]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sky chart reading — fires after chart renders, never blocks it
   useEffect(() => {
-    if (!skyChartData || !apiKey) return
+    if (!skyChartData) return
     let cancelled = false
     setSkyReadingLoading(true)
     setSkyReadingText(null)
@@ -357,13 +354,12 @@ export default function NumerologyPage() {
     generateNumerologySkyChartReading(
       { name: birthData.userName, date: birthData.date },
       skyChartData.frequencyMap,
-      apiKey,
     )
       .then(text => { if (!cancelled) setSkyReadingText(text) })
       .catch(err => { if (!cancelled) setSkyReadingError((err as Error).message) })
       .finally(() => { if (!cancelled) setSkyReadingLoading(false) })
     return () => { cancelled = true }
-  }, [skyChartData, birthData.userName, birthData.date, apiKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [skyChartData, birthData.userName, birthData.date]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const numerologyContext = useMemo(
     () => buildNumerologyContext(reading, chartData, birthData.userName, birthData.date),
@@ -397,6 +393,8 @@ export default function NumerologyPage() {
     setEditingName(false)
   }
 
+  const gptNudge = getGptNudge()
+
   return (
     <div className="w-full max-w-3xl mx-auto">
       {/* Header */}
@@ -428,11 +426,7 @@ export default function NumerologyPage() {
             </div>
 
             {/* Sky chart GPT reading */}
-            {!apiKey ? (
-              <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-5 text-center">
-                <p className="text-mystic-muted text-sm">Add your OpenAI API key to receive a reading of your numerical sky.</p>
-              </div>
-            ) : skyReadingLoading ? (
+            {skyReadingLoading ? (
               <div className="bg-mystic-surface/50 border border-mystic-gold/20 rounded-xl p-6 md:p-8">
                 <div className="flex items-center gap-2 mb-5">
                   <span className="font-heading text-mystic-gold text-sm tracking-widest animate-pulse">✦ Reading your sky…</span>
@@ -464,7 +458,6 @@ export default function NumerologyPage() {
                     generateNumerologySkyChartReading(
                       { name: birthData.userName, date: birthData.date },
                       skyChartData!.frequencyMap,
-                      apiKey,
                     )
                       .then(text => setSkyReadingText(text))
                       .catch(err => setSkyReadingError((err as Error).message))
@@ -484,6 +477,7 @@ export default function NumerologyPage() {
                     <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{para}</p>
                   ))}
                 </div>
+                {gptNudge && <p className="text-mystic-muted/60 text-xs mt-4">{gptNudge}</p>}
               </div>
             ) : null}
           </>
@@ -621,11 +615,7 @@ export default function NumerologyPage() {
           <span className="font-heading text-mystic-gold text-sm tracking-widest">✦ Your Reading</span>
           <div className="h-px flex-1 bg-mystic-border" />
         </div>
-        {!apiKey ? (
-          <div className="bg-mystic-surface/30 border border-dashed border-mystic-border rounded-xl p-5 text-center">
-            <p className="text-mystic-muted text-sm">Add your OpenAI API key to unlock your personalized reading.</p>
-          </div>
-        ) : narrativeLoading ? (
+        {narrativeLoading ? (
           <NarrativeSkeleton />
         ) : narrativeError ? (
           <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3">
@@ -635,7 +625,7 @@ export default function NumerologyPage() {
               onClick={() => {
                 setNarrativeError(null)
                 setNarrativeLoading(true)
-                generateNumerologyNarrative(reading, birthData.userName, apiKey)
+                generateNumerologyNarrative(reading, birthData.userName)
                   .then(text => setNarrativeText(text))
                   .catch(err => setNarrativeError((err as Error).message))
                   .finally(() => setNarrativeLoading(false))
@@ -658,6 +648,7 @@ export default function NumerologyPage() {
                 <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{para}</p>
               ))}
             </div>
+            {gptNudge && <p className="text-mystic-muted/60 text-xs mt-4">{gptNudge}</p>}
           </div>
         ) : null}
       </div>
@@ -673,10 +664,6 @@ export default function NumerologyPage() {
         {!chartData ? (
           <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
             <p className="text-mystic-muted text-sm">Enter your birth data to unlock the astrology ↔ numerology synthesis</p>
-          </div>
-        ) : !apiKey ? (
-          <div className="bg-mystic-surface/30 border border-mystic-border rounded-xl p-6 text-center">
-            <p className="text-mystic-muted text-sm">Add an OpenAI API key in settings to unlock the live astrology ↔ numerology synthesis</p>
           </div>
         ) : crossReadingLoading ? (
           <CrossReadingSkeleton />
@@ -704,6 +691,7 @@ export default function NumerologyPage() {
                 <p key={i} className="text-mystic-text/85 text-sm leading-relaxed">{p}</p>
               ))}
             </div>
+            {gptNudge && <p className="text-mystic-muted/60 text-xs mt-4">{gptNudge}</p>}
           </div>
         ) : null}
       </div>

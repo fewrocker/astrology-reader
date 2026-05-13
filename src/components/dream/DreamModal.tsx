@@ -4,7 +4,6 @@ import {
   getDailySnapshotInterpretation,
   getDreamInterpretation,
   getDreamDiscussResponse,
-  getStoredApiKey,
   type ChatMessage,
 } from '../../services/gptInterpretation'
 import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits } from '../../engine/transits'
@@ -195,12 +194,6 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
     const dream = dreamInput.trim()
     if (!dream) return
 
-    const apiKey = getStoredApiKey()
-    if (!apiKey) {
-      setError('An OpenAI API key is required. Add one from the Transit Reading screen.')
-      return
-    }
-
     setError(null)
     setStage('loading-sky')
 
@@ -234,7 +227,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
       setSkyContext(capturedSkyCtx)
 
       const snapshotPrompt = buildDreamSnapshotPrompt(chartData, moonPhase, transitAspects)
-      const transitSummary = await getDailySnapshotInterpretation(snapshotPrompt, apiKey)
+      const transitSummary = await getDailySnapshotInterpretation(snapshotPrompt)
 
       setStage('loading-dream')
 
@@ -250,7 +243,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
       } : undefined
 
       const interpretation = await getDreamInterpretation(
-        dream, natalCtx, transitSummary, transitAspectsText, apiKey, gptSkyCtx, chartData,
+        dream, natalCtx, transitSummary, transitAspectsText, gptSkyCtx, chartData,
       )
 
       const ctx = `## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects\n${transitAspectsText}\n\n## The Dream\n${dream}`
@@ -276,8 +269,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
     setChatLoading(true)
 
     try {
-      const apiKey = getStoredApiKey()
-      const reply = await getDreamDiscussResponse(dreamContext, newMessages, apiKey)
+      const reply = await getDreamDiscussResponse(dreamContext, newMessages)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')
