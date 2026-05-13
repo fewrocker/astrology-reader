@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import type { ChartData } from '../../engine/types'
 import { PLANET_GLYPHS } from '../../engine/types'
 import type { BirthData } from '../../context/appState'
@@ -13,6 +14,7 @@ import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getTopActiveTransits } from '../../engine/transits'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getStoredApiKey } from '../../services/gptInterpretation'
+import { syncJournalEntry } from '../../services/entrySync'
 import { isQuotaError } from '../../utils/storage'
 import DreamModal from '../dream/DreamModal'
 
@@ -76,6 +78,7 @@ interface CosmicJournalPageProps {
 
 export default function CosmicJournalPage({ chartData, birthData }: CosmicJournalPageProps) {
   const { dispatch } = useApp()
+  const { isAuthenticated, token } = useAuth()
   const [entries, setEntries] = useState<JournalEntry[]>(() => loadEntries())
   const [composerOpen, setComposerOpen] = useState(false)
   const [body, setBody] = useState('')
@@ -102,6 +105,60 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
       }).catch(() => {})
     }
   }, [])
+
+  // Authenticated mount: retry failed syncs then merge server entries
+  useEffect(() => {
+    if (!isAuthenticated || !token) return
+    const authToken = token
+
+    setTimeout(async () => {
+      // 1. Retry entries that failed to sync, oldest-first
+      const currentEntries = loadEntries()
+      const failed = currentEntries
+        .filter(e => e._syncFailed === true)
+        .sort((a, b) => {
+          if (a.date !== b.date) return a.date.localeCompare(b.date)
+          return a.createdAt.localeCompare(b.createdAt)
+        })
+      for (const entry of failed) {
+        await syncJournalEntry(entry, authToken)
+      }
+
+      // 2. Fetch server entries and merge (server wins on ID collision)
+      try {
+        const response = await fetch('/api/entries?kind=journal', {
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        })
+        if (!response.ok) return
+        const serverEntries = await response.json() as JournalEntry[]
+        const local = loadEntries()
+        const localById = new Map(local.map(e => [e.id, e]))
+
+        let changed = false
+        for (const se of serverEntries) {
+          const le = localById.get(se.id)
+          if (le) {
+            if (le._syncFailed || !le._serverId) {
+              localById.set(se.id, { ...le, ...se, _serverId: se.id, _syncFailed: undefined })
+              changed = true
+            }
+          } else {
+            localById.set(se.id, { ...se, _serverId: se.id })
+            changed = true
+          }
+        }
+
+        if (changed) {
+          const merged = Array.from(localById.values())
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          saveEntries(merged)
+          setEntries(merged)
+        }
+      } catch {
+        // silently ignore — local entries are displayed as-is
+      }
+    }, 0)
+  }, [isAuthenticated, token])
 
   // Compute sky preview (debounced)
   const computeSkyPreview = useCallback((date: string, time: string) => {
@@ -199,6 +256,10 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
 
     setEntries(updated)
     setComposerOpen(false)
+
+    if (isAuthenticated && token) {
+      void syncJournalEntry(newEntry, token)
+    }
   }
 
   const handleDelete = useCallback((id: string) => {
