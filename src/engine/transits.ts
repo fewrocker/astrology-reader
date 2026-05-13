@@ -386,15 +386,17 @@ export function buildTransitPrompt(
 }
 
 /**
- * Return the tightest active transit aspects at the current moment for a natal chart.
+ * Return the tightest active transit aspects for a natal chart at the given moment.
  * Sorted by orb ascending. Useful for capturing sky context at a specific point in time.
+ * @param date optional date to compute positions for; defaults to now (current callers unaffected)
  */
 export function getTopActiveTransits(
   chartData: ChartData,
   maxCount: number,
   maxOrbDegrees: number,
+  date?: Date,
 ): TransitAspect[] {
-  const positions = calculateCurrentPositions(new Date())
+  const positions = calculateCurrentPositions(date ?? new Date())
   const aspects = calculateTransitAspects(positions, chartData.planets, 'daily')
   return aspects.filter(a => a.orb <= maxOrbDegrees).slice(0, maxCount)
 }
