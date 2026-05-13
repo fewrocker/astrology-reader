@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
+import { AuthProvider, useAuth } from './context/AuthContext'
+import MigrationBanner from './components/auth/MigrationBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import { hasCachedBirthData } from './context/appState'
@@ -613,12 +615,37 @@ function AppContent() {
   )
 }
 
+function MigrationGate({ children }: { children: React.ReactNode }) {
+  const { isMigrationPending, migrationCandidate, dismissMigration } = useAuth()
+
+  if (isMigrationPending && migrationCandidate) {
+    return (
+      <>
+        {children}
+        <MigrationBanner
+          journalCount={migrationCandidate.journalCount}
+          dreamCount={migrationCandidate.dreamCount}
+          hasBirthData={migrationCandidate.hasBirthData}
+          onMigrate={dismissMigration}
+          onSkip={dismissMigration}
+        />
+      </>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <ErrorBoundary>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
+      <AuthProvider>
+        <AppProvider>
+          <MigrationGate>
+            <AppContent />
+          </MigrationGate>
+        </AppProvider>
+      </AuthProvider>
     </ErrorBoundary>
   )
 }

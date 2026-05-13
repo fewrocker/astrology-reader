@@ -206,13 +206,14 @@ export default function JournalEntryCard({
   const interpretation = getInterpretation('personalDay', entry.numerologicalDay)
   const phaseEmoji = moonInfo ? (PHASE_EMOJIS[moonInfo.phase] ?? '🌙') : '🌙'
 
+  const dreamSessionKey = entry.dreamRef?.type === 'local' ? entry.dreamRef.key : null
+
   const handleDreamClick = () => {
-    if (entry.dreamRef) {
-      if (onDreamOpen) {
-        onDreamOpen(entry.dreamRef)
-      } else {
-        setDreamModalOpen(true)
-      }
+    if (!dreamSessionKey) return
+    if (onDreamOpen) {
+      onDreamOpen(dreamSessionKey)
+    } else {
+      setDreamModalOpen(true)
     }
   }
 
@@ -328,7 +329,7 @@ export default function JournalEntryCard({
         </div>
 
         {/* Dream cross-reference */}
-        {entry.dreamRef && (
+        {dreamSessionKey && (
           <button
             type="button"
             onClick={handleDreamClick}
@@ -340,12 +341,12 @@ export default function JournalEntryCard({
       </div>
 
       {/* Dream Modal for cross-reference (when onDreamOpen not provided) */}
-      {dreamModalOpen && entry.dreamRef && (
+      {dreamModalOpen && dreamSessionKey && (
         <DreamModal
           open={dreamModalOpen}
           onClose={() => setDreamModalOpen(false)}
           chartData={chartData}
-          initialSessionKey={entry.dreamRef}
+          initialSessionKey={dreamSessionKey}
         />
       )}
     </>
