@@ -442,6 +442,7 @@ function AppContent() {
           houses: [] as import('./engine/types').HouseCusp[],
           angles: synastryData.compositeChart.angles as import('./engine/types').ChartAngles,
           unknownTime: true,
+          houseSystem: 'placidus' as const,
         }
         const transitData = calculateTransits(compositeChartData, state.synastryTransitPeriod!, state.synastryTransitTargetMonth ?? undefined)
 
