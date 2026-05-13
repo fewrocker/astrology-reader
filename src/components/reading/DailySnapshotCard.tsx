@@ -7,6 +7,7 @@ import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
 import { calculatePersonalDay } from '../../engine/numerology'
+import { isQuotaError } from '../../utils/storage'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -155,8 +156,10 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
           setText(result)
           try {
             localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
-          } catch {
-            // ignore cache write errors
+          } catch (e) {
+            if (isQuotaError(e)) {
+              console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+            }
           }
         }
       } catch (err) {

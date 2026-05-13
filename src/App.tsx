@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import ErrorBoundary from './components/ErrorBoundary'
+import StorageWarningBanner from './components/StorageWarningBanner'
 import { hasCachedBirthData } from './context/appState'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -524,6 +525,11 @@ function AppContent() {
     <div className={`min-h-screen bg-mystic-bg flex flex-col items-center px-4 relative ${isLandingPage && showCachedLanding ? 'py-6 lg:py-8' : 'py-12'}`}>
       <div className="starfield" aria-hidden="true" />
       <div className="relative z-10 w-full flex flex-col items-center">
+        {state.storageWarning && (
+          <div className="w-full max-w-2xl mb-4">
+            <StorageWarningBanner />
+          </div>
+        )}
         <header className={`text-center ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'}`}>
           <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
           <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
