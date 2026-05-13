@@ -1,5 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
+import authRouter from './routes/auth';
 
 // JWT secret validation — must happen before anything else
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -20,7 +21,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.use(express.json());
+
 app.get('/health', (req, res) => res.json({ ok: true }));
+app.use('/api/auth', authRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
