@@ -1,182 +1,159 @@
-# John Carmack — Sprint 6 Proposal Voice
+# John Carmack — Sprint 0007 Proposal Voice
 
-Sprint 5 shipped cleanly. Today page is live. Dream resonance is working. The personal day deduplication is done. Good. Now let's talk about Cosmic Journal, because this sprint is technically the most interesting one yet — and it has some real complexity hiding under what looks like a simple CRUD feature.
-
----
-
-## The Real Technical Problem: Retroactive Sky Computation
-
-The vision describes "real retroactive sky computation" like it's a checkbox. It's not. Let me be precise about what this actually means and where the complexity lives.
-
-The existing `calculateCurrentPositions(date: Date)` in `src/engine/transits.ts` already accepts an arbitrary `Date`. That part works. So does `calculateTransitAspects()`. And `getMoonSignAndPhase()` in `src/engine/astronomy.ts` accepts a `Date`. The engine layer is fine — it's genuinely general-purpose.
-
-The problem is the **timezone conversion for historical dates**. Look at `resolveToUTC()` in `src/engine/astronomy.ts` (line 409). It uses `Intl.DateTimeFormat` to find the UTC offset at a given local datetime. For current dates, this is reliable. For historical dates, it depends on whether the browser's IANA timezone database has accurate historical DST data. Most modern engines do — but this is a silent failure mode: if someone enters an event from 1987 in a timezone that had a DST rule change, the computed UTC moment could be off by an hour. The chart positions will be off by a proportional amount — nothing catastrophic for slow planets, but potentially wrong for the Moon (which moves ~13° per day, so an hour error means ~0.5° Moon position error). This is acceptable for the journal's purpose, but it should be documented, not silently trusted.
-
-The journal entry composer needs to construct a proper `Date` from the user's local date and time fields. The catch is: we don't know the user's timezone for the event. We know their birth city timezone (in `birthData.city.tz`). Do we assume the event happened in their home timezone? Probably yes for most users. But a journal entry from a business trip to Tokyo would be wrong if we apply their Berlin timezone. For sprint 6, assume home timezone for events. Don't over-engineer this — note it as a known limitation.
-
-**Implementation**: In the entry composer, construct the UTC moment via `resolveToUTC()` using `birthData.city.tz` (already imported in App.tsx via birthData). Pass that UTC Date to `calculateCurrentPositions()` and `getMoonSignAndPhase()`. This is a 3-line wire-up. The complexity is in recognizing you need to do it at all.
+Sprint 0006 shipped cleanly. The Cosmic Journal is live, the sky computation is correct for historical dates, the energy rating deduplication is done, and the localStorage guard exists. Good. Now sprint-0007 introduces a backend for the first time, and this is where architectural decisions made in a hurry will haunt you for the life of the product. Let me be precise about what the actual hard problems are.
 
 ---
 
-## Data Model: Where Decisions Will Haunt You
+## Architecture: What to Actually Build
 
-The vision proposes this interface:
+The vision correctly lands on a Node.js/Express monolith. That's the right call. Don't second-guess it. One process, one port, one deploy, `dist/` served statically by Express, `/api/*` handled by Express routes. This is not a microservices problem. It's a small personal app that needs user accounts and a database. Keep it simple.
+
+**SQLite vs PostgreSQL:** Go SQLite with `better-sqlite3` for v1. The vision hedges on this and it shouldn't. The app runs on a single-server VPS. SQLite on a single machine outperforms PostgreSQL for simple read/write workloads when there's no horizontal scale requirement. `better-sqlite3` is synchronous by design — no async/await surface, no connection pool to manage, no separate process, no network socket. The migration path to PostgreSQL is straightforward if you ever need it: the schema is tiny and the queries are simple. Starting with PostgreSQL because "production" adds operational complexity for zero benefit at this scale. Pick SQLite. Make it a conscious decision, document it, move on.
+
+**JWT secret management:** This is the first place this sprint can go badly. The JWT secret must come from an environment variable (`JWT_SECRET`). If it's hardcoded anywhere — even in a comment, even in a `.env.example` — someone will copy it into production. The server startup should fail loudly if `JWT_SECRET` is not set and `NODE_ENV !== 'development'`. In dev, generate a random secret at startup and log a warning. Do not use a hardcoded fallback in any code path that runs in production. This is non-negotiable.
+
+**Token expiry:** 30 days is fine. Use `jsonwebtoken` with `{ expiresIn: '30d' }`. The `/api/auth/me` endpoint validates the token on every request — that's the right model. Don't store tokens server-side (no session table). The token is the session.
+
+**Password hashing:** `bcrypt` with cost factor 12. Not 10 (too fast on modern hardware), not 14 (too slow for a responsive login). 12 is the current production default. The hash lives in the `users.password_hash` column, never in a log, never in an error message, never returned in an API response.
+
+---
+
+## The Real Technical Risks
+
+### Risk 1: The localStorage-to-Server Migration Will Destroy Data If You Get the Order Wrong
+
+The vision describes the migration flow correctly at a high level, but the implementation has a subtle failure mode that will burn users. Here's the sequence that kills data:
+
+1. User logs in
+2. Frontend detects local journal entries
+3. User clicks "Upload"
+4. Frontend batch-POSTs entries to `/api/entries`
+5. **Server returns 201**
+6. **Frontend clears localStorage** — this is the only safe moment to clear
+
+The failure mode: if step 6 happens before step 5 confirms, or if the frontend clears on any network response (including 4xx/5xx), the data is gone. The `_synced: true` marker approach in the vision is better than clearing, but it has its own problem: if the marker write fails (quota error), you get duplicate entries on the next sync attempt. 
+
+The correct implementation: don't clear localStorage on upload success. Instead, mark each entry with `_synced: true` server-side UUID (the ID assigned by the server). On future loads, when authenticated, load from the server and use server IDs as the source of truth. Let localStorage atrophy naturally — it becomes stale read-only backup. Only clear it on explicit user action ("Clear local data") after verifying the server has everything. This is more conservative than the vision's approach but eliminates the data loss failure mode entirely.
+
+Also: the batch upload endpoint must be idempotent. If the client retries (network timeout between POST and 201 response), you must not create duplicates. Use the client-generated UUID (`id` field in `JournalEntry`) as the deduplication key on the server — `INSERT OR IGNORE` in SQLite, `INSERT ... ON CONFLICT DO NOTHING` in the schema. This makes retries safe.
+
+### Risk 2: The OpenAI API Key Is Currently Exposed on the Client
+
+`src/services/gptInterpretation.ts` stores the OpenAI API key in localStorage and calls `api.openai.com` directly from the browser. This is a known limitation of a frontend-only app. But now that a backend exists, this is the sprint to fix it. Every GPT call should go through the backend:
+
+1. Client calls `POST /api/gpt/interpret` with the prompt payload
+2. Server holds `OPENAI_API_KEY` in environment variable
+3. Server proxies to OpenAI and returns the result
+
+The client never touches the OpenAI key. The API key storage in localStorage, the `getStoredApiKey()` function, the key setup UI — all of this goes away. Users no longer need to supply their own API key. The server owns the key.
+
+This is not explicitly in the sprint vision but it's the natural completion of introducing a backend. Shipping a backend that still requires users to paste in their OpenAI API key is a missed opportunity and leaves a security-unfriendly pattern (localStorage key storage) intact. This is the clean break point.
+
+If cost is a concern, rate-limit GPT endpoints per user on the server side — simple in-memory counter per `user_id` per day is enough for v1.
+
+### Risk 3: The `dreamRef` Field Couples Journal to localStorage Dream Sessions
+
+`JournalEntry.dreamRef` stores a localStorage key (`dream-session-YYYY-MM-DD`). When journal entries migrate to the server, `dreamRef` becomes a dangling reference to a localStorage key that may or may not still exist on the current device. If the user logs in on a new device, all `dreamRef` links are broken — silently, because the code just checks `localStorage.getItem(dreamRef)` and returns null on miss.
+
+The correct fix during this sprint: dream sessions need to move to the `entries` table with `kind = 'dream'`. The `dreamRef` field on journal entries should become a UUID reference to the dream entry's server-side ID, not a localStorage key string. During migration, when uploading dream sessions, generate a UUID for each and update the corresponding journal entries' `dreamRef` to point to the new UUID.
+
+If dream session migration is out of scope for this sprint (it's complex), at minimum: change `dreamRef` to store `{ type: 'localStorage', key: string } | { type: 'server', id: string }` so the field format is forward-compatible when dream sessions do migrate. A stringly-typed localStorage key baked into every server-side journal entry is a schema smell that will require a migration later.
+
+### Risk 4: AppState.ts Is Now Two Different Things
+
+`src/context/appState.ts` currently handles two concerns: (1) birth data persistence to localStorage and (2) app view state/reducer. When auth is introduced, birth data has a new source of truth (the server), but the reducer still writes to localStorage on `UPDATE_BIRTH_DATA` → `saveBirthData()`. The sequence during login will be ambiguous: does birth data come from the server response or from localStorage? Which wins if they differ?
+
+The answer needs to be explicit in code: on login, server birth data overwrites localStorage. The `SET_AUTH_USER` action (new) should accept `{ user, birthData }` and dispatch a `LOAD_BIRTH_DATA_FROM_SERVER` action that replaces `state.birthData` without writing to localStorage. The `saveBirthData()` function in localStorage should only be called when the user is not authenticated (localStorage fallback path) or when explicitly told to sync to localStorage as backup.
+
+Right now this coupling is implicit. Making it explicit before writing 2000 lines of backend code will prevent a class of "my profile shows wrong data" bugs.
+
+---
+
+## Existing Code Smells That Will Cause Problems
+
+**1. No fetch abstraction.** The frontend currently has zero `fetch()` calls — all computation is local. `authService.ts` will be the first place network requests appear. Don't scatter raw `fetch()` calls across authService. Build a thin `apiClient.ts` that handles: base URL resolution (localhost:3001 in dev, `/api` in prod), JWT Authorization header injection from the stored token, timeout (important for offline tolerance — the vision requires graceful degradation), and standardized error shapes. Every endpoint in authService goes through this client. This pays for itself immediately when you need to add request logging or handle 401s globally (token expired → force logout).
+
+**2. The `saveEntries` function in `CosmicJournalPage.tsx` re-implements quota error detection.** Lines 48-50 catch `QuotaExceededError` by string matching on `e.message` instead of using the `isQuotaError()` utility already in `src/utils/storage.ts`. This is exactly the pattern sprint-0006 created `isQuotaError()` to eliminate. Fix it in the same PR as the backend work — it's a one-line import change.
+
+**3. The PatternPanel computes transit aspects live for historical entries.** `PatternPanel.tsx` calls `getTopActiveTransits(chartData, 20, 10, entryDate)` per entry in the `processNext` loop (line 185). This was an architectural concern I flagged in sprint-0006 analysis: recomputing sky snapshots from stored entries at read time instead of storing them at write time. For 50+ entries, this is 50 × 10 planet position lookups running via `requestAnimationFrame` — it works, but it means the pattern panel's accuracy depends on the runtime engine state rather than the stored snapshot. When entries live on the server, this computation happens on the client against the live engine, which is correct — but it means the pattern data is only as good as the browser's IANA timezone database for historical dates. Consider storing the top transit aspects in `metadata` JSONB at write time and reading from stored data in PatternPanel. This makes patterns deterministic and server-renderable.
+
+**4. `buildInitialState()` runs synchronous localStorage reads at module load time.** Lines 278-309 in `appState.ts` call `loadCachedBirthData()`, `loadCachedChartResults()`, `loadCachedTransitResults()`, and `loadCachedSynastryResults()` synchronously before any React tree renders. When the app is authenticated, the initial state should load from the server — but the current pattern has `initialState` as a module-level constant populated synchronously. You can't `await` a server fetch at module load time. The fix: make `buildInitialState()` return a promise or move to an async initialization hook. For sprint-0007, the practical path is: load from localStorage first (as today), then dispatch `LOAD_BIRTH_DATA_FROM_SERVER` after the auth token is validated, overwriting the initial state. Two-phase initialization is fine for a personal app. Just make it explicit.
+
+---
+
+## Dev Setup: The Vite Proxy Is Missing
+
+`vite.config.ts` has `server.allowedHosts: ['.ngrok-free.app']` but no `server.proxy` configuration. The vision correctly identifies that dev needs `/api/*` proxied to `http://localhost:3001`. Without this, every `fetch('/api/auth/login')` from the Vite dev server on port 5173 hits the wrong host. Add:
 
 ```ts
-{ id, date, time?, title, body, tags, skySnapshot, numerologicalDay, dreamRef? }
+server: {
+  allowedHosts: ['.ngrok-free.app'],
+  proxy: {
+    '/api': {
+      target: 'http://localhost:3001',
+      changeOrigin: true,
+    },
+  },
+},
 ```
 
-That's directionally right but underspecified. Let me work through what `skySnapshot` needs to contain for the pattern detection to work, because if you store the wrong things now, you'll have to migrate or recompute everything later when you want to do the analysis.
-
-**skySnapshot must store:**
-1. `moonSign: string` — for phase pattern detection
-2. `moonPhase: string` — for phase pattern detection  
-3. `moonElongation: number` — if you want to group entries by lunar phase with any precision
-4. `transitAspects: TransitAspect[]` — the full set computed at entry time, not just top 3. The Pattern Panel needs to aggregate across all aspects, not just the ones that happened to display on the card.
-5. The raw `currentPlanets: TransitPosition[]` — or at minimum, each planet's sign and retrograde status. Planet-in-sign patterns over time are meaningful (e.g., "most of my grief entries happen when Saturn is in Capricorn").
-
-If you only store the top 3 aspects for display, you've permanently lost the analytical signal. Store the full set, filter for display. The storage overhead is trivial — 10-20 transit aspects are maybe 2KB of JSON per entry. Even 200 journal entries is 400KB, well within localStorage's 5-10MB limit.
-
-**skySnapshot should NOT store:**
-- The full `TransitPosition` planet list with house assignments against natal chart — the natal chart is stable and you can recompute house assignments on read if needed.
-- Computed interpretations (GPT annotations are stored separately as `annotation?: string`).
-
-**The `dreamRef` field** — the vision says to check `dream-session-YYYY-MM-DD` in localStorage. That format is already in use by `DreamModal.tsx`. But the key format isn't centralized — it's presumably a string literal somewhere in `DreamModal.tsx`. Before the journal tries to look up dream sessions by date, extract that key format into a shared constant in `appState.ts` or a new `dreamStorage.ts`. Right now you have a hidden coupling: if someone ever changes the dream session key format, the journal link silently breaks and there's no compile-time error.
-
-The `numerologicalDay` field stores a number. Fine. But `calculatePersonalDay()` in `src/engine/numerology.ts` (line 69) has a subtle issue for journal entries: **it hardcodes `new Date()` internally**. For retroactive entries, you need a version that accepts a target date. Right now the function always computes today's personal day regardless of what date you pass it as `birthDate`. 
-
-Look at line 74-79 in `src/engine/numerology.ts`:
-```ts
-const now = new Date()
-const dateStr = `${now.getFullYear()}${...}`
-```
-
-This is a bug for the journal use case. You need `calculatePersonalDayForDate(birthDate: string, targetDate: Date): number`. The existing function should probably just delegate to this new one with `new Date()` as the default. One-line change to the engine, but you have to catch it before it ships wrong data into every journal entry.
+This is a 5-line addition that unblocks all local development of the backend. It's easy to forget and will cause confusing CORS errors when the first backend route is tested.
 
 ---
 
-## The Pattern Panel: Aggregation vs. Display
+## Database Schema: One Fix
 
-The Pattern Panel is the feature's analytical heart, and it's where complexity can blow up if you don't plan the algorithm clearly upfront.
+The vision's schema is correct. One addition: add a unique constraint on `(user_id, id)` for the entries table, and use the client-generated UUID as the primary key (already in the vision). Also add an index on `(user_id, kind, date)` — you will query entries by user + kind + date range, and without an index on a table that could have thousands of rows, that's a full table scan. SQLite will handle it fine for hundreds of rows, but adding the index costs nothing and the query pattern is obvious from day one.
 
-The natural implementation that will get written first: iterate over all journal entries with a given tag, count occurrences of each aspect type and lunar phase, sort by frequency, render. That's O(n × k) where n is entries and k is aspects per entry. For 200 entries with 15 aspects each, that's 3000 iterations — totally fine, runs in milliseconds.
-
-What will make this feel fake rather than real: displaying raw aspect names as patterns. "Transit Jupiter trine Natal Sun appeared 4 times" is data. But the pattern that matters is higher-level: which transit *planets* correlate with which event types, regardless of specific aspect. Someone who has 6 breakthrough entries, 4 with Jupiter active (conjunction, trine, and sextile mixed), 2 with Saturn — Jupiter is the breakthrough planet for this person. The frequency of the specific aspect type is less meaningful than the planet involved.
-
-**The aggregation I'd implement:**
+```sql
+CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date 
+  ON entries(user_id, kind, date DESC);
 ```
-For each tag group:
-  1. Planet frequency: count unique transit planets appearing in any aspect across all entries
-  2. Lunar phase frequency: count phase names
-  3. Personal day frequency: count day numbers
-  4. Compute dominant signatures: planet with highest frequency / total entries > 0.4 is "meaningful"
-```
-
-The 0.4 threshold is arbitrary — you need *some* threshold or you get false positives with small sample sizes. With only 3-5 entries per tag, every pattern is "meaningful" statistically. The GPT synthesis prompt should include the total count so it can hedge appropriately ("based on your 4 breakthrough entries, there appears to be a tendency...").
-
-The GPT call for pattern synthesis is the **only** expensive operation in the Pattern Panel. Everything else is pure local computation. The pattern detection itself runs without network access. GPT is called once, on demand, with the aggregated data as input — not once per entry. This is the right architecture.
-
----
-
-## What's Fragile or Poorly Structured Right Now
-
-**1. `AppState` is becoming a God Object.**
-
-Look at `src/context/appState.ts`. The state interface has 25+ fields. Every feature sprint adds more. Right now it's manageable, but Cosmic Journal is going to add `journalEntries: JournalEntry[]` to this object, plus potentially a loading state for pattern GPT calls. At some point this needs to be split — but that refactor is not sprint 6 work. What sprint 6 must not do is add a separate full journal reducer into the same reducer function (already 50 cases). The journal's storage pattern should follow the dream journal's model: **localStorage-direct, not reducer-managed**. Dream sessions aren't in AppState at all. The journal entries shouldn't be either. They load from localStorage on component mount and save there directly. This avoids inflating the already-large reducer.
-
-**2. `computeEnergyRating` is duplicated.**
-
-The exact same function appears in both `src/components/reading/DailySnapshotCard.tsx` (line 29) and `src/components/reading/TodayPage.tsx` (line 49). Sprint 5 fixed the `calculatePersonalDay` duplication; this one was missed. Before the journal's entry card needs an energy rating, extract `computeEnergyRating` to a shared utility — probably `src/engine/transitUtils.ts` or inline in `src/engine/transits.ts` as an exported helper. Both components import from `../../engine/transits` anyway.
-
-**3. `getTopActiveTransits` hardcodes `new Date()`.**
-
-In `src/engine/transits.ts` (line 392-400), `getTopActiveTransits()` always computes for the current moment. For the journal feature, you need to compute for the entry's historical moment. The function should accept a `Date` parameter. The current call sites pass nothing and want current time — make the parameter default to `new Date()`. This is a 2-line change that unblocks the journal without breaking existing usage.
-
-```ts
-export function getTopActiveTransits(
-  chartData: ChartData,
-  maxCount: number,
-  maxOrbDegrees: number,
-  date: Date = new Date(),  // <-- add this
-): TransitAspect[] {
-  const positions = calculateCurrentPositions(date)  // use date instead of new Date()
-  ...
-}
-```
-
-**4. The `BODY_MAP` is duplicated between `astronomy.ts` and `transits.ts`.**
-
-Both files define an identical `BODY_MAP: Record<PlanetName, Astronomy.Body>`. This is a classic copy-paste coupling — if a planet name ever changes in `types.ts`, you have to update two places and the compiler won't tell you one of them is wrong. Extract to `src/engine/astronomyBodies.ts` or add to `src/engine/types.ts`. This isn't a sprint 6 blocker, but it's the kind of thing that bites you when you add a new body (Chiron, Ceres) and update one map but not the other.
-
----
-
-## Performance: What's Brewing
-
-The `detectVoidOfCourse()` function in `src/engine/lunar.ts` (line 57) is doing real astronomical computation in a loop — checking 2-hour intervals for up to 72 steps (3 days), computing 6 planet positions at each step. That's up to 432 planet position lookups per call, each using `Astronomy.GeoVector()`. In practice it terminates early, but worst case on a device without hardware math optimization, this could be 200-500ms.
-
-It's called from `getCurrentMoonPhase()`, which is called from both `DailySnapshotCard` and `TodayPage` on mount. Currently they both call it independently for the same moment. For the journal feature, if someone opens the pattern panel while the entry list is loading, you don't want multiple `getCurrentMoonPhase()` calls in flight.
-
-This won't cause user-visible jank today because it runs once on mount and the result is cached daily in `DailySnapshotCard`. But for the journal, each entry's sky snapshot is precomputed at save time and stored — so `detectVoidOfCourse()` is called exactly once per entry at write time, not at read time. That's the right architecture. The journal entry card renders from stored snapshot data, never recomputes.
-
-The one performance risk I want flagged explicitly: if someone builds the pattern panel by calling `calculateCurrentPositions()` for each historical entry on-the-fly instead of reading from stored snapshots, that's O(n) astronomical calculations synchronously on the main thread when the panel renders. 50 entries would be 50 × (10 planet GeoVector calls each) = 500 astronomical computations. That will freeze for 2-3 seconds. **The fix is to always store the sky snapshot at write time and never recompute it at read time.** This is an architectural discipline thing, not a technical limitation.
 
 ---
 
 ## Proposals
 
-### Proposal 1: `calculatePersonalDay` for Arbitrary Date (Engine Fix)
+### feat-backend-monolith-express-sqlite
+**Type:** feat  
+Introduce the `server/` directory with Express + better-sqlite3: entry point, DB init with schema, auth routes (register/login/logout/me), profile routes (get/put birth data), entries routes (get/post/delete). One `npm start` runs the server that also serves the built React app from `dist/`. Includes `tsconfig.server.json` for separate server compilation to `dist-server/`.
 
-**Type:** Issue Fix  
-**File:** `src/engine/numerology.ts`  
-**Impact:** Blocks correct journal entry annotation
+### feat-auth-context-jwt
+**Type:** feat  
+Create `src/context/AuthContext.tsx` with `useAuth()` hook, holding `{ user, token }`. JWT persisted to localStorage under a dedicated key. Provides `login()`, `register()`, `logout()` functions that call `authService.ts`. On mount, validates stored token against `/api/auth/me` and dispatches `LOAD_BIRTH_DATA_FROM_SERVER` if valid. Session expiry and 401 responses trigger automatic logout.
 
-`calculatePersonalDay(birthDate)` reads `new Date()` internally (line 74). For journal entries saved with a past date, this returns today's personal day, not the entry date's personal day. The `NumerologyReading.personalDay` stored on historical entries will be wrong.
+### feat-auth-modals-login-register
+**Type:** feat  
+Minimal `LoginModal.tsx` and `RegisterModal.tsx`: email + password fields, validation, submit to authService, error display. A "Save to account ✦" badge appears in `CachedDataLanding` for unauthenticated users with local data. Auth is additive — no feature gating, no required login. Logout clears token from localStorage but does not clear birth data or journal entries from localStorage (offline path stays intact).
 
-Fix: add `calculatePersonalDayForDate(birthDate: string, targetDate: Date): number` that accepts an explicit date. Refactor `calculatePersonalDay` to call it with `new Date()`. The journal entry composer calls `calculatePersonalDayForDate(birthData.date, entryDate)`.
+### feat-gpt-proxy-server-side
+**Type:** feat  
+Move all OpenAI API calls from client-side `gptInterpretation.ts` to server-side `/api/gpt/*` endpoints. Server holds `OPENAI_API_KEY` in environment. Client calls `/api/gpt/interpret` with prompt payload; server proxies to OpenAI and returns result. Remove `getStoredApiKey()`, `storeApiKey()`, and the API key UI from the frontend. Add per-user rate limiting (simple in-memory counter, 20 GPT calls/day/user). Unauthenticated users get a lower limit or a prompt to create an account.
 
-This is a 10-line change that prevents permanent incorrect data in every historical journal entry.
+### feat-localstorage-migration-upload-flow
+**Type:** feat  
+On first login in a browser with existing local data, detect unsynced journal entries, dream sessions, and birth data. Show a non-blocking banner: "Upload your history to your account?" with Upload and Skip buttons. Batch-POST entries using client UUIDs as idempotent deduplication keys (`INSERT OR IGNORE`). PUT birth data to `/api/profile`. Never clear localStorage on upload — only mark entries with their server-assigned confirmation (server echoes back the UUID). If upload fails, keep localStorage intact and show error. Dream sessions upload as `kind = 'dream'` entries.
 
----
+### feat-api-client-fetch-abstraction
+**Type:** feat  
+Create `src/services/apiClient.ts`: thin wrapper around `fetch` that injects the Authorization header from the stored JWT, resolves the correct base URL (empty string in prod, `http://localhost:3001` in dev via Vite proxy), enforces a 10-second timeout via `AbortController`, and returns typed error objects instead of thrown exceptions. All `authService.ts` methods go through this client. Catches offline/unreachable states and returns a typed `{ ok: false, error: 'offline' }` result so components can fall back to localStorage without crashing.
 
-### Proposal 2: `getTopActiveTransits` Date Parameter (Code Enhancement)
+### issue-dream-ref-forward-compatible-format
+**Type:** issue  
+`JournalEntry.dreamRef` currently stores a raw localStorage key string (`dream-session-YYYY-MM-DD`). When dream sessions migrate to the server, this field becomes a dangling reference. Change the type to `{ type: 'local', key: string } | { type: 'server', id: string } | null` before entries reach the server. Existing localStorage entries get `{ type: 'local', key: '...' }` during the migration upload. New entries on authenticated sessions get `{ type: 'server', id: '...' }`. This is a 20-line change that prevents a schema migration later.
 
-**Type:** Code Enhancement  
-**File:** `src/engine/transits.ts`, line 392  
-**Impact:** Required for journal sky snapshot computation
+### issue-journal-save-entries-uses-wrong-quota-guard
+**Type:** issue  
+`saveEntries()` in `CosmicJournalPage.tsx` (lines 44-52) catches `QuotaExceededError` by checking `e.name` and `e.message` with string matching — bypassing the `isQuotaError()` utility already in `src/utils/storage.ts`. Replace with `import { isQuotaError } from '../../utils/storage'` and call it. This is a one-line fix that makes quota detection consistent across all save sites.
 
-Add a `date: Date = new Date()` parameter to `getTopActiveTransits()` so it can compute transit aspects for historical moments. All current call sites in `TodayPage.tsx` and `DailySnapshotCard.tsx` pass nothing, so default behavior is unchanged. The journal composer passes the entry date to get the historical snapshot.
+### code-vite-proxy-api-dev
+**Type:** code  
+Add `server.proxy` configuration to `vite.config.ts` routing `/api/*` to `http://localhost:3001`. Without this, all backend API calls from the Vite dev server fail with connection refused or CORS errors. Required prerequisite for any local backend development. Also add `build.outDir: 'dist'` explicitly (it's the default but making it explicit prevents confusion when the server references it).
 
-This is the correct way to make the existing engine work for the journal without duplicating any computation logic.
+### code-birth-data-server-overwrite-path
+**Type:** code  
+Add a `LOAD_BIRTH_DATA_FROM_SERVER` action to `appReducer` in `appState.ts` that sets `state.birthData` without triggering the `saveBirthData()` localStorage write. Currently `UPDATE_BIRTH_DATA` always saves to localStorage. When authenticated, birth data loaded from the server must overwrite the reducer state without re-persisting to localStorage (which could create a stale localStorage copy that wins on next cold load if the server is unreachable). Explicit action, explicit intent, no ambiguity.
 
----
-
-### Proposal 3: `computeEnergyRating` Deduplication (Code Enhancement)
-
-**Type:** Code Enhancement  
-**Files:** `src/components/reading/DailySnapshotCard.tsx` (line 29), `src/components/reading/TodayPage.tsx` (line 49), `src/engine/transits.ts`
-
-The function is identical in both components — 12 lines of pure logic mapping aspect scores to label/color tuples. Extract to `src/engine/transits.ts` as an exported function alongside the other transit utilities. Both components already import from that file. The journal's `JournalEntryCard` will also want an energy indicator — this is the third call site that will need it, making the duplication even more wasteful if it's not resolved now.
-
----
-
-### Proposal 4: Dream Session Key Constant (Issue Fix)
-
-**Type:** Issue Fix  
-**Files:** `src/components/dream/DreamModal.tsx`, `src/context/appState.ts`  
-**Impact:** Prevents silent breakage of journal ↔ dream cross-reference
-
-The journal's `dreamRef` lookup will need to reconstruct the localStorage key for a dream session by date. If that key format is a string literal embedded in `DreamModal.tsx`, the journal must replicate it — creating silent coupling. Extract `DREAM_SESSION_KEY_PREFIX` (or `getDreamSessionKey(date: string): string`) to `src/context/appState.ts` alongside the other key constants. Both `DreamModal` and the journal's lookup code import from the same place. If the key format ever changes, it changes in one place.
-
-This is a 5-minute fix now versus a subtle bug later when the formats drift.
-
----
-
-## What I'm NOT Recommending
-
-**Don't add journal state to AppState/appReducer.** The reducer is already handling 50+ actions across 25+ state fields. The journal is a self-contained append-only list of entries. Load on component mount, save on mutation, done. The dream journal proves this pattern works.
-
-**Don't compute sky snapshots lazily.** Some implementation paths will be tempted to store only `{ date, time, tags, body }` and compute the sky data when displaying the Pattern Panel. This is wrong. Astronomical calculations for historical moments must happen once at write time. If someone edits an entry's time field later, recompute then. But the display path must read from storage, not compute.
-
-**Don't build the Pattern Panel as a GPT-first feature.** The pattern aggregation is pure local computation. GPT synthesizes what the computation finds — it doesn't drive it. If you invert this (send all entries to GPT and ask it to find patterns), you'll spend 10x more tokens, lose the ability to work offline, and get hallucinated patterns that don't actually exist in the data. Aggregate locally, send summary to GPT.
-
-**Don't start with the full feature surface.** The entry composer, entry list, sky snapshot computation, and localStorage persistence are the load-bearing floor. The Pattern Panel is the ceiling. Build the floor first and make sure the data model is right before building anything that reads from it.
+### code-entries-db-index
+**Type:** code  
+Add `CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date ON entries(user_id, kind, date DESC)` to `server/db.ts` schema initialization. The entries table will be queried by user + kind + date range on every journal and dream page load. Index it from day one rather than adding it as a "performance fix" when the table has 10,000 rows and query time becomes visible.

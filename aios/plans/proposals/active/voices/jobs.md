@@ -1,125 +1,186 @@
-# Steve Jobs — Sprint 6 Proposal Voice
+# Steve Jobs — Sprint 7 Proposal Voice
 
-Sprint 5 delivered. The Today page exists. The dream reader knows your Neptune. The app now has a morning ritual and a night ritual. These are not small things — rituals are how products become indispensable.
+Sprint 6 delivered the Cosmic Journal. The app now has a heartbeat — it accumulates meaning, not just readings. When the Pattern Panel has enough data to speak, the product becomes something genuinely different from every astrology app on earth.
 
-Now I am holding sprint 6 in my hands, and I am asking the only question that matters: **Will this make someone feel something they have never felt before?**
+But sprint 6 also surfaced the existential risk hidden inside everything we built: all of it lives in localStorage. One browser clear. One device switch. One user who finally gets passionate about the journal after 40 entries and then formats their laptop. Gone. That is not a storage problem. That is a product betrayal.
 
-The Cosmic Journal can. Or it can be a glorified notes app with zodiac glyphs pasted on top. The difference between those two outcomes is not engineering skill. It is clarity of intention about what emotional truth this feature serves.
-
-Let me be specific about what I think and what I would build.
+Sprint 7 fixes the betrayal. And I want to talk about exactly how to do it without creating a new one.
 
 ---
 
-## The Emotional Core They Haven't Named
+## The Only Thing That Matters in This Sprint
 
-Every astrology product on earth tells you what *the sky* means. What the planets are doing. What this transit will bring. It is all forward-looking, or it is generic. "Mars enters your 10th house — expect career movement." For whom? At what intensity? In what direction?
+Here is the question I would ask every engineer on this team, every day of this sprint: **Does this make the user feel more trusted, or less?**
 
-The Cosmic Journal is the first feature in this product that promises something genuinely different: **it learns which parts of the sky actually speak to *you*.** That is a profound idea. After three months of entries, the app could say: "Every time you log a breakthrough, Jupiter is within 8 degrees of your natal Sun. Every time you log a 'stuck' day, Saturn is squaring your Moon within 3 degrees." No other astrology product can say this, because no other astrology product has your data.
+Adding authentication to a product is a minefield. Every authentication system ever built starts with the same good intention — "we need to save user data" — and ends with the same failures — "the user couldn't get in, lost their data, or never bothered to register because the wall felt too high." Those are not technical failures. They are failures of trust architecture.
 
-But here is the danger: if we build the Cosmic Journal as a logging tool that stores entries with glyph decorations and produces a generic GPT synthesis, we will have buried the revolutionary insight under feature sprawl. We will have built the wrong thing beautifully.
+This product has built something precious: it does not require a login. The user arrives, enters their birth data, and the cosmos opens. That experience is the foundation of everything. If we introduce authentication carelessly, we turn that arrival into an interrogation. The stars now want credentials.
 
-**The pattern detection is the product.** Everything else — the entry composer, the sky snapshot, the numerological day, the dream cross-reference — all of it exists in service of the one moment when the app looks at six months of your life and says: "Here is what the cosmos has been trying to tell you."
-
-That moment needs to feel like revelation. Not like a pie chart with percentages.
+We cannot do that.
 
 ---
 
-## What the Entry Experience Must Feel Like
+## The Auth UX Must Feel Like Recognition, Not Registration
 
-Right now the user's journey through this app is: compute your chart once, then navigate between readings. Each reading is a one-time event. There is no accumulation, no memory, no arc.
+Every corporate app introduces a login modal the same way: "Create Account" at the top, white form fields, a password strength meter, a "By signing up you agree to our Terms of Service" paragraph in 9px gray text. That experience communicates: "You are a user to be managed."
 
-The journal entry composer is the first time the user is asked to bring *their* life into the app. This is a fundamentally different gesture. They are not asking the stars for a reading — they are saying: "This happened to me today. Map it." The composer must honor the gravity of that.
+A mystical astrology app must communicate something completely different: "We want to keep your story safe."
 
-What I mean concretely: the entry composer cannot be a bare form with a date picker and a text box. That is utility, not experience. The moment the user clicks "Log an Event," something should shift — a visual transition, a slight darkening of the background, as if they are entering a more intimate space. A single central question: "What happened?" Not a label for a text field — a question, spoken to them directly.
+This distinction is not aesthetic. It changes every copy choice, every interaction, every flow.
 
-The sky snapshot that appears automatically beneath the entry must feel like the cosmos has already responded before the user finishes typing. As they commit the entry, the sky glyph row appears: the three most significant transits at that exact moment, the moon phase, the personal day number. The user should feel that the universe was already paying attention.
+When a user who has been using the app for two months — who has 30 journal entries, a full dream log, a birth chart they trust — first encounters the auth prompt, they should feel: "Yes. I want my data to live somewhere safer than my browser." They should not feel: "Here we go, another account to manage."
 
-This is not animation for its own sake. It is communicating: "We noticed you noticed something."
+What this means concretely:
 
----
+**The prompt in `CachedDataLanding` must be about the user's data, not about the app's features.** Not "Sign up to unlock cloud sync" — that is marketing language. The copy should be: "Save your journal to your account — it follows you across devices." The emphasis is on what they already have and what they might lose, not on what we're offering.
 
-## The Pattern Panel — The Only Moment That Matters
+**The register/login modal must open like a chamber, not a drawer.** On a mystical dark app, a standard Bootstrap-style white modal with a login form is a complete tonal collapse. The modal background should be deep charcoal, the input borders should be gold at focus, the call-to-action should speak in the product's voice. "Begin ✦" or "Enter ✦" as the register button, not "Create Account."
 
-When the Pattern Panel has fewer than five entries, it should say nothing. Or almost nothing — just: "Add more moments. The patterns will emerge." This is restraint, and restraint is trust.
+**First-time registration should ask only for email and password.** Not name, not birthday (we already have it), not "how did you hear about us." Two fields. If we already know their name from the numerology `userName` field, prefill a greeting using it.
 
-When the Pattern Panel has enough data — say, seven or more entries — it should speak plainly. No hedging. No "these patterns may suggest." Name what the data shows:
-
-"Your entries tagged 'breakthrough' cluster under Jupiter transiting within 10 degrees of your natal Sun (4 of 6 occurrences). Your 'stuck' entries cluster under Saturn within 8 degrees of your natal Moon (5 of 7 occurrences). Personal Day 1 and 3 appear in 7 of your 9 positive entries."
-
-Then one GPT sentence that synthesizes this: "Your pattern is clear — expansion happens when Jupiter speaks to your identity, friction when Saturn bears down on your emotional foundation."
-
-That is the moment. The user has never seen their life described this way. They feel understood by the cosmos in a way that no generic horoscope could produce.
-
-The pattern panel is not a "section" on a page. It is the reason the journal exists. If the design treats it as an afterthought below the entry list, we have failed. It should be the first thing the user sees when they open the journal — above the entries, not below them. The entries exist to feed it. The pattern is the point.
+**The "Log In" vs "Register" distinction should be minimal.** A single toggle beneath the form fields: "First time? / Already have an account." Not two separate modals. One clean surface that transforms.
 
 ---
 
-## What I Would Cut Without Hesitation
+## The Unauthenticated Path: The Wall We Must Not Build
 
-**Rich text in the entry body.** The sprint vision correctly rules this out, but I want to say it again with emphasis: the prose of an entry is not the value. The cosmic annotation is the value. If a user writes three words — "got the job" — that is enough. If they write three paragraphs about how they felt, the GPT has more to work with, but the planetary data is what we are here for. Do not invest one minute in markdown rendering, formatting toolbars, or entry templates. One plain textarea, minimal rows, and done.
+The sprint vision says "unauthenticated path stays intact." I agree — and I want to go further. The unauthenticated path must stay delightful, not just intact.
 
-**The "discuss" button on individual entries.** This would be a natural next thought — "What if the user could discuss a specific journal entry with GPT?" Do not build this now. It scatters the focus. The journal's GPT surfaces are two and only two: the one-sentence annotation per entry (generated on save), and the pattern synthesis. Anything else is feature accretion that makes the product feel like it has no spine.
+Here is the UX risk: the moment we add an auth prompt, human psychology shifts. Users who previously enjoyed the app without friction now feel they are missing something. The "Save to account ✦" prompt in `CachedDataLanding` must be additive and optional — it must not feel like a nag. This means:
 
-**Export, share, or backup UI.** Not this sprint. Not anywhere near this sprint.
+One prompt. Not recurring. If the user dismisses it, it does not come back until they have meaningfully more data (say, 10 more journal entries). The app remembers the dismissal in localStorage. We do not guilt them every session.
 
-**A separate "Journal" section in the navigation for the form wizard.** The journal only makes sense after someone has their chart. It lives in the post-chart world, behind the cached landing screen. A "Journal ✦" button in `CachedDataLanding` is the right and only entry point. Do not add journal access to the form flow or the results page header.
+The prompt's visual weight must be subordinate to the main actions. It should not compete with "Read My Chart ✦" or "Journal ✦" for attention. A single soft line at the bottom of the menu panel, not a banner, not a card, not a persistent footer. Something like: "✦ Save your chart to your account" rendered in `text-mystic-muted/50` — visible if you look, invisible if you don't.
 
----
-
-## Signature Moments the Feature Must Nail
-
-**Moment 1: The first entry.** The user logs their first event. The sky snapshot computes in real time — they see the glyphs appear. The GPT tag arrives: "Jupiter within 3° of your natal Venus — a day the heart opened." They think: "How did it know that?" They immediately log a second entry. The feature has self-enrolled them.
-
-**Moment 2: The dream link.** The user logs a major life event — a breakup, a job offer, an illness. They see: "✦ A dream was recorded this night — see it?" They click. They see the dream they recorded that morning in the dream journal. The connection between their inner and outer world is now documented. They feel seen across time.
-
-**Moment 3: The pattern revelation.** Three months in. The user opens the journal. The pattern panel now has enough data to speak. They read: "Across 18 entries, your breakthroughs consistently occur under Jupiter-Sun contacts. Your creative entries cluster during Personal Days 3 and 9." They sit with this for a minute. They do not need to buy a new book about astrology. The book has been written from their own life.
+Never gate any feature behind auth. The Cosmic Journal, the Dream Journal, transits, synastry — all of it remains accessible without a login. Auth is a preservation mechanism, not a feature gate.
 
 ---
 
-## The Design Problem No One Will Notice Until It's Wrong
+## The Data Migration: The Moment of Welcome, Not of Warning
 
-The entry list will accumulate. After three months, a user might have sixty entries. If the list is a simple reverse-chronological scroll, the journal becomes an archive, not a living document. The pattern panel exists to solve this — it surfaces the signal from the noise — but the entry list itself needs a layer of intelligence.
+When a user logs in for the first time in a browser that has local data — journal entries, dream sessions, birth data — they will see a migration prompt. The sprint vision calls for an "Upload my existing data" flow.
 
-I would build one thing into the entry list that costs almost nothing to implement but changes everything: **a subtle visual weight system.** Entries with high-significance transits at the time of logging (tight orb, luminaries involved, multiple simultaneous aspects) should feel slightly more prominent than ordinary entries. Not color-coded — just a slightly bolder glyph row, a slightly stronger gold tint on the border. The user will not consciously notice it. They will subconsciously feel that some entries carry more charge than others — which is true.
+This moment has the potential to be either profoundly welcoming or profoundly alarming. The difference is entirely in the language and design.
 
-This is the difference between a database and an oracle. An oracle knows which moments matter.
+**What the alarming version looks like:** A modal that says "We found local data. Upload it to your account? [Upload] [Skip]." The word "upload" sounds technical. The word "Skip" sounds like you might lose something if you don't act. The user feels a low-grade panic.
 
-Implementing this is simple: in `JournalEntryCard.tsx`, compute a significance score from the `skySnapshot.transitAspects` at the time of the entry — count aspects with orb < 2°, bonus weight for luminaries (Sun, Moon). If significance > threshold, apply a slightly stronger `border-mystic-gold/50` instead of the default `border-mystic-border`. That is four lines of logic. It will make users feel that the journal is intelligent rather than passive.
+**What the welcoming version looks like:** A warm, expansive surface — not a warning dialog — that says: "Your cosmic record is here — 30 journal entries, 12 dream sessions, your chart." Then: "We'll carry it to your account now." One action: "Bring it with me ✦." A secondary option, styled very quietly: "Start fresh instead." Nothing about HTTP calls, batch operations, or localStorage keys.
+
+The words "upload" and "sync" should not appear in any user-facing copy. "Carry," "bring," "keep" — these are the words. They communicate continuity, not technical operations.
+
+The migration must happen visibly but not anxiously. A simple progress note: "Carrying your journal..." with a slow celestial animation — the same spinning ✦ we use on the chart loading screen. Not a progress bar with percentages. Not a spinning loader. The same visual language the app already uses for moments of computation.
+
+If the migration fails, the copy is important: "We couldn't reach the server — your data is still safe here." Not "Upload failed." Not "Error 503." The user should feel that nothing was lost, not that something broke.
 
 ---
 
-## Three Concrete Proposals
+## The Session Display: A Name, Not a Status Indicator
 
-### Proposal 1 (Feature): Entry Composer as an Arrival, Not a Form
+Once logged in, the app should acknowledge the user's presence in the header — but with extraordinary restraint. Not a user avatar, not a dropdown menu, not a "Signed in as user@email.com" line. A single small element: their first name (or the `userName` from numerology if available) and a gold ✦. Like a signature, not an account status.
 
-The entry composer in `CosmicJournalPage.tsx` should open as a dedicated full-panel experience, not an inline form. When the user clicks "Log an Event," the journal list slides left and the composer takes the right half on desktop, or the full screen on mobile. A single, centered large question — "What happened?" — above a minimal textarea. Below the textarea, date and time inputs that auto-populate to now but can be adjusted. When the user adjusts the date, the sky snapshot (transit glyphs, moon phase, personal day number) should update in real-time to reflect the new date — this is the engine already being called for the correct moment.
+Example: "Felipe ✦" rendered in `text-mystic-muted text-xs` at the top right of the header. Clicking it opens a minimal panel: "Sign Out" and nothing else for this sprint. No account settings, no email management, no password change. Those belong in a later sprint when we have a clear need.
 
-The composer's save button should not say "Save." It should say "Record This Moment." The label is small. The feeling it creates is not.
+This minimal presence communicates: "We know who you are, and we don't need to make a big deal of it."
 
-No tags on the entry form itself — tags are assigned automatically by the GPT annotation (breakthrough, turning point, grief, decision, love, creative peak, blocked). The user does not categorize; the cosmos does.
+---
 
-### Proposal 2 (Feature): Pattern Panel as the Journal's Opening Statement
+## The CLEAR_CACHE Risk
 
-Restructure `CosmicJournalPage.tsx` so that when five or more entries exist, the Pattern Panel appears at the top of the journal view, collapsed to a single evocative summary line by default — the most prominent pattern, one sentence — with an expand control to see the full breakdown. When fewer than five entries exist, the panel shows a quiet invitation: "Your cosmic patterns will surface after a few more entries."
+The current `CLEAR_CACHE` action in `appState.ts` clears all localStorage data and resets the app to the empty form. When the user is authenticated, `CLEAR_CACHE` must also call the backend logout endpoint.
 
-This architectural decision — pattern at the top, entries below — communicates the product's purpose with every visit. The user is not here to read their old diary. They are here to see what the cosmos has learned about them.
+But there is a subtler UX risk here: the "Enter New Birth Data" button in `CachedDataLanding` currently destroys all the user's local data. If the user is authenticated, clicking this should ask what they want to do — clear the local device cache (while keeping server data), or actually start over with a new chart (which should prompt: "This will update your birth data on your account — are you sure?"). These are two completely different intentions hiding behind one button.
 
-The pattern computation in `PatternPanel.tsx` must be honest about small sample sizes. Do not surface a pattern from two entries. The threshold should be three or more matching instances before any pattern is named. Weaker patterns can appear with softer language. The strongest pattern — the one with the most evidence — should be the headline.
+The authenticated and unauthenticated versions of "Enter New Birth Data" have different consequences and need different confirmation language.
 
-### Proposal 3 (Code Enhancement): GPT Annotation Permanence and Deferred Loading
+---
 
-The one-sentence GPT annotation per entry — generated by `generateJournalEntryAnnotation()` — must be stored permanently in the entry object in localStorage the moment it is generated. This is critical. If the annotation is regenerated on every load (even with the same entry data), the result will vary due to GPT's temperature. The user's memory of what their entry "meant" will shift every time they view it. That is disorienting and breaks trust.
+## The FormWizard Completion: Silent Save
 
-Store the GPT annotation as `entry.gptTag: string | null` in the `JournalEntry` interface. When loading an entry that already has a `gptTag`, skip the API call entirely and display the stored tag. Only generate (and immediately persist) the annotation when `gptTag` is null — i.e., on the first save of a new entry. This makes the journal's cosmic annotations a permanent record, not a regenerated approximation.
+When an authenticated user completes the birth data form wizard and hits calculate, their birth data should be saved to their backend profile silently. No confirmation prompt, no "Saved ✦" toast. Just: we have it now. The same way a trusted bank saves your transaction without asking you to confirm the save operation.
 
-Separately: when the journal page opens, do not fire GPT annotation calls for all entries simultaneously. Defer annotation loading: annotate only the 5 most recent entries on first open, then annotate older entries progressively as the user scrolls. In `JournalEntryCard.tsx`, use an `IntersectionObserver` or a simple index-based throttle — fire the annotation request only when the card is near-visible in the list. This prevents API hammering on a user with 30+ entries.
+The only exception: if the save fails due to network error, a single non-blocking notification — "Couldn't save to your account — local copy is safe." Then disappear after 4 seconds.
+
+---
+
+## What This Sprint Is Not About (But Someone Will Try)
+
+**Social features.** Someone will want to add "who else has this placement" or "share your chart" once user accounts exist. Block it. Hard. Not this sprint, not the next sprint. The user data is private and the app's entire emotional proposition is personal.
+
+**Profile editing.** The question will arise: "Now that we have accounts, can users edit their birth data from a settings page?" Not this sprint. Birth data is updated by re-entering it through the existing form wizard. Accounts are for data persistence, not for adding new management surfaces.
+
+**Password reset.** The vision correctly defers this. Do not ship email delivery in sprint 7. But the "Forgot your password?" link must be present and must show a clear, honest message: "Password reset will be available soon — contact us at [email] if you need immediate help." No dead links. No empty states. An honest placeholder.
+
+**Merging synastry partner data to the server.** This is a tempting scope addition. Partner birth data lives in localStorage too. Don't migrate it in sprint 7. The user's own data — journal, dreams, birth data — is the core. Partner data is temporary and session-specific by nature.
+
+---
+
+## Three Things This Sprint Must Absolutely Nail
+
+**1. The transition from localStorage-world to server-world must be invisible to users who don't choose to authenticate.** Open the app, everything works, nothing changed, no prompts unless you have data to protect and you're paying attention to the soft prompt.
+
+**2. The migration flow must complete without losing a single journal entry.** If one entry fails to upload, the entire migration should halt, report the partial state, and leave all local data intact. No "most of your data was saved" halfway states. All or nothing, with a safe fallback.
+
+**3. The auth modals must not look like they were dropped in from a different product.** They must use the same dark background, gold focus states, serif heading font, and celestial copy voice as everything else in the app. If you open the modal and it looks like a SaaS login screen dropped into an astrology app, we have failed.
+
+---
+
+## Proposals
+
+### Proposal 1 — feat: auth-modal-as-ceremony
+
+**Type:** feat  
+**Description:** The login/register modals (`LoginModal.tsx`, `RegisterModal.tsx`) should be designed as a single unified modal with a tab-toggle, not two separate components. They use the app's full dark-mystic theme — no white backgrounds, gold-accented focus rings, serif headings. Registration reads "Open Your Account ✦" as the heading, login reads "Return ✦". The submit button for registration says "Begin ✦", for login it says "Enter ✦". Password field shows a minimal gold eye-icon toggle for visibility. These words cost nothing to change and everything to get right.
+
+---
+
+### Proposal 2 — feat: migration-welcome-flow
+
+**Type:** feat  
+**Description:** The first-login migration experience in `authService.ts` should not be a warning dialog. It should surface as a warm "your record" panel that lists what's waiting to be carried over — entry count, dream session count, chart status — and uses celestial copy throughout. The action is "Bring it with me ✦", not "Upload". Progress uses the existing ✦ spinner, not a progress bar. Failure state says "Your data is still safe here" without technical jargon. If migration succeeds, localStorage is only cleared after HTTP 200/201 confirmations, never before.
+
+---
+
+### Proposal 3 — feat: unauthenticated-nudge-with-restraint
+
+**Type:** feat  
+**Description:** In `CachedDataLanding`, add a single soft auth prompt visible only to unauthenticated users who have meaningful data (journal entries > 0, or app usage > 7 days based on birth data creation date). The prompt is a single muted line at the bottom of the nav panel — below all the main action buttons — that reads "✦ Protect your cosmic record" and opens the register modal. It is dismissed persistently with a small ✕ and does not return until the user has logged 10 more journal entries. No banner, no modal, no floating CTA. The main experience is not interrupted.
+
+---
+
+### Proposal 4 — issue: clear-cache-auth-fork
+
+**Type:** issue  
+**Description:** The `CLEAR_CACHE` reducer action in `appState.ts` and the "Enter New Birth Data" button in `CachedDataLanding` must behave differently for authenticated vs unauthenticated users. Authenticated users should see a confirmation that distinguishes between "sign out and clear this device" (keeps server data) and "start over with new birth data" (updates account). The reducer must call the backend logout endpoint when authenticated. The current single-button behavior is a data-loss risk for logged-in users.
+
+---
+
+### Proposal 5 — feat: session-badge-not-account-menu
+
+**Type:** feat  
+**Description:** Once authenticated, display the user's first name (or `userName` from numerology if set) plus a ✦ in the app header as a small muted text element — not a menu, not an avatar, not a dropdown. Clicking it shows a minimal inline panel with only "Sign Out" for this sprint. The presence should feel like a quiet signature, not an account management surface. Styled in `text-mystic-muted text-xs`, positioned at the top-right of the header alongside the existing "Astral Chart" title.
+
+---
+
+### Proposal 6 — code: authService-offline-fallback
+
+**Type:** code  
+**Description:** All API calls in `authService.ts` must implement a 5-second timeout with an `AbortController` and fall back to the localStorage path on timeout or network error. The error should dispatch a `SET_NETWORK_WARNING` action (analogous to `SET_STORAGE_WARNING` introduced in sprint 6) that renders a soft, dismissible banner: "Could not reach the server — your data is safe locally." The app must never hang or show a spinning state indefinitely due to backend unreachability. Every API call is wrapped, every failure is caught, every fallback is the unauth path.
+
+---
+
+### Proposal 7 — code: formwizard-silent-profile-save
+
+**Type:** code  
+**Description:** In `FormWizard.tsx`, on the final step completion (when `SET_VIEW loading` is dispatched), if an `authUser` is present in context, silently POST the birth data to `/api/profile` via `authService.ts`. No confirmation dialog, no success toast on the happy path. On failure: a single non-blocking 4-second notification rendered via the existing `StorageWarningBanner` infrastructure: "Couldn't save to your account — local copy is safe." This keeps the form wizard's existing UX intact while adding server persistence as a transparent layer.
 
 ---
 
 ## What Success Looks Like
 
-The Cosmic Journal succeeds when a returning user — someone who has been using the app for two months — opens it and spends more time reading patterns than reading individual entries. When they feel that the app knows them better than they know themselves. When the one-sentence GPT tags feel like footnotes to their life, not generated text.
+Sprint 7 succeeds when a user who has been journaling for two months can log into the app on a new laptop and see all 40 of their entries waiting. When that moment happens, the product graduates from a clever browser tool to something they would pay to keep.
 
-The one-sentence story of this sprint: **The app learns you.**
+That moment cannot be earned with engineering alone. Every interaction between now and that moment — the first time they see the auth prompt, the migration flow, the session badge — must build trust incrementally. If any one of those interactions feels corporate or clinical, we have broken the spell that the app has spent six sprints casting.
 
-Everything else is in service of that sentence. Cut anything that isn't.
+The one-sentence story of this sprint: **Your story is safe now.**
+
+Everything else is in service of making the user feel that, and believe it.
