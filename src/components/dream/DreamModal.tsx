@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import {
   getDailySnapshotInterpretation,
   getDreamInterpretation,
   getDreamDiscussResponse,
-  getStoredApiKey,
   type ChatMessage,
 } from '../../services/gptInterpretation'
 import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits } from '../../engine/transits'
@@ -13,6 +13,7 @@ import { getMoonSignAndPhase } from '../../engine/astronomy'
 import type { ChartData, PlanetPosition } from '../../engine/types'
 import { isQuotaError } from '../../utils/storage'
 import { getDreamSessionKey } from '../../context/appState'
+import { syncDreamSession } from '../../services/entrySync'
 
 const todayKey = new Date().toISOString().slice(0, 10)
 const DREAM_SESSION_KEY = getDreamSessionKey(todayKey)
@@ -29,6 +30,8 @@ interface DreamSession {
   dreamContext: string
   dreamInput: string
   skyContext?: SkyContext
+  _serverId?: string
+  _syncFailed?: boolean
 }
 
 const PLANET_GLYPHS: Record<string, string> = {
@@ -105,6 +108,7 @@ function buildNatalContext(chart: ChartData, birthDate: string): string {
 export default function DreamModal({ open, onClose, chartData: chartDataProp, initialSessionKey }: DreamModalProps) {
   const { state } = useApp()
   const { birthData } = state
+  const { isAuthenticated, token } = useAuth()
   const chartData = chartDataProp ?? state.chartData
 
   const [stage, setStage] = useState<Stage>('input')
@@ -140,6 +144,10 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
         setRestoredCount(session.messages.length)
         setStage('chat')
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'instant' }), 80)
+        // Retry a previously failed sync on next open
+        if (session._syncFailed && isAuthenticated && token) {
+          void syncDreamSession(sessionKeyToLoad, token)
+        }
         return
       }
     } catch {
@@ -155,18 +163,21 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [open, initialSessionKey])
 
-  // Persist session to localStorage whenever messages or context update
+  // Persist session to localStorage whenever messages or context update; sync in background if authenticated
   useEffect(() => {
     if (messages.length === 0) return
     try {
       const session: DreamSession = { messages, dreamContext, dreamInput, skyContext }
       localStorage.setItem(DREAM_SESSION_KEY, JSON.stringify(session))
+      if (isAuthenticated && token) {
+        void syncDreamSession(DREAM_SESSION_KEY, token)
+      }
     } catch (e) {
       if (isQuotaError(e)) {
         setError('Your browser storage is full — this dream session could not be saved. Export your data to free space.')
       }
     }
-  }, [messages, dreamContext, dreamInput, skyContext])
+  }, [messages, dreamContext, dreamInput, skyContext, isAuthenticated, token])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -194,12 +205,6 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
   const handleInterpret = async () => {
     const dream = dreamInput.trim()
     if (!dream) return
-
-    const apiKey = getStoredApiKey()
-    if (!apiKey) {
-      setError('An OpenAI API key is required. Add one from the Transit Reading screen.')
-      return
-    }
 
     setError(null)
     setStage('loading-sky')
@@ -234,7 +239,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
       setSkyContext(capturedSkyCtx)
 
       const snapshotPrompt = buildDreamSnapshotPrompt(chartData, moonPhase, transitAspects)
-      const transitSummary = await getDailySnapshotInterpretation(snapshotPrompt, apiKey)
+      const transitSummary = await getDailySnapshotInterpretation(snapshotPrompt)
 
       setStage('loading-dream')
 
@@ -250,7 +255,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
       } : undefined
 
       const interpretation = await getDreamInterpretation(
-        dream, natalCtx, transitSummary, transitAspectsText, apiKey, gptSkyCtx, chartData,
+        dream, natalCtx, transitSummary, transitAspectsText, gptSkyCtx, chartData,
       )
 
       const ctx = `## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${transitSummary}\n\n## Active Transit Aspects\n${transitAspectsText}\n\n## The Dream\n${dream}`
@@ -276,8 +281,7 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
     setChatLoading(true)
 
     try {
-      const apiKey = getStoredApiKey()
-      const reply = await getDreamDiscussResponse(dreamContext, newMessages, apiKey)
+      const reply = await getDreamDiscussResponse(dreamContext, newMessages)
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred')

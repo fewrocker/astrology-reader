@@ -5,7 +5,7 @@ import type { ChartData } from '../../engine/types'
 import type { BirthData } from '../../context/appState'
 import { getTopActiveTransits } from '../../engine/transits'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
-import { generateCosmicPatternReading, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateCosmicPatternReading } from '../../services/gptInterpretation'
 import type { PatternSummary, PatternReading } from '../../services/gptInterpretation'
 
 interface PatternPanelProps {
@@ -218,9 +218,6 @@ export default function PatternPanel({ entries, chartData, birthData }: PatternP
     if (!expanded || gptFiredRef.current || !aggregationDone) return
     if (patternCards.length === 0) return
 
-    const apiKey = getStoredApiKey()
-    if (!apiKey) return
-
     gptFiredRef.current = true
     setGptLoading(true)
 
@@ -233,7 +230,7 @@ export default function PatternPanel({ entries, chartData, birthData }: PatternP
       entryDates: card.dates.slice(0, 8),
     }))
 
-    generateCosmicPatternReading(patterns, chartData, entries.length, apiKey)
+    generateCosmicPatternReading(patterns, chartData, entries.length)
       .then(readings => {
         setGptReading(readings)
       })
@@ -343,11 +340,6 @@ export default function PatternPanel({ entries, chartData, birthData }: PatternP
                     )}
                     {gptCard?.body && (
                       <p className="text-mystic-muted/80 text-sm leading-relaxed">{gptCard.body}</p>
-                    )}
-                    {!gptLoading && !gptCard && !getStoredApiKey() && (
-                      <p className="text-mystic-muted/40 text-xs italic">
-                        Add an API key to unlock pattern synthesis.
-                      </p>
                     )}
                     {card.dominantPlanets.length > 0 && !gptCard && !gptLoading && (
                       <div className="flex flex-wrap gap-1.5 mt-1">

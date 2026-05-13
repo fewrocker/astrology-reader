@@ -1,0 +1,615 @@
+import OpenAI from 'openai'
+
+// ---------------------------------------------------------------------------
+// Types — mirrors the relevant subsets of src/engine/types for server use
+// ---------------------------------------------------------------------------
+
+interface Planet {
+  name: string
+  sign: string
+  house: number
+  retrograde: boolean
+  degree: number
+}
+
+interface Angles {
+  ascendant: { sign: string }
+  midheaven: { sign: string }
+}
+
+interface ChartData {
+  planets: Planet[]
+  angles: Angles
+  unknownTime: boolean
+}
+
+interface TransitAspect {
+  transitPlanet: string
+  symbol: string
+  natalPlanet: string
+  orb: number
+  nature: string
+}
+
+interface JournalEntry {
+  date: string
+  time: string
+  body: string
+  numerologicalDay: number
+}
+
+interface PatternSummary {
+  tagGroup: string
+  dominantPlanets: string[]
+  dominantPhases: string[]
+  dominantPersonalDays: number[]
+  sampleSize: number
+  entryDates: string[]
+}
+
+export interface PatternReading {
+  tagGroup: string
+  heading: string
+  body: string
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI client + call infrastructure
+// ---------------------------------------------------------------------------
+
+let _client: OpenAI | null = null
+
+function getClient(): OpenAI {
+  if (!_client) _client = new OpenAI() // reads OPENAI_API_KEY from process.env
+  return _client
+}
+
+class GptServiceError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+    this.name = 'GptServiceError'
+  }
+}
+
+const RETRYABLE = new Set([429, 503, 504])
+
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      const isRetryable = err instanceof GptServiceError && RETRYABLE.has(err.status)
+      if (!isRetryable) throw err
+      if (attempt < maxAttempts - 1) {
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt)))
+      }
+    }
+  }
+  throw lastError
+}
+
+async function callOpenAI(
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
+  options: { temperature?: number; max_tokens?: number } = {},
+): Promise<string> {
+  const client = getClient()
+  try {
+    const completion = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages,
+      temperature: options.temperature ?? 0.8,
+      max_tokens: options.max_tokens ?? 2000,
+    })
+    return completion.choices[0]?.message?.content ?? ''
+  } catch (err) {
+    if (err instanceof OpenAI.APIError) {
+      throw new GptServiceError(err.message, err.status ?? 500)
+    }
+    throw err
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared utilities (ported from gptInterpretation.ts verbatim)
+// ---------------------------------------------------------------------------
+
+function houseSuffix(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return s[(v - 20) % 10] || s[v] || s[0]
+}
+
+const MASTER_NUMBERS = new Set([11, 22, 33])
+
+function isMaster(n: number): boolean {
+  return MASTER_NUMBERS.has(n)
+}
+
+function masterLabel(n: number): string {
+  if (!isMaster(n)) return ''
+  const labels: Record<number, string> = {
+    11: 'Master Intuitive',
+    22: 'Master Builder',
+    33: 'Master Teacher',
+  }
+  return ` [${labels[n]}]`
+}
+
+function buildDreamscapeContext(chart: ChartData): string {
+  const neptune = chart.planets.find(p => p.name === 'Neptune')
+  const moon = chart.planets.find(p => p.name === 'Moon')
+  const showHouses = !chart.unknownTime
+  const ascSign = showHouses ? chart.angles?.ascendant?.sign : undefined
+
+  let ctx = '## Dreamscape Natal Blueprint (emphasize these in interpretation)\n'
+  if (neptune) {
+    ctx += `Neptune (dream ruler): ${neptune.sign}`
+    if (showHouses && neptune.house) ctx += `, House ${neptune.house}`
+    ctx += '\n'
+  }
+  if (moon) {
+    ctx += `Moon (night mind): ${moon.sign}`
+    if (showHouses && moon.house) ctx += `, House ${moon.house}`
+    ctx += '\n'
+  }
+  if (showHouses) {
+    const twelfthHousePlanets = chart.planets.filter(p => p.house === 12)
+    if (twelfthHousePlanets.length > 0) {
+      ctx += `12th house (unconscious realm): ${twelfthHousePlanets.map(p => `${p.name} in ${p.sign}`).join(', ')}\n`
+    }
+  }
+  if (ascSign === 'Pisces') {
+    ctx += 'Pisces Rising: naturally permeable to dreamspace and the collective unconscious\n'
+  }
+  return ctx
+}
+
+// ---------------------------------------------------------------------------
+// Per-type interpretation handlers
+// All prompts are copied verbatim from the original gptInterpretation.ts.
+// No prompt content is changed — this is a transport-layer migration only.
+// ---------------------------------------------------------------------------
+
+async function handleTransitInterpretation(payload: { systemPrompt: string }): Promise<string> {
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are an expert astrologer who provides factual, precise, and honest transit readings grounded in traditional and modern astrological technique. State what the chart shows plainly — name favorable configurations and their real benefits, and name difficult ones with their real challenges. Do not sugar-coat, minimize tensions, or add generic encouragement. Treat the reader as someone who takes astrology seriously and wants the unvarnished picture. Reference dignities, debilities, sect, and aspect doctrine where relevant. Be direct, specific, and substantive — never cheerful for its own sake.',
+      },
+      { role: 'user', content: payload.systemPrompt },
+    ], { temperature: 0.8, max_tokens: 2000 })
+  )
+  return result || 'Unable to generate interpretation.'
+}
+
+async function handleDreamInterpretation(payload: {
+  dreamDescription: string
+  natalContext: string
+  transitSummary: string
+  transitAspectsText: string
+  skyContext: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> } | null
+  chartData: ChartData | null
+}): Promise<string> {
+  let skySection = ''
+  if (payload.skyContext) {
+    const transitLine = payload.skyContext.transits && payload.skyContext.transits.length > 0
+      ? ' Active transits: ' + payload.skyContext.transits.map(t => `${t.transitPlanet} ${t.aspect} natal ${t.natalPlanet} (${t.orb}° orb)`).join(', ') + '.'
+      : ''
+    skySection = `\n\n## Sky Context at Time of Recording\nMoon in ${payload.skyContext.moonSign} (${payload.skyContext.moonPhase}).${transitLine}`
+  }
+
+  const dreamscapeSection = payload.chartData ? buildDreamscapeContext(payload.chartData) + '\n' : ''
+
+  const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${payload.natalContext}\n\n## Today's Astrological Picture\n${payload.transitSummary}\n\n## Active Transit Aspects Today\n${payload.transitAspectsText}${skySection}\n\n## The Dream\n${payload.dreamDescription}\n\nFocus your interpretation especially on the Dreamscape Blueprint above — these are the placements that most shape this person's dream life. Provide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: `You are a mystical astrologer and dream interpreter. You read the unconscious mind through the lens of the cosmos — connecting dream symbols, emotions, and narratives with current planetary transits and the dreamer's natal chart.\n\nWhen interpreting:\n- Focus especially on the Dreamscape Blueprint — these are the placements most relevant to this person's dream life\n- Connect specific dream symbols to relevant planetary archetypes and active transits (Mars = conflict/drive, Neptune = dissolution/illusion/dreams, Moon = emotion/memory, Mercury = mind/communication, Saturn = limits/structure, etc.)\n- Reference the dreamer's natal placements to personalize the reading — show how the dream echoes their chart\n- Weave between psychological depth and cosmic synchronicity\n- Speak with poetic precision — evocative but grounded in actual astrological doctrine\n- Be specific about which planets and aspects are speaking through the dream imagery\n- Do not be generic — every interpretation must be personal to this chart and this transit moment`,
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 1200 })
+  )
+  return result || 'Unable to generate dream interpretation.'
+}
+
+async function handleDreamDiscuss(payload: {
+  dreamContext: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+}): Promise<string> {
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: `You are a mystical astrologer and dream interpreter continuing a conversation about someone's dream and their natal chart. Use the full context below — the dreamer's chart, today's transits, and the original dream — to answer follow-up questions with depth and specificity. Stay in the dreamy, cosmic register. Be direct and personal.\n\n${payload.dreamContext}`,
+      },
+      ...payload.messages,
+    ], { temperature: 0.85, max_tokens: 1000 })
+  )
+  return result || 'Unable to generate a response.'
+}
+
+async function handleAstroNumerologyCross(payload: {
+  numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number }
+  chartData: ChartData
+  userName: string | null
+}): Promise<string> {
+  const nameStr = payload.userName ? `Name: ${payload.userName}` : 'Name: not provided'
+  const planetLines = payload.chartData.planets
+    .filter(p => p.name !== 'NorthNode')
+    .map(p => {
+      const houseStr = !payload.chartData.unknownTime ? ` in the ${p.house}${houseSuffix(p.house)} house` : ''
+      const rxStr = p.retrograde ? ' (retrograde)' : ''
+      return `- ${p.name}: ${p.sign} ${p.degree}°${houseStr}${rxStr}`
+    })
+    .join('\n')
+
+  const anglesStr = !payload.chartData.unknownTime
+    ? `Ascendant: ${payload.chartData.angles.ascendant.sign}\nMidheaven: ${payload.chartData.angles.midheaven.sign}`
+    : '(birth time unknown — houses not available)'
+
+  const expressionLine = payload.numbers.expressionNumber !== undefined
+    ? `Expression Number: ${payload.numbers.expressionNumber}`
+    : 'Expression Number: not provided (no birth name given)'
+
+  const prompt = `You are synthesizing numerology and astrology into a single integrated reading for one specific person.
+
+## Person
+${nameStr}
+
+## Numerology Profile
+Life Path: ${payload.numbers.lifePath}
+Birthday Number: ${payload.numbers.birthdayNumber}
+Personal Year: ${payload.numbers.personalYear}
+${expressionLine}
+
+## Natal Chart
+${planetLines}
+${anglesStr}
+
+Write 2–3 paragraphs that synthesize both systems for this specific person. Name where the numbers and chart resonate and amplify each other, and name where they create interesting tension or complexity. Be specific — reference actual placements, actual numbers, and what that combination reveals. Do not write generic number definitions. Do not write generic planet definitions. Write only about this person's specific combination. Examples of what good synthesis looks like: "Your Life Path 7 resonates with your Scorpio Moon — both point toward a life of depth, research, and hidden truths." Or: "Your 8 Life Path's drive for material mastery sits in interesting tension with your 12th house Saturn — this combination suggests someone who must do their inner work before the outer success becomes stable." Speak directly to the person in second person. Be direct, evocative, and substantive.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are a master reader of both numerology and astrology — someone who holds both systems simultaneously and finds the living synthesis between them. You do not treat them as two separate readings placed side by side. You weave them together, finding where they echo and where they create productive tension. You are specific, personal, and direct. You never pad with generic definitions. You write as though you know this person.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 900 })
+  )
+  return result || 'Unable to generate cross-reading.'
+}
+
+async function handleDailySnapshot(payload: { prompt: string }): Promise<string> {
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are an expert astrologer writing a personalized daily briefing. Be concise and direct — 2 to 3 sentences maximum. Name what is actually happening astrologically and what it means for this specific person today. Reference the actual planets and aspects. Do not be generic or vague. No cheerful filler.',
+      },
+      { role: 'user', content: payload.prompt },
+    ], { temperature: 0.75, max_tokens: 300 })
+  )
+  return result || 'Unable to generate daily snapshot.'
+}
+
+async function handleNumerologyNarrative(payload: {
+  numbers: {
+    lifePath: number
+    birthdayNumber: number
+    personalYear: number
+    expressionNumber?: number
+    soulUrge?: number
+  }
+  userName: string | null
+}): Promise<string> {
+  const nameIntro = payload.userName ? `Reading for: ${payload.userName}` : 'Reading for: unnamed person'
+  const expressionLine = payload.numbers.expressionNumber !== undefined
+    ? `Expression Number: ${payload.numbers.expressionNumber}${masterLabel(payload.numbers.expressionNumber)} — how gifts and personality express outward in the world`
+    : 'Expression Number: not provided (no birth name given)'
+  const soulUrgeLine = payload.numbers.soulUrge !== undefined
+    ? `Soul Urge Number: ${payload.numbers.soulUrge}${masterLabel(payload.numbers.soulUrge)} — the inner desire, what the soul craves and is driven by`
+    : 'Soul Urge Number: not provided'
+
+  const hasMaster = [
+    payload.numbers.lifePath,
+    payload.numbers.birthdayNumber,
+    payload.numbers.personalYear,
+    payload.numbers.expressionNumber,
+    payload.numbers.soulUrge,
+  ].some(n => n !== undefined && isMaster(n as number))
+
+  const prompt = `${nameIntro}
+
+## Complete Numerological Profile
+
+Life Path: ${payload.numbers.lifePath}${masterLabel(payload.numbers.lifePath)} — the fundamental nature, the overarching life theme and lesson
+Birthday Number: ${payload.numbers.birthdayNumber}${masterLabel(payload.numbers.birthdayNumber)} — a specific natural talent, a gift brought into this life
+Personal Year: ${payload.numbers.personalYear}${masterLabel(payload.numbers.personalYear)} — the current annual cycle, the dominant theme and energy of this year
+${expressionLine}
+${soulUrgeLine}
+
+Write a cohesive 3-paragraph reading that treats these numbers as a single integrated portrait — not as definitions placed side by side. In each paragraph, show how the numbers interact: where they reinforce each other and create coherent themes, and where they create genuine tension or complexity that this person must navigate.${hasMaster ? ' Name any master numbers with appropriate weight — they carry double the vibration and double the burden.' : ''} Reference the actual numbers throughout — never speak in generic archetypes without grounding them in these specific digits. Speak in second person, directly to this person${payload.userName ? `, using their name (${payload.userName}) where it feels natural` : ''}. Be evocative but precise — this is a real reading, not a textbook.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are a master numerologist who reads the full numerological profile as a single, integrated portrait — not as separate number definitions placed side by side. Every reading is personal, direct, and specific to this person\'s actual numbers and their interactions.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 1200 })
+  )
+  return result || 'Unable to generate numerology narrative.'
+}
+
+async function handleNumerologySkyChart(payload: {
+  birthData: { name?: string; date: string }
+  frequencyMap: Record<number, Array<{ label: string; eclipticDegree: number }>>
+}): Promise<string> {
+  const nameStr = payload.birthData.name ? `Name: ${payload.birthData.name}` : 'Name: not provided'
+
+  const entriesByCount = Object.entries(payload.frequencyMap)
+    .map(([num, pts]) => ({ num: Number(num), pts }))
+    .filter(e => e.pts.length > 0)
+    .sort((a, b) => b.pts.length - a.pts.length)
+
+  const freqLines = entriesByCount
+    .map(({ num, pts }) => {
+      const sources = pts.map(p => `${p.label} (${Math.floor(p.eclipticDegree)}°)`).join(', ')
+      return `  Number ${num}: ${pts.length}× — ${sources}`
+    })
+    .join('\n')
+
+  const dominant = entriesByCount.slice(0, 3)
+  const dominantLines = dominant
+    .map(({ num, pts }) => `  ${num} (${pts.length}×): ${pts.map(p => p.label).join(', ')}`)
+    .join('\n')
+
+  const prompt = `${nameStr}
+Birth date: ${payload.birthData.date}
+
+## Sky Chart — Numerological Frequency Map
+${freqLines}
+
+## Dominant Numbers in the Sky
+${dominantLines}
+
+Write a 2–3 paragraph reading about what this numerical distribution across the sky reveals. Do not recite generic number meanings. Focus on: why do these particular numbers appear at these specific chart positions? What does it mean that ${dominant[0]?.num ?? 'this number'} is echoed by ${dominant[0]?.pts.map(p => p.label).join(', ')}? What does the full pattern suggest about this person's core nature and cosmic signature? Be personal, evocative, and specific to this person's actual distribution — not a textbook entry.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: "You are a numerologist-astrologer who reads birth charts through numbers. When all chart points are reduced numerologically, you see a numerical sky — and you read what that sky says about a person's soul. You do not define numbers in isolation. You interpret the pattern: why these numbers, at these positions, in this person's chart. You speak personally, directly, and with poetic precision.",
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 900 })
+  )
+  return result || 'Unable to generate sky chart reading.'
+}
+
+async function handleTodaySynthesis(payload: {
+  moon: { phaseName: string; moonSign: string; isVoid: boolean }
+  aspects: TransitAspect[]
+  personalDay: number
+  personalDayArchetype: string
+}): Promise<string> {
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  })
+
+  const aspectLines = payload.aspects.slice(0, 3).map(a =>
+    `${a.transitPlanet} ${a.symbol} natal ${a.natalPlanet} (${a.nature}, ${a.orb.toFixed(1)}° orb)`
+  ).join('\n') || 'No tight transit aspects active today.'
+
+  const voidNote = payload.moon.isVoid ? ' The Moon is void of course — avoid committing to irreversible decisions.' : ''
+
+  const prompt = `Today is ${today}.
+
+Personal Day number: ${payload.personalDay} — ${payload.personalDayArchetype}
+
+Moon: ${payload.moon.phaseName} in ${payload.moon.moonSign}${voidNote}
+
+Top transit aspects:
+${aspectLines}
+
+Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${payload.personalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are an expert astrologer and numerologist writing a personalized morning synthesis. Weave the personal day number, moon phase, and transit aspects into a single cohesive 2-3 sentence reading. Be direct, specific, and personal — name actual energies. No generic encouragement. No filler. Speak to this person\'s day as it actually is.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 350 })
+  )
+  return result || 'Unable to generate morning synthesis.'
+}
+
+async function handleNumerologyDiscuss(payload: {
+  numerologyContext: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+}): Promise<string> {
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: `You are an expert numerologist and astrologer who holds both systems simultaneously — you see numbers and planetary energies as two languages describing the same soul. You are continuing a conversation with someone about their numerological profile. Use the full context below to answer follow-up questions with depth, specificity, and personal directness. Reference their actual numbers. Do not be generic. Stay personal and direct.\n\n${payload.numerologyContext}`,
+      },
+      ...payload.messages,
+    ], { temperature: 0.85, max_tokens: 1000 })
+  )
+  return result || 'Unable to generate a response.'
+}
+
+async function handleAstroDiscuss(payload: {
+  astroContext: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+}): Promise<string> {
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: `You are an expert astrologer having a direct, honest conversation about someone's birth chart and transits. Answer using the astrological data below. Be factual and precise — state what is favorable clearly and state what is difficult without softening it. Reference specific planetary placements, dignities, and aspect doctrine. Do not default to reassurance or encouragement — instead give the person the real picture so they can make informed decisions. If an aspect is classically malefic, say so. If a placement is strong, say so. Keep responses focused and substantive (2-4 paragraphs unless they ask for detail).\n\n${payload.astroContext}`,
+      },
+      ...payload.messages,
+    ], { temperature: 0.8, max_tokens: 1500 })
+  )
+  return result || 'Unable to generate a response.'
+}
+
+async function handleJournalAnnotation(payload: {
+  entry: JournalEntry
+  topTransits: TransitAspect[]
+  moonPhase: string
+  moonSign: string
+  chartData: { planets: Planet[]; angles: { ascendant?: { sign: string } } }
+}): Promise<string> {
+  const sun = payload.chartData.planets.find(p => p.name === 'Sun')
+  const moon = payload.chartData.planets.find(p => p.name === 'Moon')
+  const asc = payload.chartData.angles?.ascendant
+
+  const natalContext = [
+    sun ? `Sun in ${sun.sign}` : '',
+    moon ? `Moon in ${moon.sign}` : '',
+    asc ? `Ascendant in ${asc.sign}` : '',
+  ].filter(Boolean).join(', ')
+
+  const transitLines = payload.topTransits.slice(0, 3).map(t =>
+    `${t.transitPlanet} ${t.symbol} natal ${t.natalPlanet} (${t.orb.toFixed(1)}° orb, ${t.nature})`
+  ).join('\n') || 'No tight transit aspects active.'
+
+  const bodyContext = payload.entry.body.trim()
+    ? `Entry text: "${payload.entry.body.slice(0, 300)}"`
+    : 'No text recorded — moment only.'
+
+  const prompt = `Date: ${payload.entry.date}
+Time: ${payload.entry.time}
+Personal Day: ${payload.entry.numerologicalDay}
+Moon: ${payload.moonPhase} in ${payload.moonSign}
+
+Natal chart: ${natalContext}
+
+Active transits at this moment:
+${transitLines}
+
+${bodyContext}
+
+Write one sentence (20-30 words) naming the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'Write one sentence (20-30 words) that names the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 80 })
+  )
+  return result.trim() || 'The sky held a particular arrangement at this moment.'
+}
+
+async function handleCosmicPatternReading(payload: {
+  patterns: PatternSummary[]
+  chartData: ChartData
+  totalEntryCount: number
+}): Promise<PatternReading[]> {
+  const sun = payload.chartData.planets.find(p => p.name === 'Sun')
+  const moon = payload.chartData.planets.find(p => p.name === 'Moon')
+  const asc = payload.chartData.angles?.ascendant
+
+  const natalContext = [
+    sun ? `Sun in ${sun.sign}` : '',
+    moon ? `Moon in ${moon.sign}` : '',
+    asc ? `Ascendant in ${asc.sign}` : '',
+  ].filter(Boolean).join(', ')
+
+  const patternLines = payload.patterns.map(p => {
+    const dates = p.entryDates.slice(0, 5).join(', ')
+    return `Category: ${p.tagGroup} (${p.sampleSize} entries, dates: ${dates})
+Dominant planets: ${p.dominantPlanets.join(', ') || 'none identified'}
+Dominant moon phases: ${p.dominantPhases.join(', ') || 'none identified'}
+Dominant personal days: ${p.dominantPersonalDays.join(', ') || 'none identified'}`
+  }).join('\n\n')
+
+  const prompt = `Total journal entries: ${payload.totalEntryCount}
+Natal chart: ${natalContext}
+
+Patterns identified across life events:
+
+${patternLines}
+
+For each event category listed, write one named pattern with a 3-5 word heading and 1-2 sentences. Return your response as a JSON array with objects: { "tagGroup": "...", "heading": "...", "body": "..." }
+
+Do not speak statistically. Speak in present tense. Name the pattern as a quality of this person — not as a count of data points. Use mirror-language: state what the pattern reveals about who this person is, not what their data shows. Do not use the word "data", "pattern", or "trend". Do not hedge. Write as though you have known this person for years.`
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are reading a person\'s longitudinal life record through the cosmos. For each event category listed, write one named pattern with a 3-5 word heading and 1-2 sentences. Do not speak statistically. Speak in present tense. Name the pattern as a quality of this person — not as a count of data points. Use mirror-language: state what the pattern reveals about who this person is, not what their data shows. Do not use the word "data", "pattern", or "trend". Do not hedge. Write as though you have known this person for years. Return valid JSON array only.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.85, max_tokens: 800 })
+  )
+
+  try {
+    const cleaned = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    return JSON.parse(cleaned) as PatternReading[]
+  } catch {
+    return payload.patterns.map(p => ({
+      tagGroup: p.tagGroup,
+      heading: `${p.tagGroup.charAt(0).toUpperCase() + p.tagGroup.slice(1)} at Your Thresholds`,
+      body: result.slice(0, 200),
+    }))
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main dispatcher
+// ---------------------------------------------------------------------------
+
+export async function handleGptRequest(
+  type: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('gpt_unavailable')
+  }
+
+  switch (type) {
+    case 'transit-interpretation':
+      return handleTransitInterpretation(payload as Parameters<typeof handleTransitInterpretation>[0])
+    case 'dream-interpretation':
+      return handleDreamInterpretation(payload as Parameters<typeof handleDreamInterpretation>[0])
+    case 'dream-discuss':
+      return handleDreamDiscuss(payload as Parameters<typeof handleDreamDiscuss>[0])
+    case 'astro-numerology-cross':
+      return handleAstroNumerologyCross(payload as Parameters<typeof handleAstroNumerologyCross>[0])
+    case 'daily-snapshot':
+      return handleDailySnapshot(payload as Parameters<typeof handleDailySnapshot>[0])
+    case 'numerology-narrative':
+      return handleNumerologyNarrative(payload as Parameters<typeof handleNumerologyNarrative>[0])
+    case 'numerology-sky-chart':
+      return handleNumerologySkyChart(payload as Parameters<typeof handleNumerologySkyChart>[0])
+    case 'today-synthesis':
+      return handleTodaySynthesis(payload as Parameters<typeof handleTodaySynthesis>[0])
+    case 'numerology-discuss':
+      return handleNumerologyDiscuss(payload as Parameters<typeof handleNumerologyDiscuss>[0])
+    case 'astro-discuss':
+      return handleAstroDiscuss(payload as Parameters<typeof handleAstroDiscuss>[0])
+    case 'journal-annotation':
+      return handleJournalAnnotation(payload as Parameters<typeof handleJournalAnnotation>[0])
+    case 'cosmic-pattern-reading':
+      return handleCosmicPatternReading(payload as Parameters<typeof handleCosmicPatternReading>[0])
+    default:
+      throw new Error(`Unknown GPT type: ${type}`)
+  }
+}

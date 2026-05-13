@@ -5,7 +5,6 @@ import type { ZodiacSign, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import SolarReturnBiWheel from '../chart/SolarReturnBiWheel'
 import DiscussModal from '../discuss/DiscussModal'
-import { getStoredApiKey, storeApiKey } from '../../services/gptInterpretation'
 
 function SRReading({ text }: { text: string }) {
   const paragraphs = text.split('\n').filter(p => p.trim().length > 0)
@@ -90,15 +89,12 @@ export default function SolarReturnPage() {
   const { solarReturnData, solarReturnInterpretation, birthData, solarReturnError } = state
   const [activeTab, setActiveTab] = useState<'reading' | 'chart'>('reading')
   const [discussOpen, setDiscussOpen] = useState(false)
-  const [apiKey, setApiKey] = useState(getStoredApiKey())
-  const [showKeyInput, setShowKeyInput] = useState(!getStoredApiKey())
 
   const currentYear = new Date().getFullYear()
   const targetYear = solarReturnData?.targetYear ?? currentYear
 
   const handleYearChange = (year: number) => {
     if (!birthData.city) return
-    if (apiKey) storeApiKey(apiKey)
     dispatch({ type: 'START_SOLAR_RETURN', targetYear: year })
   }
 
@@ -210,27 +206,6 @@ export default function SolarReturnPage() {
               <h2 className="font-heading text-2xl mb-4" style={{ color: '#e8a830' }}>Year Ahead Reading</h2>
               <SRReading text={solarReturnInterpretation} />
             </>
-          ) : !getStoredApiKey() ? (
-            <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8">
-              <p className="text-mystic-gold font-heading text-lg mb-4">OpenAI API Key Required</p>
-              <p className="text-mystic-muted text-sm mb-4">A year-ahead reading requires GPT interpretation. Enter your API key to generate it.</p>
-              {showKeyInput ? (
-                <div className="space-y-2">
-                  <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-4 py-2 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text text-sm focus:border-mystic-gold/50 focus:outline-none" />
-                  <button onClick={() => { storeApiKey(apiKey); dispatch({ type: 'START_SOLAR_RETURN', targetYear }) }}
-                    className="w-full px-4 py-2 font-heading rounded-lg transition-colors text-sm"
-                    style={{ background: 'rgba(232,168,48,0.15)', border: '1px solid rgba(232,168,48,0.35)', color: 'rgba(232,168,48,0.9)' }}>
-                    Generate Year Ahead Reading
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => setShowKeyInput(true)} className="text-mystic-muted text-xs hover:text-mystic-text transition-colors">
-                  Enter API Key
-                </button>
-              )}
-            </div>
           ) : (
             <div className="text-center py-8 text-mystic-muted">Loading reading...</div>
           )}

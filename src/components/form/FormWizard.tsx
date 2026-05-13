@@ -1,4 +1,6 @@
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { saveProfile } from '../../services/authService'
 import StepDate from './StepDate'
 import StepTime from './StepTime'
 import StepPlace from './StepPlace'
@@ -11,6 +13,7 @@ const STEPS = [
 
 export default function FormWizard() {
   const { state, dispatch } = useApp()
+  const { isAuthenticated } = useAuth()
   const { formStep, birthData } = state
   const StepComponent = STEPS[formStep].component
 
@@ -28,6 +31,11 @@ export default function FormWizard() {
       dispatch({ type: 'SET_STEP', step: formStep + 1 })
     } else {
       dispatch({ type: 'SET_VIEW', view: 'loading' })
+      if (isAuthenticated) {
+        saveProfile(birthData).catch(() => {
+          dispatch({ type: 'SET_STORAGE_WARNING', message: 'Birth data saved locally — could not sync to server.' })
+        })
+      }
     }
   }
 

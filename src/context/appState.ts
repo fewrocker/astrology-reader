@@ -106,6 +106,7 @@ export type AppAction =
   | { type: 'SET_SOLAR_RETURN_ERROR'; error: string }
   | { type: 'SET_STORAGE_WARNING'; message: string }
   | { type: 'CLEAR_STORAGE_WARNING' }
+  | { type: 'LOAD_BIRTH_DATA_FROM_SERVER'; data: BirthData }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -360,6 +361,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, storageWarning: action.message }
     case 'CLEAR_STORAGE_WARNING':
       return { ...state, storageWarning: null }
+    case 'LOAD_BIRTH_DATA_FROM_SERVER':
+      return { ...state, birthData: action.data }
     default:
       return state
   }

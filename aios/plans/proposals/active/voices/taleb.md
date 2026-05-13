@@ -1,152 +1,135 @@
-# Nassim Taleb — Sprint 6 Proposal Voice
+# Nassim Taleb — Sprint 7 Proposal Voice
 
-Everyone in the room is excited about Cosmic Journal. A personal data layer that learns your patterns. Machine-calibrated astrology. The feature that makes the app a "living almanac." I have read the vision document and I have read the code. Let me tell you what they are not excited about, because they are too close to it.
-
----
-
-## The Central Fragility: localStorage as a Journal Database
-
-The sprint vision says, plainly: "Entries are private, local, localStorage-only." This is presented as a non-issue — we are a personal app, not a social platform, so local storage is fine. This reasoning contains a hidden error. The problem is not privacy. The problem is capacity and reliability.
-
-localStorage is capped at approximately 5MB per origin in every major browser, and the current app is already storing: birth data, chart results (all planet positions, house cusps, angles, aspects, reading text), transit results (transit data plus the full GPT interpretation string), partner birth data, synastry results, and dream sessions keyed by date. Each `dream-session-YYYY-MM-DD` key holds the full message array including the entire GPT response text.
-
-Now add journal entries. Each `JournalEntry` as designed contains: `id`, `date`, `time`, `title`, `body`, `tags`, `skySnapshot` (a full set of transit aspect objects, moon data, numerological day), and optionally `dreamRef` plus a `GPT annotation string`. A single entry with a sky snapshot — which includes positions for 11 planets plus transit aspects — will serialize to roughly 2–4KB of JSON, depending on aspect count and body text. At 500 entries, that is 1–2MB of journal data added to a localStorage already carrying natal chart data, transit history, synastry, and dream sessions. At 1000 entries — which a daily user logging faithfully for three years would accumulate — you are at 2–4MB. The entire origin quota is 5MB.
-
-The failure mode is not graceful. When `localStorage.setItem()` throws a `QuotaExceededError`, the current code in `saveBirthData`, `saveChartResults`, `saveSynastryResults`, and the dream modal's `useEffect` all catch the error and silently ignore it. The exception is swallowed. The write does not happen. The user sees no error, presses save, believes their entry is stored, closes the app, and comes back to find it gone.
-
-This is not a theoretical edge case. It is the guaranteed outcome for any user who actually uses the product as designed — daily, for years. The feature that sells itself as "a living almanac" will silently destroy its own data for its most loyal users.
-
-**Proposed fix — issue: journal-storage-quota-guard**
-
-Before every journal write, check the estimate. The Storage API provides `navigator.storage.estimate()` on modern browsers, which returns approximate `usage` and `quota`. This is async but can be called once on mount and cached. If estimated usage exceeds 70% of quota, show a visible, non-dismissable warning in the journal UI: "Your local storage is nearly full. Older journal data may be at risk. Consider exporting your entries." Additionally, implement a lightweight export function — a single button that dumps the journal array as a JSON file via a Blob download — so users can protect their data before they hit the wall. The export requires no server, no account, no dependencies beyond what already exists. It is a `URL.createObjectURL(new Blob(...))` call.
-
-The deeper fix is to separate the sky snapshot payload from the entry payload. The sky snapshot for a given date is fully recomputable from the date alone — the astronomy engine is already deterministic and takes arbitrary datetime inputs. Rather than storing all planet positions and transit aspects in the journal entry, store only the `date` and `time`. Recompute the sky snapshot on load. This reduces per-entry storage from ~3KB to under 300 bytes, increasing capacity by an order of magnitude. The vision says entries should have "retroactive sky computation" — excellent. Trust the engine. Do not store what can be computed.
+Sprint 6 delivered exactly what I warned about in sprint 5: a feature — the Cosmic Journal — that accumulates irreplaceable personal data and sits it on localStorage. The band-aid arrived one sprint too late for some users. Now sprint 7 proposes the cure: a real backend, JWT authentication, and a migration path. This is the right direction. But the proposal is optimistic about implementation details in ways that will produce new fragilities while eliminating old ones. Let me enumerate them.
 
 ---
 
-## The Hidden Bug in `calculatePersonalDay` for Retrospective Entries
+## Persona Perspective
 
-The vision says each journal entry should record the numerological day for the entry's date. The sprint document lists `calculatePersonalDay(birthDate)` called "with the entry's date, not today." This instruction is sound in principle. The problem is that the function as currently implemented in `src/engine/numerology.ts` hardcodes `new Date()` internally:
+I study how systems fail under conditions their designers did not imagine. The sprint-0007 vision is a confidence document. It says: "secure auth, not toy auth." It says: "no data loss during migration." It says: "offline tolerance." These are commitments. Commitments made in architecture documents are cheap. What matters is whether the implementation can honor them when a malicious user probes the login endpoint from a botnet, when a user's localStorage has a partially-synced `_synced` flag from a connection dropout, when the backend is down at exactly the moment a user creates their first account. I will focus on those cases.
 
-```typescript
-export function calculatePersonalDay(birthDate: string): number {
-  // ...
-  const now = new Date()  // ← always today
-  const dateStr = `${now.getFullYear()}...`
-  // ...
-}
-```
-
-The function accepts only `birthDate`. There is no parameter for the target date. If the Cosmic Journal implementation calls `calculatePersonalDay(birthData.date)` for a journal entry dated six months ago, it will return today's personal day number, not the personal day for the entry's date. The journal entry will be annotated with the wrong number — silently, with no error, with high confidence.
-
-This is a data integrity bug masquerading as a feature. Every journal entry ever created before this function is fixed will carry the wrong numerological annotation. There is no recovery path: once the wrong number is stored, there is no way to know which entries are corrupted without a schema migration.
-
-**Proposed fix — issue: numerology-personal-day-date-parameter**
-
-`calculatePersonalDay` in `src/engine/numerology.ts` needs a second optional parameter: `targetDate?: Date`. When provided, it uses that date instead of `new Date()`. The function signature becomes:
-
-```typescript
-export function calculatePersonalDay(birthDate: string, targetDate?: Date): number
-```
-
-And internally:
-```typescript
-const now = targetDate ?? new Date()
-```
-
-This change is backward-compatible: all existing callers that pass no second argument continue to receive today's personal day as before. The journal entry composer passes `new Date(entryDate + 'T' + entryTime)` — or noon if no time specified — as the second argument. This must be done before any journal entries are ever persisted, or the first version of the feature ships with a systematic error in its primary data.
-
-The same issue applies to `calculatePersonalYear` and `calculatePersonalMonth` — they also call `new Date()` internally with no override path. A retrospective reading for December 2023 will show the 2026 personal year, not the 2023 one. Fix all three.
+The vision is also a monolith document, which is appropriate for this stage. I have no objection to the monolith. The objection I have is to the assumptions baked into the monolith that will make it fragile to extract later — not because extraction is needed now, but because the choices made today determine the cost of that extraction tomorrow.
 
 ---
 
-## The Astronomy Engine's Polar Region Failure and Its Implication for Global Users
-
-The Placidus house calculation in `src/engine/astronomy.ts` contains this line deep in the iterative `placidusCusp` function:
-
-```typescript
-if (!isFinite(ad)) break // polar regions
-```
-
-When `Math.asin(Math.tan(latRad) * Math.tan(decl))` is called with an argument outside `[-1, 1]`, `Math.asin` returns `NaN`, `isFinite(NaN)` is false, and the iteration breaks early. The cusp is returned as whatever the initial guess was — the equal-arc approximation — not a computed Placidus cusp. The house system silently degrades to a rough approximation for users born above approximately 60° north latitude or below 60° south latitude.
-
-This affects real users: Reykjavik is 64°N, Helsinki is 60°N, Oslo is 59°N, Stockholm is 59°N, Anchorage is 61°N. These are not edge cases. These are capitals of countries with populations of millions. Any user born in these cities who uses the house-dependent features — transit aspects to natal houses, the 12th house dreamscape reading, the "natal dream resonance" introduced in sprint 5 — is receiving calculations based on silently wrong house cusps.
-
-**Proposed fix — issue: astronomy-polar-latitude-whole-sign-fallback**
-
-When `isFinite(ad)` fails during Placidus computation, do not silently continue with the initial guess. Instead, flag the chart with a `houseSystemFallback: 'whole-sign'` property (which can live on `ChartData` alongside `unknownTime: boolean`). Fall back to Whole Sign houses for the remainder of the calculation — assign each house cusp to 0° of the sign that was rising at the given latitude. Whole Sign is universally valid regardless of latitude. Surface this degradation to the user with a single note: "Placidus houses are not reliable at your latitude. Whole Sign houses have been applied." This is honest and recoverable. The current behavior — silently wrong Placidus cusps — is neither.
-
-This also means the retrospective sky computation in Cosmic Journal will produce wrong house assignments for polar-region users. An entry logged from Helsinki in winter will have subtly wrong transit house placements that will propagate into the pattern panel's analysis. The pattern panel will then confidently report correlations based on corrupted data.
+## Proposals
 
 ---
 
-## What Everyone Is Excited About That They Shouldn't Be: Pattern Detection
+### issue: jwt-secret-hardcoding-env-guard
 
-The vision describes the Pattern Panel as the heart of the feature: "count which transit aspects were active, which numerological day predominated, which moon phase repeated" across tagged entries, then produce "a ranked list of cosmic signatures with their frequency."
+**Type:** issue
 
-Here is what this computation actually requires to mean anything: enough entries. Specifically, enough entries of the same tag type. The minimum sample size for any pattern to be statistically meaningful — even in the soft sense of "tends to cluster" — is somewhere around 10 to 20 instances of the same event type. A user who tags five entries as "breakthrough" and the Pattern Panel reports that "your breakthroughs tend to occur during Jupiter transits" is receiving a pattern reading built on 5 data points, with enormous variance, that would change entirely if they had tagged one more entry differently.
-
-I am not saying the pattern reading is wrong. I am saying the implementation will produce confident-sounding output for users with 3 entries, 5 entries, 10 entries — none of which carries enough signal to distinguish pattern from coincidence. And the GPT synthesis will render this as prose that sounds authoritative. Users will believe it.
-
-**Proposed fix — feat: journal-pattern-minimum-sample-size-gate**
-
-Before the Pattern Panel runs its analysis and before GPT is called, count the entries per tag. If fewer than 8 entries exist for a given tag, do not attempt pattern analysis for that tag. Instead, display: "You have 3 entries tagged 'breakthrough' — patterns will emerge with at least 8 entries of the same type. Keep logging." This is honest. It sets a real expectation. It gives the user a target. And it protects the GPT synthesis from making confident claims about 3-point datasets.
-
-Separately: the pattern correlation logic must distinguish between transit planets and natal planets in the transit aspect list. A user who always has "Jupiter aspecting something" is not necessarily experiencing "Jupiter patterns" — Jupiter moves slowly and will be aspecting multiple natal points simultaneously for months. The pattern counter must weight by: (1) aspect tightness (orb), (2) transit planet speed (slower = less informative as a "personal" pattern, because everyone has that transit at the same time), and (3) uniqueness to this user versus universal transits. A Jupiter-Neptune conjunction that lasts 18 months is not a personal pattern — it is a generational event. The pattern panel must not report it as if it were the user's personal cosmic signature.
+The vision says the JWT secret "must come from environment variables, never hardcoded." This is correct. But there is no proposed mechanism to enforce this at startup. The risk is that a developer writes `const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-fallback'` — which is a common pattern, appears harmless, and catastrophically undermines JWT security in any deployment where the environment variable is not set. A server running with `'dev-secret-fallback'` as the signing key will happily accept forged tokens signed with that string. The guard must be: if `process.env.JWT_SECRET` is absent or shorter than 32 characters, `server/index.ts` must refuse to start entirely. Fail loud at boot, not silently at runtime.
 
 ---
 
-## The `getTopActiveTransits` Function Always Uses `new Date()`
+### issue: brute-force-login-no-rate-limiting
 
-In `src/engine/transits.ts`, the function `getTopActiveTransits` is defined as:
+**Type:** issue
 
-```typescript
-export function getTopActiveTransits(
-  chartData: ChartData,
-  maxCount: number,
-  maxOrbDegrees: number,
-): TransitAspect[] {
-  const positions = calculateCurrentPositions(new Date())  // ← always now
-  ...
-}
-```
+The proposed auth route (`POST /api/auth/login`) accepts an email and password and returns a JWT. There is no mention of rate limiting anywhere in the vision. Without rate limiting, the login endpoint accepts unlimited password attempts per second, per IP. The Cosmic Journal stores private personal life entries — grief, turning points, loves. These are exactly the kind of records an abusive ex-partner or stalker would want to access. A bcrypt hash with cost factor 10 slows verification to roughly 100ms per attempt on a modest server, but 100 parallel requests from a single IP still yield 600 attempts per minute. Implement `express-rate-limit` on `/api/auth/login` and `/api/auth/register` — 10 requests per IP per 15 minutes — before the first line of route code is written. The fix is 8 lines of middleware. The omission is a hostile surface area that requires no sophistication to exploit.
 
-The vision says the sky snapshot at entry date must be "genuinely accurate for the recorded moment." But this function — which is the natural candidate to call when generating the sky snapshot for a journal entry — hardcodes `new Date()`. If this function is used for retroactive entry creation, every historical entry will show today's transit aspects, not the aspects from the logged date.
+---
 
-The function needs a `date?: Date` parameter. Without it, any developer building the journal entry composer who reaches for the obvious utility will produce systematically wrong data while believing they are producing correct data.
+### issue: migration-partial-sync-data-loss
 
-**Proposed fix — code: transits-get-top-active-transits-date-parameter**
+**Type:** issue
 
-```typescript
-export function getTopActiveTransits(
-  chartData: ChartData,
-  maxCount: number,
-  maxOrbDegrees: number,
-  date?: Date,
-): TransitAspect[] {
-  const positions = calculateCurrentPositions(date ?? new Date())
-  ...
-}
-```
+The data migration plan in the vision describes: detect local data, offer upload, batch-POST to server, mark `_synced: true` or clear. This flow contains a dangerous race condition. Consider: the user clicks "Upload my existing data." The batch POST begins. The server receives 47 of 50 journal entries and then the connection drops — a phone switching from WiFi to cellular, a server-side timeout, a Cloudflare reset. The migration promise rejects. The client was designed to "keep localStorage intact on upload failure." Good. But which entries made it to the server? The server has 47. localStorage has all 50. The client has no way to know. The next time the user tries to migrate, they will upload all 50 again. Three of the 47 that succeeded will now duplicate on the server unless the server handles idempotent upserts by client-generated UUID. The `entries` table schema uses `UUID PRIMARY KEY DEFAULT gen_random_uuid()` — server-generated, not client-generated. This means the server cannot deduplicate on re-upload. The fix: the client sends the entry's existing `id` (already a UUID v4, generated at save time in the localStorage model) as the primary key in the POST body, and the server's INSERT uses `ON CONFLICT (id) DO NOTHING`. This makes the migration batch operation idempotent — safe to retry any number of times without duplication.
 
-One line change. Zero breaking changes to existing callers. The dream modal, the Today page — both call this function with no date argument and correctly receive today's transits. The journal entry composer passes the entry's resolved datetime. This is the fix that makes the retroactive computation actually retroactive.
+---
+
+### issue: localstorage-token-xss-exposure
+
+**Type:** issue
+
+The vision proposes: "Persists the JWT to localStorage so the session survives page refresh." This is the standard approach and the convenient one. It is also an approach that exposes the JWT to any JavaScript running on the page. The app already loads an OpenAI API key from localStorage (visible in `getStoredApiKey()` in `src/services/gptInterpretation.ts`). A single XSS vulnerability — in a third-party dependency, in a future markdown renderer for journal entries, in a GPT response rendered without sanitization — can extract both the OpenAI key and the JWT in the same payload. The lower-risk alternative is `HttpOnly` cookies for the JWT, which are inaccessible to JavaScript by definition. The tradeoff is CSRF exposure, which requires its own mitigation (SameSite=Strict or a CSRF token). For a single-origin monolith serving its own frontend, `SameSite=Strict` is sufficient. The vision's quality bar says "secure auth, not toy auth" — storing the JWT in localStorage, alongside a plaintext API key, is closer to toy than secure.
+
+---
+
+### issue: clear-cache-logout-coupling-silent-failure
+
+**Type:** issue
+
+In `src/context/appState.ts`, the `CLEAR_CACHE` reducer calls `clearBirthDataCache()` and resets state. The vision notes: "The `CLEAR_CACHE` action currently logs the user out; it must also call the backend logout endpoint." The failure mode: if the backend logout call is fire-and-forget (unawaited, no confirmation), the server-side session is not invalidated. If JWTs are stateless (no server-side revocation list), this does not matter — the JWT simply expires. But if the implementation later adds server-side session tracking or a token blocklist, a missed logout call leaves an active token floating. Worse: if the dispatch is synchronous (it is — reducers are synchronous in React) and the backend call is async, there will be a window where the local state is cleared but the JWT is still in localStorage and valid. Any code that reads the JWT before the async logout resolves will believe the user is still authenticated. The reducer must be extended with a `LOGOUT_START` / `LOGOUT_COMPLETE` action pair, and the UI must hold in a transitional state until the server confirms.
+
+---
+
+### issue: unauthenticated-path-regression-risk-from-api-imports
+
+**Type:** issue
+
+The vision guarantees: "A user who does not log in must still get the full app experience." This is the most dangerous guarantee to make in an additive auth sprint, because it requires that every new import, every new context, every new `useEffect` that touches the auth layer does not conditionally crash when `user` is `null`. The typical failure mode is subtle: `AuthContext.tsx` is created, `useAuth()` is exported, a developer uses it in `CosmicJournalPage.tsx` to conditionally sync entries, and accidentally writes `const { user } = useAuth()` at the top of the component without null-checking before accessing `user.id`. The unauthenticated path throws a runtime error. Nobody catches it because the developer always tests with an account. The fix is structural: `AuthContext` must be designed with a strict null-default — `user` is `null` until proven otherwise, every consumer must handle null, and the TypeScript type must not permit `user.id` without a null guard. Additionally, the unauthenticated flow must be smoke-tested explicitly in the PR — load the app with no account, use every feature, confirm no console errors.
+
+---
+
+### issue: dream-session-key-scope-bug-after-auth
+
+**Type:** issue
+
+In `DreamModal.tsx`, line 17: `const DREAM_SESSION_KEY = getDreamSessionKey(todayKey)` — this is a module-level constant, evaluated once at import time. The key is `dream-session-YYYY-MM-DD` where the date is today at the time the module is first loaded. After authentication is added, dream sessions will be server-side entries associated with `user_id`. But the current localStorage key scheme uses date-based keys with no user identifier. If two users share a browser session (family computer), their dream sessions will collide — user A's `dream-session-2026-05-13` will be read by user B on the same date. The fix: once authenticated, dream session localStorage keys (if still used as a local cache) must be scoped to user ID: `dream-session-{userId}-{date}`. Or, more cleanly, dream sessions load exclusively from the server when authenticated, and localStorage is only the fallback for unauthenticated users.
+
+---
+
+### issue: backend-down-blocking-app-boot
+
+**Type:** issue
+
+The vision says "API calls from `authService.ts` must time out gracefully and fall back to the localStorage path." Good intent. The fragile implementation: if `AuthContext.tsx` calls `GET /api/auth/me` on mount to restore the session, and the backend is down, the app must not show a loading spinner indefinitely. There must be a hard timeout — 5 seconds maximum — after which the app assumes unauthenticated and loads from localStorage. Without this timeout, a backend outage (routine maintenance, deploy restart, server crash) renders the app unusable for all users, including users who do not care about their account and just want to read their chart. The unauthenticated path must be reachable without any backend round-trip. The auth check must be async, non-blocking, and resolved either with a session restoration or a definitive "unauthenticated" state within a bounded time window.
+
+---
+
+### feat: client-side-entry-id-as-server-primary-key
+
+**Type:** feat
+
+The current `JournalEntry` schema in `src/components/journal/types.ts` generates `id: crypto.randomUUID()` on the client at save time. The server schema in the vision uses `UUID PRIMARY KEY DEFAULT gen_random_uuid()` — server-generated. This divergence makes idempotent migration impossible (see migration partial-sync issue above) and also means the client cannot optimistically assign a permanent ID before a server round-trip. The correct design for a eventually-consistent local-first system: the client generates the UUID, it travels in the POST body, the server uses it as the primary key with `ON CONFLICT (id) DO NOTHING` for idempotency. This is a trivial schema change (`id UUID PRIMARY KEY` with no default, supplied by client) that eliminates an entire class of duplication and consistency bugs across the migration flow, offline writes, and future sync scenarios.
+
+---
+
+### feat: password-strength-enforcement-server-side
+
+**Type:** feat
+
+The vision describes register/login modals as "minimal modal forms: email + password." There is no mention of password policy. A user registering with password `1` will create an account with a bcrypt hash of `1`. This is not the user's fault — the app permitted it. Enforce a minimum length (12 characters) and reject common passwords server-side on `/api/auth/register`. Client-side hints are UX; server-side rejection is security. The rule must live on the server because client-side validation is trivially bypassed with a direct HTTP request.
+
+---
+
+### feat: export-all-data-authenticated-path
+
+**Type:** feat
+
+`src/utils/storage.ts` exports `exportAllLocalStorage()` — a JSON dump of everything in localStorage. After authentication, a significant portion of the user's data lives on the server, not in localStorage. The export function must be extended to include server-side data: journal entries and dream sessions fetched from `/api/entries`, birth data from `/api/profile`. The authenticated export should be a full account backup — not just whatever happens to be cached locally. This is especially important as an escape valve: a user who wants to delete their account must be able to download everything before deletion. Implement this before account deletion is added, not after.
+
+---
+
+### feat: account-deletion-endpoint
+
+**Type:** feat
+
+The vision does not mention account deletion. This is a common omission in early auth implementations and an increasingly regulated one. The `users` table schema has `ON DELETE CASCADE` on the entries foreign key, which is correct. What is missing is a `DELETE /api/user` endpoint that removes the user row (cascading to entries) and invalidates the JWT. Without this endpoint, users who want to leave are stuck. In many jurisdictions (GDPR, CCPA), the absence of a delete mechanism is a legal exposure, not just a UX gap. The endpoint itself is 10 lines of SQL and one JWT invalidation. Build it now, surface it in settings later.
+
+---
+
+### code: monolith-extract-boundary-preparation
+
+**Type:** code
+
+The vision describes a monolith: Express serves the static Vite build and all API routes from one process. This is the right choice for now. The fragility: if the backend code is written without clear module boundaries — if route handlers reach directly into DB connection objects, if business logic mixes with request parsing, if the server module exports are tangled — extraction to a separate service later costs 10x what it costs now. The fix is not to build microservices. It is to enforce a three-layer boundary in `server/`: routes (HTTP parsing only), services (business logic, no HTTP objects), and db (SQL only, no business logic). Routes call services. Services call db. This is 3 directories and a convention. It costs nothing to enforce now and buys significant flexibility later.
+
+---
+
+### code: sqlite-to-postgres-divergence-prevention
+
+**Type:** code
+
+The vision offers SQLite for local development and PostgreSQL for production "to avoid divergence." Then it immediately says "SQLite-only is acceptable for v1." The problem: SQLite and PostgreSQL are not the same language. JSONB columns (used for `birth_place` and `metadata`) do not exist in SQLite — they are stored as TEXT. `gen_random_uuid()` does not exist in SQLite. `TIMESTAMPTZ` does not exist in SQLite. A developer who writes and tests against SQLite and then deploys to PostgreSQL will encounter schema and query failures at deploy time. The correct approach: pick one and use it everywhere. If cost is the concern, PostgreSQL is available free on Fly.io, Railway, and Supabase. The cost of running two database dialects in one codebase — even with an ORM abstracting them — is always paid in bugs that appear only in production.
 
 ---
 
 ## Summary Assessment
 
-Sprint 6 is building on sound astronomical infrastructure. The engine is competent. The GPT integration is appropriately layered with fallbacks. The design language is consistent. The ambition of the feature — a personal data layer that accumulates cosmic context over time — is the right next step for this product.
+The sprint-0007 direction is correct. The fragility catalog above is not an argument against building the backend — it is a map of the failure modes that will manifest if the implementation is optimistic. The two highest-priority issues are the migration idempotency gap (journal entries will duplicate on retry without client-generated UUIDs as server primary keys) and the brute-force exposure on the login endpoint (no rate limiting on a form that guards private journal data). Both are easy to fix before any route code ships. The JWT storage question (localStorage versus HttpOnly cookie) is the most architecturally consequential decision and should be made deliberately, not by default.
 
-The fragilities are:
-
-1. **localStorage quota exhaustion** will silently corrupt or discard journal entries for long-term users. This is the most dangerous issue — it is the exact kind of failure that appears only after users have invested time and trust in the product. Fix: recomputable sky snapshots (don't store what you can compute), quota monitoring, and a JSON export escape valve.
-
-2. **`calculatePersonalDay` date parameter missing** will produce systematically wrong numerological annotations on every retrospective entry. This is a data integrity bug that ships silently on day one. Fix: add `targetDate?` parameter before any entries are persisted.
-
-3. **`getTopActiveTransits` always uses `new Date()`** will silently produce wrong retroactive sky snapshots if called naively. Fix: add `date?` parameter.
-
-4. **Pattern panel minimum sample gate missing** will produce GPT-rendered pattern readings based on insufficient data, delivered with the confidence of authoritative analysis. Fix: gate pattern synthesis behind an 8-entry minimum per tag.
-
-5. **Polar latitude Placidus failure** silently degrades house calculations for users in northern Europe and Alaska. Fix: detect failure, apply Whole Sign fallback, surface the note to the user.
-
-The most antifragile path is: store less, compute more. The astronomy engine is deterministic and fast. The less the journal persists (beyond the irreproducible human content — the title, body, and tags), the more resilient it is to storage constraints, schema changes, and calculation corrections. Trust the engine at read time, not at write time.
+The unauthenticated path guarantee is the one commitment that will silently break if the auth layer is not developed with null-first discipline. Test it explicitly. Every PR that touches auth-adjacent code should include a test step: open the app without an account, use every feature, confirm no regressions.
