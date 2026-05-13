@@ -824,6 +824,22 @@ Before any proposal is generated, the sprint must know what it is about. The rec
    - develop and deliver the task end-to-end
    - validate its changes appropriately
    - update the card with outcome notes and the spec checklist
+   - run the **code review and fix loop**:
+     1. Spawn a **Code Review Agent** — a new isolated subagent whose sole job is to review the implementation in the task's worktree. Pass it:
+        - The full contents of the sprint card (problem, proposal, specifications)
+        - The worktree path and branch name (`sprint-XXXX-task-YYYY-[TASK_NAME]`)
+        - Instruction to invoke the `superpowers:requesting-code-review` skill and apply it to all changed files in the worktree
+        - Instruction to produce a structured review report: one section per issue found, each with severity (`blocking` / `warning` / `suggestion`), the file and line, and a clear description of what is wrong and why
+        - Instruction to write the review report to `sprints/sprint-XXXX/cards/sprint-XXXX-task-YYYY-[TASK_NAME]-review.md`
+     2. Wait for the Code Review Agent to finish and read its report.
+     3. If the report contains no `blocking` issues: proceed. `warning` and `suggestion` findings are recorded in the card but do not block completion.
+     4. If the report contains one or more `blocking` issues: spawn a **Code Fix Agent** — another isolated subagent — and pass it:
+        - The full contents of the sprint card
+        - The full review report (path and contents)
+        - The worktree path and branch name
+        - Explicit instruction: fix every `blocking` issue found in the review; do not introduce new behaviour beyond what is needed to resolve the review findings; commit the fixes to the task branch inside the worktree
+     5. Wait for the Code Fix Agent to finish, then return to step 1 with a fresh Code Review Agent. Repeat until no `blocking` issues remain or three iterations have completed.
+     6. If `blocking` issues still remain after three iterations, mark the task as `failed-review` in `sprints/sprint-XXXX/state.md` with a summary of the unresolved findings; do not silently skip or suppress the failure.
    - signal the task done in `sprints/sprint-XXXX/state.md`
 6. The parent `/sprint` workflow must wait until every task subagent has finished before closing the sprint.
 7. If a task fails, mark it clearly in `sprints/sprint-XXXX/state.md` and do not silently drop it.
@@ -912,13 +928,24 @@ This step is where parallel sprint work gets unified. Because every task ran in 
    - **How to use it** — one short instruction-oriented description
 5. For incomplete or failed tasks, list them separately with a brief blocker or failure note.
 
-**11. Report back to the user**
+**11. Write the review plan**
+1. Write `sprints/sprint-XXXX/review-plan.md`.
+2. For each feature listed in the changelog (completed tasks only), write a section that tells the user exactly how to manually verify that feature in the running app:
+   - **Feature** — the task name and a one-line description of what was delivered
+   - **Where to go** — the specific screen, route, or UI entry point to navigate to (e.g. "Open the app → tap Birth Chart → select a date")
+   - **How to test it** — a short numbered walkthrough of the steps to exercise the feature, written as if guiding someone who has never seen it before
+   - **What to expect** — the observable outcome that confirms the feature is working correctly
+3. Focus only on delivered features (`feat-` proposals). Bug fixes and code improvements may be grouped at the end under a single "Internal Changes" note with no navigation steps.
+4. Write in plain, direct language — no technical jargon, no file paths. The audience is the product owner doing a manual review pass.
+
+**12. Report back to the user**
 1. Present the sprint result to the user with:
    - sprint number
    - number of completed tasks
    - number of failed or deferred tasks
    - path to `sprints/sprint-XXXX/changelog.md`
-2. The changelog is the primary human-readable sprint summary.
+   - path to `sprints/sprint-XXXX/review-plan.md`
+2. The changelog is the primary human-readable sprint summary. The review plan is the manual QA guide.
 
 **12. Resumability rules**
 1. If `/sprint` is interrupted, resume from `sprints/sprint-XXXX/state.md`.
