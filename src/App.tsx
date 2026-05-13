@@ -26,7 +26,7 @@ import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
-import { getGptInterpretation, getStoredApiKey } from './services/gptInterpretation'
+import { getGptInterpretation } from './services/gptInterpretation'
 
 const NUDGE_DISMISS_KEY = 'auth-nudge-dismissed-at'
 const JOURNAL_KEY = 'cosmic-journal-entries'
@@ -555,8 +555,7 @@ function AppContent() {
 
         // Get GPT interpretation
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
-        const apiKey = getStoredApiKey()
-        const interpretation = await getGptInterpretation(prompt, apiKey)
+        const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_RESULTS', transitData, interpretation })
@@ -606,8 +605,7 @@ function AppContent() {
 
         // Get GPT interpretation
         const prompt = buildSynastryPrompt(chart1, chart2, synData, birthData.date, partnerBirthData.date)
-        const apiKey = getStoredApiKey()
-        const interpretation = await getGptInterpretation(prompt, apiKey)
+        const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_RESULTS', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData, interpretation })
@@ -646,8 +644,7 @@ function AppContent() {
 
         // Get GPT interpretation
         const prompt = buildCoupleTransitPrompt(chartData, partnerChartData, synastryData, transitData, state.synastryTransitPeriod!, birthData.date, partnerBirthData.date, state.synastryTransitTargetMonth ?? undefined)
-        const apiKey = getStoredApiKey()
-        const interpretation = await getGptInterpretation(prompt, apiKey)
+        const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
@@ -698,8 +695,7 @@ function AppContent() {
 
         // Get GPT interpretation
         const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
-        const apiKey = getStoredApiKey()
-        const interpretation = await getGptInterpretation(prompt, apiKey)
+        const interpretation = await getGptInterpretation(prompt)
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_RESULTS', data: srData, interpretation })

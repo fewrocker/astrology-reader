@@ -8,7 +8,7 @@ import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransit
 import type { TransitAspect } from '../../engine/transits'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getInterpretation } from '../../data/numerologyInterpretations'
-import { generateJournalEntryAnnotation, getStoredApiKey } from '../../services/gptInterpretation'
+import { generateJournalEntryAnnotation } from '../../services/gptInterpretation'
 import DreamModal from '../dream/DreamModal'
 
 // Simple concurrent annotation limiter
@@ -117,10 +117,6 @@ export default function JournalEntryCard({
   // Deferred annotation via IntersectionObserver
   useEffect(() => {
     if (annotation !== null || annotationStartedRef.current) return
-    if (!getStoredApiKey()) {
-      setAnnotationPending(false)
-      return
-    }
 
     const startAnnotation = async () => {
       if (annotationStartedRef.current) return
@@ -140,12 +136,6 @@ export default function JournalEntryCard({
 
         const topTransits = getTopActiveTransits(chartData, 3, 8, entryDate)
         const moon = getMoonSignAndPhase(entryDate)
-        const apiKey = getStoredApiKey()
-
-        if (!apiKey) {
-          setAnnotationPending(false)
-          return
-        }
 
         const result = await generateJournalEntryAnnotation(
           entry,
@@ -153,7 +143,6 @@ export default function JournalEntryCard({
           moon.phase,
           moon.sign,
           chartData,
-          apiKey,
         )
 
         // Persist the annotation to localStorage
@@ -289,8 +278,6 @@ export default function JournalEntryCard({
             <p className="text-mystic-muted/80 text-sm italic">{annotation}</p>
           ) : annotationPending ? (
             <div className="h-4 w-3/4 bg-mystic-surface rounded animate-pulse" />
-          ) : !getStoredApiKey() ? (
-            <p className="text-mystic-muted/40 text-xs">✦ Add an API key to unlock cosmic annotations</p>
           ) : null}
         </div>
 

@@ -8,7 +8,7 @@ import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
-import { getTodayPageInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
+import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -72,23 +72,19 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
       const all = calculateTransitAspects(calculateCurrentPositions(now), chartData.planets, 'daily')
       setEnergy(computeEnergyRating(all))
 
-      const apiKey = getStoredApiKey()
-      if (apiKey) {
-        setGptLoading(true)
-        getTodayPageInterpretation(
-          currentMoon,
-          top,
-          personalDayNum,
-          interpretation?.archetype ?? '',
-          apiKey,
-        ).then(text => {
-          setGptText(text)
-        }).catch(() => {
-          // silently hide if API call fails
-        }).finally(() => {
-          setGptLoading(false)
-        })
-      }
+      setGptLoading(true)
+      getTodayPageInterpretation(
+        currentMoon,
+        top,
+        personalDayNum,
+        interpretation?.archetype ?? '',
+      ).then(text => {
+        setGptText(text)
+      }).catch(() => {
+        // silently hide if API call fails
+      }).finally(() => {
+        setGptLoading(false)
+      })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -233,7 +229,10 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
             </div>
           )}
           {gptText && (
-            <p className="text-mystic-text/90 text-sm leading-relaxed">{gptText}</p>
+            <>
+              <p className="text-mystic-text/90 text-sm leading-relaxed">{gptText}</p>
+              {getGptNudge() && <p className="text-mystic-muted/60 text-xs mt-3">{getGptNudge()}</p>}
+            </>
           )}
         </div>
       )}

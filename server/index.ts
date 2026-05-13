@@ -7,6 +7,7 @@ import { getDb } from './db.js';
 import authRouter from './routes/auth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
+import gptRouter from './routes/gpt.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,12 +34,14 @@ getDb();
 
 const app = express();
 
+app.set('trust proxy', 1);
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
+app.use('/api/gpt', gptRouter);
 
 // Serve compiled frontend in production (dist/ lives one level above server/)
 const distDir = path.resolve(__dirname, '../dist');

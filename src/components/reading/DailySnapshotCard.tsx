@@ -5,7 +5,7 @@ import { calculateCurrentPositions, calculateTransitAspects, computeEnergyRating
 import type { TransitAspect, EnergyRating } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
-import { getDailySnapshotInterpretation, getStoredApiKey } from '../../services/gptInterpretation'
+import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptInterpretation'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
 
@@ -118,17 +118,8 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
           setTopAspect(best)
         }
 
-        const apiKey = getStoredApiKey()
-        if (!apiKey) {
-          if (!cancelled) {
-            setError('Add an OpenAI API key to unlock the daily reading.')
-            setLoading(false)
-          }
-          return
-        }
-
         const prompt = buildSnapshotPrompt(chart, currentMoon, aspects)
-        const result = await getDailySnapshotInterpretation(prompt, apiKey)
+        const result = await getDailySnapshotInterpretation(prompt)
 
         if (!cancelled) {
           setText(result)
@@ -243,7 +234,10 @@ export default function DailySnapshotCard({ chart, birthDate }: { chart: ChartDa
         )}
 
         {text && !loading && (
-          <p className="text-mystic-text/90 text-sm leading-relaxed">{text}</p>
+          <>
+            <p className="text-mystic-text/90 text-sm leading-relaxed">{text}</p>
+            {getGptNudge() && <p className="text-mystic-muted/60 text-xs mt-2">{getGptNudge()}</p>}
+          </>
         )}
       </div>
     </div>

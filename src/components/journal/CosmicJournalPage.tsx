@@ -12,7 +12,6 @@ import { calculatePersonalDay } from '../../engine/numerology'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getTopActiveTransits } from '../../engine/transits'
 import { getInterpretation } from '../../data/numerologyInterpretations'
-import { getStoredApiKey } from '../../services/gptInterpretation'
 import DreamModal from '../dream/DreamModal'
 
 const PHASE_EMOJIS: Record<string, string> = {
@@ -224,7 +223,6 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
   }
 
   const today = getTodayString()
-  const apiKey = getStoredApiKey()
 
   // Live sky for empty state
   const nowSky = (() => {
@@ -278,9 +276,6 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
             >
               Export ↓
             </button>
-          )}
-          {!apiKey && (
-            <span className="text-mystic-muted/40 text-xs">Add an API key for cosmic annotations</span>
           )}
         </div>
       </div>
@@ -432,7 +427,7 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
 
               {/* Tags note */}
               <p className="text-mystic-muted/40 text-xs mb-4">
-                Tags will be refined after you record — or add an API key for cosmic tagging.
+                Tags will be refined after you record.
               </p>
 
               {/* Submit */}
