@@ -20,19 +20,18 @@ export default function NetworkWarningBanner() {
         style={{ color: '#c9a84c', filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.4))' }}
         aria-hidden="true"
       >
-        ✦
+        ◆
       </span>
+
       <div className="flex-1 min-w-0">
-        <p
-          className="text-sm leading-relaxed"
-          style={{ color: 'rgba(201, 168, 76, 0.9)' }}
-        >
+        <p className="text-sm leading-relaxed" style={{ color: 'rgba(201, 168, 76, 0.9)' }}>
           Could not reach the server — using local data for now.
         </p>
       </div>
+
       <button
         onClick={dismissNetworkWarning}
-        className="p-1.5 transition-colors flex-shrink-0"
+        className="p-1.5 flex-shrink-0 transition-colors"
         style={{ color: 'rgba(201, 168, 76, 0.4)' }}
         onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201, 168, 76, 0.8)')}
         onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201, 168, 76, 0.4)')}

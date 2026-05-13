@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import { fetchWithTimeout, getStoredToken, setStoredToken, clearStoredToken } from '../services/authService'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
+import { AUTH_TOKEN_KEY, getSession, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
 import type { AuthUser } from '../services/authService'
+import { useApp } from './AppContext'
 
 interface AuthContextType {
   user: AuthUser | null
@@ -9,118 +9,118 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   displayName: string
-  login: (email: string, password: string) => Promise<void>
-  register: (email: string, password: string, displayName: string) => Promise<void>
-  logout: () => void
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  logout: () => Promise<void>
   showNetworkWarning: boolean
   dismissNetworkWarning: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-export function useAuth(): AuthContextType {
-  const ctx = useContext(AuthContext)
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
-  return ctx
+function titleCase(str: string): string {
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
+}
+
+function deriveDisplayName(user: AuthUser | null, userName?: string): string {
+  if (userName) return userName
+  if (!user) return ''
+  const local = user.email.split('@')[0]
+  return titleCase(local)
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { state, dispatch } = useApp()
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [token, setToken] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY))
   const [isLoading, setIsLoading] = useState(true)
   const [showNetworkWarning, setShowNetworkWarning] = useState(false)
-  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const storedToken = getStoredToken()
-    let cancelled = false
-
+    const storedToken = localStorage.getItem(AUTH_TOKEN_KEY)
     if (!storedToken) {
-      // No JWT — proceed unauthenticated silently, no notification
       setIsLoading(false)
       return
     }
 
-    setToken(storedToken)
-
-    fetchWithTimeout('/api/auth/me', {
-      headers: { Authorization: `Bearer ${storedToken}` },
-    })
-      .then(async res => {
-        if (cancelled) return
-        if (res.ok) {
-          const data = await res.json()
-          setUser(data as AuthUser)
+    getSession().then(result => {
+      if (result.ok) {
+        const { id, email } = result.data
+        setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '' }, state.birthData.userName) })
+        if (result.data.profile?.birthData) {
+          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: result.data.profile.birthData })
         }
-        // non-OK (e.g. 401 expired token): silently unauthenticated, no banner
-      })
-      .catch(() => {
-        // Network error or 5-second timeout: user had a token but server unreachable
-        if (cancelled) return
-        setShowNetworkWarning(true)
-        dismissTimerRef.current = setTimeout(() => {
-          if (!cancelled) setShowNetworkWarning(false)
-        }, 6000)
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false)
-      })
+      } else {
+        if (result.error === 'offline') {
+          setShowNetworkWarning(true)
+        }
+        localStorage.removeItem(AUTH_TOKEN_KEY)
+        setToken(null)
+        setUser(null)
+      }
+      setIsLoading(false)
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      cancelled = true
-      if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
+  const displayName = deriveDisplayName(user, state.birthData.userName)
+
+  const login = useCallback(async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+    const result = await apiLogin(email, password)
+    if (result.ok) {
+      const { token: jwt, user: userData } = result.data
+      localStorage.setItem(AUTH_TOKEN_KEY, jwt)
+      setToken(jwt)
+      setUser({ id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) })
+      return { ok: true }
     }
-  }, [])
+    if (result.error === 'unauthorized') return { ok: false, error: 'Invalid email or password.' }
+    if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
+    return { ok: false, error: 'Something went wrong. Please try again.' }
+  }, [state.birthData.userName])
 
-  function dismissNetworkWarning() {
-    if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current)
-    setShowNetworkWarning(false)
-  }
+  const register = useCallback(async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
+    const result = await apiRegister(email, password)
+    if (result.ok) {
+      const { token: jwt, user: userData } = result.data
+      localStorage.setItem(AUTH_TOKEN_KEY, jwt)
+      setToken(jwt)
+      setUser({ id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) })
+      return { ok: true }
+    }
+    if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
+    if (result.error === 'server-error' && result.status === 409) return { ok: false, error: 'An account with this email already exists.' }
+    return { ok: false, error: 'Something went wrong. Please try again.' }
+  }, [state.birthData.userName])
 
-  async function login(email: string, password: string) {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    if (!res.ok) throw new Error('Login failed')
-    const { token: newToken, user: newUser } = await res.json()
-    setStoredToken(newToken)
-    setToken(newToken)
-    setUser(newUser)
-  }
-
-  async function register(email: string, password: string, displayName: string) {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, displayName }),
-    })
-    if (!res.ok) throw new Error('Registration failed')
-    const { token: newToken, user: newUser } = await res.json()
-    setStoredToken(newToken)
-    setToken(newToken)
-    setUser(newUser)
-  }
-
-  function logout() {
-    clearStoredToken()
+  const logout = useCallback(async () => {
+    await apiLogout()
+    localStorage.removeItem(AUTH_TOKEN_KEY)
     setToken(null)
     setUser(null)
-  }
+  }, [])
 
-  const value: AuthContextType = {
-    user,
-    token,
-    isLoading,
-    isAuthenticated: !!user,
-    displayName: user?.displayName ?? user?.email ?? '',
-    login,
-    register,
-    logout,
-    showNetworkWarning,
-    dismissNetworkWarning,
-  }
+  const dismissNetworkWarning = useCallback(() => setShowNetworkWarning(false), [])
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return (
+    <AuthContext.Provider value={{
+      user,
+      token,
+      isLoading,
+      isAuthenticated: user !== null,
+      displayName,
+      login,
+      register,
+      logout,
+      showNetworkWarning,
+      dismissNetworkWarning,
+    }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth(): AuthContextType {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
+  return ctx
 }
