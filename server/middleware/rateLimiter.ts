@@ -7,3 +7,11 @@ export const authRateLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many attempts — please wait a few minutes before trying again.' },
 });
+
+export const writeRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many write requests — please slow down.' },
+});

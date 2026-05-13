@@ -48,14 +48,14 @@ router.post('/register', authRateLimiter, (req: Request, res: Response): void =>
     return;
   }
 
-  if (!password || typeof password !== 'string' || password.length < 12) {
-    res.status(400).json({ error: 'Password must be at least 12 characters' });
+  if (!password || typeof password !== 'string' || password.length < 12 || password.length > 1024) {
+    res.status(400).json({ error: 'Password must be between 12 and 1024 characters' });
     return;
   }
 
   const db = getDb();
 
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.toLowerCase());
+  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase());
   if (existing) {
     res.status(409).json({ error: 'Email already registered' });
     return;
@@ -67,10 +67,10 @@ router.post('/register', authRateLimiter, (req: Request, res: Response): void =>
     .prepare(
       'INSERT INTO users (email, password_hash, full_name) VALUES (?, ?, ?)'
     )
-    .run(email.toLowerCase(), passwordHash, fullName ?? null);
+    .run(email.trim().toLowerCase(), passwordHash, fullName ?? null);
 
   const userId = result.lastInsertRowid as number;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow;
+  const user = db.prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE id = ?').get(userId) as UserRow;
 
   res.status(201).json({ token: signToken(userId), user: safeUser(user) });
 });
@@ -85,8 +85,8 @@ router.post('/login', authRateLimiter, (req: Request, res: Response): void => {
 
   const db = getDb();
   const user = db
-    .prepare('SELECT * FROM users WHERE email = ?')
-    .get(email.toLowerCase()) as UserRow | undefined;
+    .prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE email = ?')
+    .get(email.trim().toLowerCase()) as UserRow | undefined;
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid email or password' });
@@ -103,7 +103,7 @@ router.post('/logout', (_req: Request, res: Response): void => {
 router.get('/me', requireAuth, (req: Request, res: Response): void => {
   const { userId } = req as AuthenticatedRequest;
   const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as UserRow | undefined;
+  const user = db.prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE id = ?').get(userId) as UserRow | undefined;
 
   if (!user) {
     res.status(404).json({ error: 'User not found' });

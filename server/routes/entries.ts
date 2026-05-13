@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { writeRateLimiter } from '../middleware/rateLimiter.js';
 
 interface EntryRow {
   id: string;
@@ -47,7 +48,7 @@ router.get('/', (req: Request, res: Response): void => {
   );
 });
 
-router.post('/', (req: Request, res: Response): void => {
+router.post('/', writeRateLimiter, (req: Request, res: Response): void => {
   const { userId } = req as AuthenticatedRequest;
   const { id, kind, date, body, metadata } = req.body as {
     id?: string;
@@ -96,7 +97,7 @@ router.post('/', (req: Request, res: Response): void => {
   });
 });
 
-router.delete('/:id', (req: Request, res: Response): void => {
+router.delete('/:id', writeRateLimiter, (req: Request, res: Response): void => {
   const { userId } = req as AuthenticatedRequest;
   const { id } = req.params;
 

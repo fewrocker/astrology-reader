@@ -2,6 +2,7 @@ import { DREAM_SESSION_KEY_PREFIX } from '../context/appState'
 import { JOURNAL_STORAGE_KEY, normalizeDreamRef } from '../components/journal/types'
 import type { JournalEntry, DreamRef } from '../components/journal/types'
 import type { BirthData } from '../context/appState'
+import { AUTH_TOKEN_KEY } from './authService'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -128,7 +129,12 @@ export function markMigrationDeclined(): void {
 function timedFetch(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController()
   const id = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(id))
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string>),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+  return fetch(url, { ...init, headers, signal: controller.signal }).finally(() => clearTimeout(id))
 }
 
 export async function migrateToServer(
@@ -181,26 +187,23 @@ export async function migrateToServer(
         return { key, date, session: { ...session, _pendingServerId: id }, id }
       })
 
-      const body = sessionsWithIds.map(({ id, date, session }) => ({
-        id,
-        kind: 'dream',
-        date,
-        body: session.dreamContext,
-        metadata: {
-          messages: session.messages,
-          dreamInput: session.dreamInput,
-          skyContext: session.skyContext,
-        },
-      }))
-
-      const res = await timedFetch('/api/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(`entries ${res.status}`)
-
-      for (const { key, id } of sessionsWithIds) {
+      for (const { key, id, date, session } of sessionsWithIds) {
+        const res = await timedFetch('/api/entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id,
+            kind: 'dream',
+            date,
+            body: session.dreamContext,
+            metadata: {
+              messages: session.messages,
+              dreamInput: session.dreamInput,
+              skyContext: session.skyContext,
+            },
+          }),
+        })
+        if (!res.ok) throw new Error(`entries ${res.status}`)
         try {
           const raw = localStorage.getItem(key)
           if (raw) {
@@ -225,28 +228,27 @@ export async function migrateToServer(
         if (id) dreamKeyToServerId[key] = id
       }
 
-      const body = data.journalEntries.map(entry => {
+      const migratedIds = new Set<string>()
+      for (const entry of data.journalEntries) {
         let dreamRef: DreamRef = entry.dreamRef
         if (dreamRef?.type === 'local' && dreamKeyToServerId[dreamRef.key]) {
           dreamRef = { type: 'server', id: dreamKeyToServerId[dreamRef.key] }
         }
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _serverId, _syncFailed, ...rest } = entry
-        return { ...rest, dreamRef, kind: 'journal' }
-      })
-
-      const res = await timedFetch('/api/entries', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(`entries ${res.status}`)
+        const res = await timedFetch('/api/entries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...rest, dreamRef, kind: 'journal' }),
+        })
+        if (!res.ok) throw new Error(`entries ${res.status}`)
+        migratedIds.add(entry.id)
+      }
 
       try {
         const raw = localStorage.getItem(JOURNAL_STORAGE_KEY)
         if (raw) {
           const all = JSON.parse(raw) as Array<JournalEntry>
-          const migratedIds = new Set(data.journalEntries.map(e => e.id))
           const updated = all.map(e => migratedIds.has(e.id) ? { ...e, _serverId: e.id } : e)
           localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(updated))
         }

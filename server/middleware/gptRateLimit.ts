@@ -43,8 +43,8 @@ function extractUserId(req: Request): number | null {
   try {
     const secret = process.env.JWT_SECRET
     if (!secret) return null
-    const payload = jwt.verify(token, secret) as { id: number }
-    return typeof payload.id === 'number' ? payload.id : null
+    const payload = jwt.verify(token, secret) as { userId: number }
+    return typeof payload.userId === 'number' ? payload.userId : null
   } catch {
     return null
   }

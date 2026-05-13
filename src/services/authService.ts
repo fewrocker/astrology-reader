@@ -82,7 +82,12 @@ export function getSession() {
 export function saveProfile(birthData: BirthData) {
   return apiClient<void>('/api/profile', {
     method: 'PUT',
-    body: JSON.stringify({ birthData }),
+    body: JSON.stringify({
+      fullName: birthData.userName ?? null,
+      birthDate: birthData.date ?? null,
+      birthTime: birthData.time ?? null,
+      birthPlace: birthData.city ?? null,
+    }),
   })
 }
 

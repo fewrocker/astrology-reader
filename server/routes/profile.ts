@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db.js';
 import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { writeRateLimiter } from '../middleware/rateLimiter.js';
 
 interface UserRow {
   id: number;
@@ -42,7 +43,7 @@ router.get('/', (req: Request, res: Response): void => {
   });
 });
 
-router.put('/', (req: Request, res: Response): void => {
+router.put('/', writeRateLimiter, (req: Request, res: Response): void => {
   const { userId } = req as AuthenticatedRequest;
   const { fullName, birthDate, birthTime, birthPlace } = req.body as {
     fullName?: string | null;
