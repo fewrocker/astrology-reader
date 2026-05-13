@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { SolarReturnData } from '../../engine/solarReturn'
+import { buildSolarReturnPrompt } from '../../engine/solarReturn'
 import type { ZodiacSign, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import SolarReturnBiWheel from '../chart/SolarReturnBiWheel'
 import DiscussModal from '../discuss/DiscussModal'
+import GptSkeleton from '../ui/GptSkeleton'
+import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
+import { getGptInterpretation } from '../../services/gptInterpretation'
 
 function SRReading({ text }: { text: string }) {
   const paragraphs = text.split('\n').filter(p => p.trim().length > 0)
@@ -89,6 +93,7 @@ export default function SolarReturnPage() {
   const { solarReturnData, solarReturnInterpretation, birthData, solarReturnError } = state
   const [activeTab, setActiveTab] = useState<'reading' | 'chart'>('reading')
   const [discussOpen, setDiscussOpen] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   const currentYear = new Date().getFullYear()
   const targetYear = solarReturnData?.targetYear ?? currentYear
@@ -96,6 +101,15 @@ export default function SolarReturnPage() {
   const handleYearChange = (year: number) => {
     if (!birthData.city) return
     dispatch({ type: 'START_SOLAR_RETURN', targetYear: year })
+  }
+
+  async function handleRetryGpt() {
+    if (!solarReturnData || !state.chartData || retrying) return
+    setRetrying(true)
+    const prompt = buildSolarReturnPrompt(state.chartData, solarReturnData.srChart, solarReturnData.srMoment, birthData.date)
+    const interpretation = await getGptInterpretation(prompt)
+    dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
+    setRetrying(false)
   }
 
   const formatSRMoment = (date: Date): string => {
@@ -201,13 +215,24 @@ export default function SolarReturnPage() {
       {/* Reading tab */}
       {activeTab === 'reading' && (
         <div>
-          {solarReturnInterpretation ? (
+          {solarReturnInterpretation === null || retrying ? (
+            <GptSkeleton label="Tracking the Sun's return..." accentColor="amber" />
+          ) : isGptError(solarReturnInterpretation) ? (
+            <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3 mb-6">
+              <p className="text-mystic-muted text-sm">{getGptErrorMessage(solarReturnInterpretation)}</p>
+              <button
+                type="button"
+                onClick={handleRetryGpt}
+                className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
+              >
+                ✦ Ask again
+              </button>
+            </div>
+          ) : (
             <>
               <h2 className="font-heading text-2xl mb-4" style={{ color: '#e8a830' }}>Year Ahead Reading</h2>
               <SRReading text={solarReturnInterpretation} />
             </>
-          ) : (
-            <div className="text-center py-8 text-mystic-muted">Loading reading...</div>
           )}
         </div>
       )}
@@ -259,7 +284,7 @@ export default function SolarReturnPage() {
 
       {/* Navigation */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8 mb-12">
-        {solarReturnInterpretation && (
+        {solarReturnInterpretation !== null && !isGptError(solarReturnInterpretation) && (
           <button onClick={() => setDiscussOpen(true)}
             className="px-6 py-3 font-heading rounded-lg transition-colors"
             style={{ background: 'rgba(232,168,48,0.08)', border: '1px solid rgba(232,168,48,0.28)', color: 'rgba(232,168,48,0.85)' }}>
