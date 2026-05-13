@@ -11,6 +11,7 @@ import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransit
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import { getMoonSignAndPhase } from '../../engine/astronomy'
 import type { ChartData, PlanetPosition } from '../../engine/types'
+import { isQuotaError } from '../../utils/storage'
 
 const todayKey = new Date().toISOString().slice(0, 10)
 const DREAM_SESSION_KEY = `dream-session-${todayKey}`
@@ -155,8 +156,10 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp }: 
     try {
       const session: DreamSession = { messages, dreamContext, dreamInput, skyContext }
       localStorage.setItem(DREAM_SESSION_KEY, JSON.stringify(session))
-    } catch {
-      // ignore quota errors
+    } catch (e) {
+      if (isQuotaError(e)) {
+        setError('Your browser storage is full — this dream session could not be saved. Export your data to free space.')
+      }
     }
   }, [messages, dreamContext, dreamInput, skyContext])
 

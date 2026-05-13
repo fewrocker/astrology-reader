@@ -9,25 +9,29 @@ const AppContext = createContext<{
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState)
 
+  function onQuotaError(message: string) {
+    dispatch({ type: 'SET_STORAGE_WARNING', message })
+  }
+
   useEffect(() => {
-    saveBirthData(state.birthData)
-  }, [state.birthData])
+    saveBirthData(state.birthData, onQuotaError)
+  }, [state.birthData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (state.chartData && state.reading) {
-      saveChartResults({ chartData: state.chartData, aspects: state.aspects, reading: state.reading })
+      saveChartResults({ chartData: state.chartData, aspects: state.aspects, reading: state.reading }, onQuotaError)
     }
-  }, [state.chartData, state.aspects, state.reading])
+  }, [state.chartData, state.aspects, state.reading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (state.transitData && state.transitInterpretation && state.transitPeriod) {
-      saveTransitResults({ transitPeriod: state.transitPeriod, transitData: state.transitData, transitInterpretation: state.transitInterpretation })
+      saveTransitResults({ transitPeriod: state.transitPeriod, transitData: state.transitData, transitInterpretation: state.transitInterpretation }, onQuotaError)
     }
-  }, [state.transitData, state.transitInterpretation, state.transitPeriod])
+  }, [state.transitData, state.transitInterpretation, state.transitPeriod]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    savePartnerData(state.partnerBirthData)
-  }, [state.partnerBirthData])
+    savePartnerData(state.partnerBirthData, onQuotaError)
+  }, [state.partnerBirthData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (state.partnerChartData && state.synastryData && state.synastryInterpretation) {
@@ -36,9 +40,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         partnerAspects: state.partnerAspects,
         synastryData: state.synastryData,
         synastryInterpretation: state.synastryInterpretation,
-      })
+      }, onQuotaError)
     }
-  }, [state.partnerChartData, state.partnerAspects, state.synastryData, state.synastryInterpretation])
+  }, [state.partnerChartData, state.partnerAspects, state.synastryData, state.synastryInterpretation]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>

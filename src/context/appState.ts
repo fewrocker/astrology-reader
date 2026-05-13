@@ -5,6 +5,7 @@ import type { FullReading } from '../data/interpretations'
 import type { TransitData, TransitPeriod } from '../engine/transits'
 import type { SynastryData } from '../engine/synastry'
 import type { SolarReturnData } from '../engine/solarReturn'
+import { isQuotaError } from '../utils/storage'
 
 export type FocusArea =
   | 'love'
@@ -70,6 +71,8 @@ export interface AppState {
   solarReturnInterpretation: string | null
   solarReturnTargetYear: number | null
   solarReturnError: string | null
+  // Storage warning
+  storageWarning: string | null
 }
 
 export type AppAction =
@@ -94,6 +97,8 @@ export type AppAction =
   | { type: 'START_SOLAR_RETURN'; targetYear?: number }
   | { type: 'SET_SOLAR_RETURN_RESULTS'; data: SolarReturnData; interpretation: string }
   | { type: 'SET_SOLAR_RETURN_ERROR'; error: string }
+  | { type: 'SET_STORAGE_WARNING'; message: string }
+  | { type: 'CLEAR_STORAGE_WARNING' }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -128,11 +133,13 @@ export function loadCachedBirthData(): BirthData {
   }
 }
 
-export function saveBirthData(data: BirthData): void {
+export function saveBirthData(data: BirthData, onQuotaError?: (msg: string) => void): void {
   try {
     localStorage.setItem(BIRTH_DATA_CACHE_KEY, JSON.stringify(data))
-  } catch {
-    // localStorage may be unavailable — silently ignore
+  } catch (e) {
+    if (isQuotaError(e)) {
+      onQuotaError?.('Your browser storage is full — birth data could not be saved. Export your data to free space.')
+    }
   }
 }
 
@@ -148,10 +155,14 @@ export function clearBirthDataCache(): void {
   }
 }
 
-export function savePartnerData(data: BirthData): void {
+export function savePartnerData(data: BirthData, onQuotaError?: (msg: string) => void): void {
   try {
     localStorage.setItem(PARTNER_DATA_CACHE_KEY, JSON.stringify(data))
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (isQuotaError(e)) {
+      onQuotaError?.('Your browser storage is full — partner data could not be saved. Export your data to free space.')
+    }
+  }
 }
 
 export function loadCachedPartnerData(): BirthData {
@@ -178,10 +189,14 @@ export interface CachedSynastryResults {
   synastryInterpretation: string
 }
 
-export function saveSynastryResults(data: CachedSynastryResults): void {
+export function saveSynastryResults(data: CachedSynastryResults, onQuotaError?: (msg: string) => void): void {
   try {
     localStorage.setItem(SYNASTRY_RESULTS_CACHE_KEY, JSON.stringify(data))
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (isQuotaError(e)) {
+      onQuotaError?.('Your browser storage is full — synastry results could not be cached. Export your data to free space.')
+    }
+  }
 }
 
 export function loadCachedSynastryResults(): CachedSynastryResults | null {
@@ -200,10 +215,14 @@ export interface CachedChartResults {
   reading: FullReading
 }
 
-export function saveChartResults(data: CachedChartResults): void {
+export function saveChartResults(data: CachedChartResults, onQuotaError?: (msg: string) => void): void {
   try {
     localStorage.setItem(CHART_RESULTS_CACHE_KEY, JSON.stringify(data))
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (isQuotaError(e)) {
+      onQuotaError?.('Your browser storage is full — chart results could not be cached. Export your data to free space.')
+    }
+  }
 }
 
 export function loadCachedChartResults(): CachedChartResults | null {
@@ -222,10 +241,14 @@ export interface CachedTransitResults {
   transitInterpretation: string
 }
 
-export function saveTransitResults(data: CachedTransitResults): void {
+export function saveTransitResults(data: CachedTransitResults, onQuotaError?: (msg: string) => void): void {
   try {
     localStorage.setItem(TRANSIT_RESULTS_CACHE_KEY, JSON.stringify(data))
-  } catch { /* ignore */ }
+  } catch (e) {
+    if (isQuotaError(e)) {
+      onQuotaError?.('Your browser storage is full — transit results could not be cached. Export your data to free space.')
+    }
+  }
 }
 
 export function loadCachedTransitResults(): CachedTransitResults | null {
@@ -275,6 +298,7 @@ function buildInitialState(): AppState {
     solarReturnInterpretation: null,
     solarReturnTargetYear: null,
     solarReturnError: null,
+    storageWarning: null,
   }
 }
 
@@ -325,6 +349,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, view: 'solar-return', solarReturnData: action.data, solarReturnInterpretation: action.interpretation, solarReturnTargetYear: action.data.targetYear }
     case 'SET_SOLAR_RETURN_ERROR':
       return { ...state, solarReturnError: action.error, view: 'form' }
+    case 'SET_STORAGE_WARNING':
+      return { ...state, storageWarning: action.message }
+    case 'CLEAR_STORAGE_WARNING':
+      return { ...state, storageWarning: null }
     default:
       return state
   }
