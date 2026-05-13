@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
+<<<<<<< HEAD
+=======
+import MigrationBanner from './components/auth/MigrationBanner'
+>>>>>>> sprint-0007-task-0008-feat-localstorage-migration-flow
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
@@ -796,12 +800,35 @@ function AppContent() {
   )
 }
 
+function MigrationGate({ children }: { children: React.ReactNode }) {
+  const { isMigrationPending, migrationCandidate, dismissMigration } = useAuth()
+
+  if (isMigrationPending && migrationCandidate) {
+    return (
+      <>
+        {children}
+        <MigrationBanner
+          journalCount={migrationCandidate.journalCount}
+          dreamCount={migrationCandidate.dreamCount}
+          hasBirthData={migrationCandidate.hasBirthData}
+          onMigrate={dismissMigration}
+          onSkip={dismissMigration}
+        />
+      </>
+    )
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
         <AuthProvider>
-          <AppContent />
+          <MigrationGate>
+            <AppContent />
+          </MigrationGate>
         </AuthProvider>
       </AppProvider>
     </ErrorBoundary>

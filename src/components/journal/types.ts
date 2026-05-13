@@ -8,6 +8,11 @@ export type JournalTag =
   | 'dream'
   | 'blocked'
 
+export type DreamRef =
+  | { type: 'local'; key: string }   // localStorage key — e.g. 'dream-session-2025-05-13'
+  | { type: 'server'; id: string }   // UUID of the dream entry on the server
+  | null
+
 export interface JournalEntry {
   id: string                    // UUID v4, generated at save time
   date: string                  // YYYY-MM-DD (local date of the event)
@@ -17,8 +22,10 @@ export interface JournalEntry {
   tags: JournalTag[]            // Assigned by GPT; may be empty until annotation completes
   numerologicalDay: number      // Result of calculatePersonalDay(birthDate, entryDate) — stored at write time
   gptAnnotation: string | null  // One-sentence cosmic tag; null until GPT resolves; stored permanently on first generation
-  dreamRef: string | null       // localStorage key of linked dream session, e.g. 'dream-session-2025-05-13'; null if none
+  dreamRef: DreamRef            // Reference to linked dream session; null if none
   createdAt: string             // ISO 8601 UTC datetime of when the entry was created in the app
+  _serverId?: string            // Set after successful server sync (equals entry.id)
+  _syncFailed?: boolean         // Set if server sync failed
 }
 
 export const JOURNAL_STORAGE_KEY = 'cosmic-journal-entries'
@@ -36,3 +43,14 @@ export const TAG_LABELS: Record<JournalTag, string> = {
 
 export const EXPANSIVE_TAGS: JournalTag[] = ['breakthrough', 'love', 'creative-peak']
 export const INWARD_TAGS: JournalTag[] = ['grief', 'dream', 'turning-point']
+
+export function normalizeDreamRef(raw: unknown): DreamRef {
+  if (raw === null || raw === undefined) return null
+  if (typeof raw === 'string') return { type: 'local', key: raw }
+  if (typeof raw === 'object') {
+    const r = raw as Record<string, unknown>
+    if (r.type === 'local' && typeof r.key === 'string') return { type: 'local', key: r.key }
+    if (r.type === 'server' && typeof r.id === 'string') return { type: 'server', id: r.id }
+  }
+  return null
+}

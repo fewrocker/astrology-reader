@@ -2,6 +2,12 @@ import { createContext, useContext, useEffect, useState, useCallback, type React
 import { AUTH_TOKEN_KEY, getSession, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
 import type { AuthUser } from '../services/authService'
 import { useApp } from './AppContext'
+import {
+  detectUnmigratedLocalData,
+  hasUnmigratedData,
+  hasMigrationBeenOffered,
+  type MigrationCandidate,
+} from '../services/migrationService'
 
 interface AuthContextType {
   user: AuthUser | null
@@ -14,6 +20,10 @@ interface AuthContextType {
   logout: () => Promise<void>
   showNetworkWarning: boolean
   dismissNetworkWarning: () => void
+  isMigrationPending: boolean
+  migrationCandidate: MigrationCandidate | null
+  notifyLoggedIn: (user: AuthUser) => void
+  dismissMigration: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -35,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY))
   const [isLoading, setIsLoading] = useState(true)
   const [showNetworkWarning, setShowNetworkWarning] = useState(false)
+  const [isMigrationPending, setIsMigrationPending] = useState(false)
+  const [migrationCandidate, setMigrationCandidate] = useState<MigrationCandidate | null>(null)
 
   useEffect(() => {
     const storedToken = localStorage.getItem(AUTH_TOKEN_KEY)
@@ -70,7 +82,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token: jwt, user: userData } = result.data
       localStorage.setItem(AUTH_TOKEN_KEY, jwt)
       setToken(jwt)
-      setUser({ id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) })
+      const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
+      setUser(loggedInUser)
       return { ok: true }
     }
     if (result.error === 'unauthorized') return { ok: false, error: 'Invalid email or password.' }
@@ -84,7 +97,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token: jwt, user: userData } = result.data
       localStorage.setItem(AUTH_TOKEN_KEY, jwt)
       setToken(jwt)
-      setUser({ id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) })
+      const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
+      setUser(loggedInUser)
       return { ok: true }
     }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
@@ -101,6 +115,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const dismissNetworkWarning = useCallback(() => setShowNetworkWarning(false), [])
 
+  const notifyLoggedIn = useCallback((loggedInUser: AuthUser) => {
+    setUser(loggedInUser)
+    if (hasMigrationBeenOffered()) return
+    if (!hasUnmigratedData()) return
+    const candidate = detectUnmigratedLocalData()
+    if (candidate.journalCount === 0 && candidate.dreamCount === 0 && !candidate.hasBirthData) return
+    setMigrationCandidate(candidate)
+    setIsMigrationPending(true)
+  }, [])
+
+  const dismissMigration = useCallback(() => {
+    setIsMigrationPending(false)
+    setMigrationCandidate(null)
+  }, [])
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -113,6 +142,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       showNetworkWarning,
       dismissNetworkWarning,
+      isMigrationPending,
+      migrationCandidate,
+      notifyLoggedIn,
+      dismissMigration,
     }}>
       {children}
     </AuthContext.Provider>

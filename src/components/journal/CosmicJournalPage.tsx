@@ -5,13 +5,15 @@ import { PLANET_GLYPHS } from '../../engine/types'
 import type { BirthData } from '../../context/appState'
 import { getDreamSessionKey } from '../../context/appState'
 import type { JournalEntry, JournalTag } from './types'
-import { JOURNAL_STORAGE_KEY, TAG_LABELS } from './types'
+import { JOURNAL_STORAGE_KEY, TAG_LABELS, normalizeDreamRef } from './types'
 import JournalEntryCard from './JournalEntryCard'
 import PatternPanel from './PatternPanel'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getTopActiveTransits } from '../../engine/transits'
 import { getInterpretation } from '../../data/numerologyInterpretations'
+import { getStoredApiKey } from '../../services/gptInterpretation'
+import { isQuotaError } from '../../utils/storage'
 import DreamModal from '../dream/DreamModal'
 
 const PHASE_EMOJIS: Record<string, string> = {
@@ -33,7 +35,8 @@ function loadEntries(): JournalEntry[] {
   try {
     const raw = localStorage.getItem(JOURNAL_STORAGE_KEY)
     if (!raw) return []
-    return JSON.parse(raw) as JournalEntry[]
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>
+    return parsed.map(e => ({ ...e, dreamRef: normalizeDreamRef(e.dreamRef) }) as JournalEntry)
   } catch {
     return []
   }
@@ -44,9 +47,7 @@ function saveEntries(entries: JournalEntry[]): 'ok' | 'quota' {
     localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(entries))
     return 'ok'
   } catch (e) {
-    if (e instanceof Error && (e.name === 'QuotaExceededError' || e.message.includes('quota'))) {
-      return 'quota'
-    }
+    if (isQuotaError(e)) return 'quota'
     return 'quota'
   }
 }
@@ -174,7 +175,7 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
 
     const numerologicalDay = calculatePersonalDay(birthData.date, resolvedDate)
     const dreamKey = getDreamSessionKey(entryDate)
-    const dreamRef = localStorage.getItem(dreamKey) ? dreamKey : null
+    const dreamRef = localStorage.getItem(dreamKey) ? { type: 'local' as const, key: dreamKey } : null
 
     const newEntry: JournalEntry = {
       id: crypto.randomUUID(),
