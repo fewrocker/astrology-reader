@@ -59,7 +59,6 @@ export interface AppState {
   transitPeriod: TransitPeriod | null
   transitData: TransitData | null
   transitInterpretation: string | null
-  transitLoading: boolean
   transitError: string | null
   // Synastry state
   partnerBirthData: BirthData
@@ -289,7 +288,6 @@ function buildInitialState(): AppState {
     transitPeriod: cachedTransit?.transitPeriod ?? null,
     transitData: cachedTransit?.transitData ?? null,
     transitInterpretation: cachedTransit?.transitInterpretation ?? null,
-    transitLoading: false,
     transitError: null,
     partnerBirthData: loadCachedPartnerData(),
     partnerChartData: cachedSynastry?.partnerChartData ?? null,
@@ -328,13 +326,13 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       clearBirthDataCache()
       return { ...initialState, birthData: { ...initialBirthData } }
     case 'START_TRANSIT':
-      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null, transitLoading: true }
+      return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null }
     case 'PENDING_TRANSIT':
       return { ...state, pendingTransit: true }
     case 'SET_TRANSIT_RESULTS':
-      return { ...state, view: 'transit-results', transitData: action.transitData, transitInterpretation: action.interpretation, transitLoading: false }
+      return { ...state, view: 'transit-results', transitData: action.transitData, transitInterpretation: action.interpretation }
     case 'SET_TRANSIT_ERROR':
-      return { ...state, transitError: action.error, transitLoading: false, view: 'transit-select' }
+      return { ...state, transitError: action.error, view: 'transit-select' }
     case 'CACHE_NATAL_CHART':
       return { ...state, chartData: action.chartData, aspects: action.aspects, reading: action.reading }
     case 'UPDATE_PARTNER_DATA':
