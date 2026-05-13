@@ -88,6 +88,7 @@ export type AppAction =
   | { type: 'SET_RESULTS'; chartData: ChartData; aspects: Aspect[]; reading: FullReading }
   | { type: 'RESET' }
   | { type: 'CLEAR_CACHE' }
+  | { type: 'COMPLETE_FORM' }
   | { type: 'START_TRANSIT'; period: TransitPeriod; targetMonth?: string }
   | { type: 'PENDING_TRANSIT' }
   | { type: 'SET_TRANSIT_RESULTS'; transitData: TransitData; interpretation: string }
@@ -325,6 +326,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLEAR_CACHE':
       clearBirthDataCache()
       return { ...initialState, birthData: { ...initialBirthData } }
+    case 'COMPLETE_FORM':
+      return { ...state, view: 'form', formStep: 0 }
     case 'START_TRANSIT':
       return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null }
     case 'PENDING_TRANSIT':

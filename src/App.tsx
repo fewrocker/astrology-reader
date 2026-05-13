@@ -6,7 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
 import AuthModal from './components/auth/AuthModal'
-import { hasCachedBirthData } from './context/appState'
+import HomeScreen from './components/home/HomeScreen'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
 import PeriodSelectPanel, { type PeriodOption } from './components/form/PeriodSelectPanel'
@@ -18,7 +18,6 @@ import SolarReturnPage from './components/results/SolarReturnPage'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
 import CosmicJournalPage from './components/journal/CosmicJournalPage'
-import HomeScreen from './components/home/HomeScreen'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -26,6 +25,7 @@ import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
 import { getGptInterpretation } from './services/gptInterpretation'
+import { hasCachedBirthData } from './context/appState'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
   const { isAuthenticated, displayName, logout } = useAuth()
@@ -408,7 +408,7 @@ function AppContent() {
   }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cachedBirthDataExists] = useState(() => hasCachedBirthData())
-  const showCachedLanding = state.view === 'form' && cachedBirthDataExists && state.formStep === 0 && !!state.birthData.date && !!state.birthData.city
+  const showCachedLanding = state.view === 'form' && cachedBirthDataExists && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 
