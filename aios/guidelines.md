@@ -1,5 +1,7 @@
 When evolving the product:
--> Introduce features which make the astrology suite more complete with different cross interpretations of things such as dreams, numerology, astrology, as one encompassing suite that works separately but also together
--> Every feature and design has to be beautiful and follow the majestic designs that are currently on the app, so before developing new UI, check some UI components to understand their vibe
-
-Main guideline: Come up with ONE big life changing feature idea that is revolutionary for this app that is different from the feature we currently have, but connected to the same World.
+Main guideline: The main part now is to add a backend layer of persistance to the project so that we can have:
+SPRINT NAME: BACKEND TO SAVE USER SESSIONS
+- users that authenticate in the app
+- save some things in the user such as dream journal entries (basically just a table called entries that have a kind to see what it was and a text)
+So we need a simple backend engine that goes together with this project in a simple monolyth structure, one deploy for everything
+- Logging in should save the main information we have in the cookies in the user session such as birth date, birth time, birth place and full name (fetched in numerology)
