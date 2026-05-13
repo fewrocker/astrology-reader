@@ -495,6 +495,17 @@ function AppContent() {
     setAuthModalOpen(true)
   }
 
+  const journalChartData = useMemo(() => {
+    if (state.chartData) return state.chartData
+    const { city } = state.birthData
+    if (!city || !state.birthData.date) return null
+    try {
+      return calculateChart(state.birthData.date, state.birthData.time, city.lat, city.lng, city.tz, state.birthData.unknownTime)
+    } catch {
+      return null
+    }
+  }, [state.chartData, state.birthData])
+
   // Run calculation when entering loading view
   useEffect(() => {
     if (state.view !== 'loading') return
@@ -781,10 +792,10 @@ function AppContent() {
         )}
         {state.view === 'solar-return' && <SolarReturnPage />}
         {state.view === 'today' && (
-          <TodayPage chartData={state.chartData} birthDate={state.birthData.date} />
+          <TodayPage chartData={journalChartData} birthDate={state.birthData.date} />
         )}
         {state.view === 'journal' && (
-          <CosmicJournalPage chartData={state.chartData} birthData={state.birthData} />
+          <CosmicJournalPage chartData={journalChartData} birthData={state.birthData} />
         )}
       </div>
 

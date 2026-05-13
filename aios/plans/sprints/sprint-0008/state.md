@@ -8,7 +8,7 @@
 
 | Task | Name | Status |
 |------|------|--------|
-| 0001 | code-app-tsx-extraction | pending |
-| 0002 | feat-home-screen-redesign | pending |
-| 0003 | feat-readings-navigation-modal | pending |
-| 0004 | feat-split-render-ai-screens | pending |
+| 0001 | code-app-tsx-extraction | done |
+| 0002 | feat-home-screen-redesign | done |
+| 0003 | feat-readings-navigation-modal | done |
+| 0004 | feat-split-render-ai-screens | done |

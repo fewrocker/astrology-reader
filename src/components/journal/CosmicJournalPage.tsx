@@ -13,7 +13,7 @@ import { calculatePersonalDay } from '../../engine/numerology'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getTopActiveTransits } from '../../engine/transits'
 import { getInterpretation } from '../../data/numerologyInterpretations'
-import { syncJournalEntry } from '../../services/entrySync'
+import { syncJournalEntry, deleteJournalEntry } from '../../services/entrySync'
 import { isQuotaError } from '../../utils/storage'
 import DreamModal from '../dream/DreamModal'
 
@@ -51,6 +51,16 @@ function saveEntries(entries: JournalEntry[]): 'ok' | 'quota' {
     if (isQuotaError(e)) return 'quota'
     return 'quota'
   }
+}
+
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
 }
 
 function getTodayString(): string {
@@ -129,7 +139,21 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
           headers: { 'Authorization': `Bearer ${authToken}` },
         })
         if (!response.ok) return
-        const serverEntries = await response.json() as JournalEntry[]
+        const raw = await response.json() as Array<Record<string, unknown>>
+        const serverEntries: JournalEntry[] = raw.map(se => {
+          const meta = (se.metadata as Record<string, unknown>) ?? {}
+          return {
+            id: se.id as string,
+            date: se.date as string,
+            time: (meta.time as string) ?? '12:00',
+            body: (se.body as string) ?? '',
+            tags: (meta.tags as JournalEntry['tags']) ?? [],
+            numerologicalDay: (meta.numerologicalDay as number) ?? 1,
+            gptAnnotation: (meta.gptAnnotation as string | null) ?? null,
+            dreamRef: normalizeDreamRef(meta.dreamRef),
+            createdAt: se.createdAt as string,
+          }
+        })
         const local = loadEntries()
         const localById = new Map(local.map(e => [e.id, e]))
 
@@ -234,7 +258,7 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
     const dreamRef = localStorage.getItem(dreamKey) ? { type: 'local' as const, key: dreamKey } : null
 
     const newEntry: JournalEntry = {
-      id: crypto.randomUUID(),
+      id: generateId(),
       date: entryDate,
       time: entryTime || '12:00',
       body: body,
@@ -262,14 +286,34 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
   }
 
   const handleDelete = useCallback((id: string) => {
+    const entry = entries.find(e => e.id === id)
     const updated = entries.filter(e => e.id !== id)
     setEntries(updated)
     saveEntries(updated)
-  }, [entries])
+    if (isAuthenticated && token && entry?._serverId) {
+      void deleteJournalEntry(id, token)
+    }
+  }, [entries, isAuthenticated, token])
 
   const handleDreamOpen = useCallback((sessionKey: string) => {
     setDreamModalKey(sessionKey)
     setDreamModalOpen(true)
+  }, [])
+
+  const handleAnnotationComplete = useCallback((id: string, annotation: string, tags: JournalTag[]) => {
+    setEntries(prev => {
+      const updated = prev.map(e =>
+        e.id === id
+          ? {
+              ...e,
+              gptAnnotation: annotation,
+              ...(tags.length > 0 && e.tags.length === 0 ? { tags } : {}),
+            }
+          : e
+      )
+      saveEntries(updated)
+      return updated
+    })
   }, [])
 
   const handleExport = () => {
@@ -559,6 +603,7 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
                   birthData={birthData}
                   onDelete={handleDelete}
                   onDreamOpen={handleDreamOpen}
+                  onAnnotationComplete={handleAnnotationComplete}
                   isPriorityEntry={i < 5}
                 />
               ))}

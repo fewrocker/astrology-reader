@@ -50,7 +50,14 @@ function extractUserId(req: Request): number | null {
   }
 }
 
+const LOCALHOST = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
 export function gptRateLimit(req: Request, res: Response, next: NextFunction): void {
+  if (LOCALHOST.has(req.ip ?? '')) {
+    next()
+    return
+  }
+
   const userId = extractUserId(req)
 
   if (userId !== null) {

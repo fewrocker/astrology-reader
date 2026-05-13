@@ -4,6 +4,16 @@ import type { JournalEntry, DreamRef } from '../components/journal/types'
 import type { BirthData } from '../context/appState'
 import { AUTH_TOKEN_KEY } from './authService'
 
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -174,7 +184,7 @@ export async function migrateToServer(
       const sessionsWithIds = data.dreamSessions.map(({ key, date, session }) => {
         let id = session._pendingServerId
         if (!id) {
-          id = crypto.randomUUID()
+          id = generateId()
           try {
             const raw = localStorage.getItem(key)
             if (raw) {

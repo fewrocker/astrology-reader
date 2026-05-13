@@ -67,16 +67,23 @@ export interface AuthUser {
   displayName: string
 }
 
-export interface SessionUser {
+// Shape the server actually returns from /api/auth/me and /api/profile
+export interface ServerUserProfile {
   id: number
   email: string
-  profile?: {
-    birthData?: BirthData
-  }
+  fullName: string | null
+  birthDate: string | null
+  birthTime: string | null
+  birthPlace: { name: string; lat: number; lng: number; tz: string; country: string } | null
+  createdAt: string
+}
+
+export interface SessionResponse {
+  user: ServerUserProfile
 }
 
 export function getSession() {
-  return apiClient<SessionUser>('/api/auth/me', {}, 5000)
+  return apiClient<SessionResponse>('/api/auth/me', {}, 5000)
 }
 
 export function saveProfile(birthData: BirthData) {
@@ -92,5 +99,5 @@ export function saveProfile(birthData: BirthData) {
 }
 
 export function getProfile() {
-  return apiClient<{ birthData?: BirthData }>('/api/profile')
+  return apiClient<ServerUserProfile>('/api/profile')
 }

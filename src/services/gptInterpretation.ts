@@ -223,7 +223,7 @@ export async function generateJournalEntryAnnotation(
   moonPhase: string,
   moonSign: string,
   chartData: ChartData,
-): Promise<string> {
+): Promise<{ annotation: string; tags: JournalTag[] }> {
   try {
     const result = await callProxy('journal-annotation', {
       entry: { date: entry.date, time: entry.time, body: entry.body, numerologicalDay: entry.numerologicalDay },
@@ -241,9 +241,13 @@ export async function generateJournalEntryAnnotation(
         angles: chartData.angles,
       },
     })
-    return (result as string).trim() || 'The sky held a particular arrangement at this moment.'
+    const data = result as { annotation?: string; tags?: JournalTag[] }
+    return {
+      annotation: (data.annotation ?? '').trim() || 'The sky held a particular arrangement at this moment.',
+      tags: Array.isArray(data.tags) ? data.tags : [],
+    }
   } catch (err) {
-    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+    return { annotation: err instanceof Error ? err.message : GPT_SERVER_ERROR, tags: [] }
   }
 }
 

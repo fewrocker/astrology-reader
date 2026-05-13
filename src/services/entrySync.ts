@@ -50,6 +50,7 @@ export async function syncJournalEntry(entry: JournalEntry, token: string): Prom
         date: entry.date,
         body: entry.body,
         metadata: {
+          time: entry.time,
           tags: entry.tags,
           gptAnnotation: entry.gptAnnotation,
           dreamRef: entry.dreamRef,
@@ -73,6 +74,17 @@ export async function syncJournalEntry(entry: JournalEntry, token: string): Prom
     return false
   } finally {
     syncInFlight.delete(entry.id)
+  }
+}
+
+export async function deleteJournalEntry(id: string, token: string): Promise<void> {
+  try {
+    await fetch(`/api/entries/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    })
+  } catch {
+    // fire-and-forget — local deletion already happened
   }
 }
 

@@ -465,13 +465,17 @@ async function handleAstroDiscuss(payload: {
   return result || 'Unable to generate a response.'
 }
 
+const VALID_JOURNAL_TAGS = new Set([
+  'breakthrough', 'turning-point', 'grief', 'love', 'decision', 'creative-peak', 'dream', 'blocked',
+])
+
 async function handleJournalAnnotation(payload: {
   entry: JournalEntry
   topTransits: TransitAspect[]
   moonPhase: string
   moonSign: string
   chartData: { planets: Planet[]; angles: { ascendant?: { sign: string } } }
-}): Promise<string> {
+}): Promise<{ annotation: string; tags: string[] }> {
   const sun = payload.chartData.planets.find(p => p.name === 'Sun')
   const moon = payload.chartData.planets.find(p => p.name === 'Moon')
   const asc = payload.chartData.angles?.ascendant
@@ -486,34 +490,51 @@ async function handleJournalAnnotation(payload: {
     `${t.transitPlanet} ${t.symbol} natal ${t.natalPlanet} (${t.orb.toFixed(1)}° orb, ${t.nature})`
   ).join('\n') || 'No tight transit aspects active.'
 
-  const bodyContext = payload.entry.body.trim()
-    ? `Entry text: "${payload.entry.body.slice(0, 300)}"`
+  const bodyText = payload.entry.body.trim()
+    ? `"${payload.entry.body}"`
     : 'No text recorded — moment only.'
 
   const prompt = `Date: ${payload.entry.date}
-Time: ${payload.entry.time}
 Personal Day: ${payload.entry.numerologicalDay}
 Moon: ${payload.moonPhase} in ${payload.moonSign}
+Natal: ${natalContext}
 
-Natal chart: ${natalContext}
-
-Active transits at this moment:
+Active transits:
 ${transitLines}
 
-${bodyContext}
+Journal entry:
+${bodyText}
 
-Write one sentence (20-30 words) naming the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.`
+Return JSON with:
+- "annotation": 2-3 sentences connecting what they wrote to the sky. Reference their actual words and the specific transits. Draw the thread between their experience and the planetary energies.
+- "tags": array of 1-3 strings from: breakthrough, turning-point, grief, love, decision, creative-peak, dream, blocked`
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
       {
         role: 'system',
-        content: 'Write one sentence (20-30 words) that names the most significant planetary event active at this moment for this person. Reference one transit planet, its relationship to one natal placement, and what that means in plain language. Be specific, not generic. Do not mention astrology as a system. State the fact as if the cosmos simply arranged it.',
+        content: 'You are an astrologer reading a person\'s journal against the sky at that moment. Connect what they actually wrote to the planetary energies active at that time — not abstractly, but specifically: what in their words reflects what the planets were doing. Write 2-3 sentences. Be direct and personal. Do not mention astrology as a system. Return valid JSON only.',
       },
       { role: 'user', content: prompt },
-    ], { temperature: 0.8, max_tokens: 80 })
+    ], { temperature: 0.8, max_tokens: 350 })
   )
-  return result.trim() || 'The sky held a particular arrangement at this moment.'
+
+  try {
+    const cleaned = result.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const parsed = JSON.parse(cleaned) as { annotation?: unknown; tags?: unknown }
+    const annotation = typeof parsed.annotation === 'string' && parsed.annotation.trim()
+      ? parsed.annotation.trim()
+      : 'The sky held a particular arrangement at this moment.'
+    const tags = Array.isArray(parsed.tags)
+      ? (parsed.tags as unknown[]).filter((t): t is string => typeof t === 'string' && VALID_JOURNAL_TAGS.has(t))
+      : []
+    return { annotation, tags }
+  } catch {
+    return {
+      annotation: 'The sky held a particular arrangement at this moment.',
+      tags: [],
+    }
+  }
 }
 
 async function handleCosmicPatternReading(payload: {

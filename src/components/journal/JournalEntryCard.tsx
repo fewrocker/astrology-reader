@@ -34,6 +34,7 @@ interface JournalEntryCardProps {
   birthData: BirthData
   onDelete: (id: string) => void
   onDreamOpen?: (sessionKey: string) => void
+  onAnnotationComplete?: (id: string, annotation: string, tags: JournalTag[]) => void
   isPriorityEntry?: boolean  // First 5 entries get immediate annotation
 }
 
@@ -69,6 +70,7 @@ export default function JournalEntryCard({
   birthData,
   onDelete,
   onDreamOpen,
+  onAnnotationComplete,
   isPriorityEntry = false,
 }: JournalEntryCardProps) {
   const { isAuthenticated, token } = useAuth()
@@ -81,6 +83,7 @@ export default function JournalEntryCard({
   const [moonInfo, setMoonInfo] = useState<{ sign: string; phase: string } | null>(null)
   const [significanceBorder, setSignificanceBorder] = useState<string>('border-mystic-border')
   const [syncFailed, setSyncFailed] = useState(entry._syncFailed ?? false)
+  const [expanded, setExpanded] = useState(false)
   const annotationStartedRef = useRef(false)
 
   // Keep local dot state in sync with prop (parent re-reads localStorage after mount merge)
@@ -153,7 +156,7 @@ export default function JournalEntryCard({
         const topTransits = getTopActiveTransits(chartData, 3, 8, entryDate)
         const moon = getMoonSignAndPhase(entryDate)
 
-        const result = await generateJournalEntryAnnotation(
+        const { annotation, tags } = await generateJournalEntryAnnotation(
           entry,
           topTransits,
           moon.phase,
@@ -161,13 +164,15 @@ export default function JournalEntryCard({
           chartData,
         )
 
-        // Persist the annotation to localStorage
+        // Persist to localStorage
         try {
           const raw = localStorage.getItem(JOURNAL_STORAGE_KEY)
           if (raw) {
             const entries = JSON.parse(raw) as JournalEntry[]
             const updated = entries.map(e =>
-              e.id === entry.id ? { ...e, gptAnnotation: result } : e
+              e.id === entry.id
+                ? { ...e, gptAnnotation: annotation, ...(tags.length > 0 && e.tags.length === 0 ? { tags } : {}) }
+                : e
             )
             localStorage.setItem(JOURNAL_STORAGE_KEY, JSON.stringify(updated))
           }
@@ -175,8 +180,11 @@ export default function JournalEntryCard({
           // ignore storage errors
         }
 
-        setAnnotation(result)
+        setAnnotation(annotation)
         setAnnotationPending(false)
+        if (onAnnotationComplete) {
+          onAnnotationComplete(entry.id, annotation, tags)
+        }
       } catch {
         setAnnotationPending(false)
       } finally {
@@ -287,9 +295,20 @@ export default function JournalEntryCard({
             {formatEntryDate(entry.date)}
           </p>
           {displayTitle ? (
-            <p className="text-mystic-text text-base leading-relaxed font-medium">
-              {displayTitle}
-            </p>
+            <div>
+              <p className="text-mystic-text text-base leading-relaxed font-medium whitespace-pre-wrap">
+                {expanded ? entry.body : displayTitle}
+              </p>
+              {entry.body.trim() !== displayTitle && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(e => !e)}
+                  className="mt-1 text-mystic-muted/40 text-xs hover:text-mystic-gold/70 transition-colors"
+                >
+                  {expanded ? 'collapse ▲' : 'expand ▼'}
+                </button>
+              )}
+            </div>
           ) : (
             <p className="text-mystic-muted/50 text-base italic">Moment recorded</p>
           )}

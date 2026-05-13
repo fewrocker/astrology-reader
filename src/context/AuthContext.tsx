@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import { AUTH_TOKEN_KEY, getSession, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
-import type { AuthUser } from '../services/authService'
+import { AUTH_TOKEN_KEY, getSession, getProfile, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
+import type { AuthUser, ServerUserProfile } from '../services/authService'
+import { saveBirthData } from './appState'
+import type { BirthData } from './appState'
 import { useApp } from './AppContext'
 import {
   detectUnmigratedLocalData,
@@ -32,6 +34,18 @@ function titleCase(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase()
 }
 
+function serverProfileToBirthData(u: ServerUserProfile, existing: BirthData): BirthData | null {
+  if (!u.birthDate || !u.birthPlace) return null
+  return {
+    date: u.birthDate,
+    time: u.birthTime ?? '12:00',
+    unknownTime: !u.birthTime,
+    city: u.birthPlace,
+    focusAreas: existing.focusAreas,
+    userName: u.fullName ?? existing.userName,
+  }
+}
+
 function deriveDisplayName(user: AuthUser | null, userName?: string): string {
   if (userName) return userName
   if (!user) return ''
@@ -57,10 +71,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     getSession().then(result => {
       if (result.ok) {
-        const { id, email } = result.data
+        const { id, email } = result.data.user
         setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '' }, state.birthData.userName) })
-        if (result.data.profile?.birthData) {
-          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: result.data.profile.birthData })
+        const birthData = serverProfileToBirthData(result.data.user, state.birthData)
+        if (birthData) {
+          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: birthData })
+          saveBirthData(birthData)
         }
       } else {
         if (result.error === 'offline') {
@@ -84,6 +100,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(jwt)
       const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
       setUser(loggedInUser)
+      // Load birth data from server profile after login
+      const profileResult = await getProfile()
+      if (profileResult.ok) {
+        const birthData = serverProfileToBirthData(profileResult.data, state.birthData)
+        if (birthData) {
+          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: birthData })
+          saveBirthData(birthData)
+        }
+      }
       return { ok: true }
     }
     if (result.error === 'unauthorized') return { ok: false, error: 'Invalid email or password.' }
