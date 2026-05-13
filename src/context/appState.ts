@@ -371,7 +371,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'LOAD_BIRTH_DATA_FROM_SERVER':
       return { ...state, birthData: action.data }
     case 'SET_TRANSIT_DATA':
-      return { ...state, view: 'transit-results', transitData: action.transitData, transitPeriod: action.transitPeriod, transitTargetMonth: action.transitTargetMonth, transitInterpretation: null, transitLoading: false }
+      return { ...state, view: 'transit-results', transitData: action.transitData, transitPeriod: action.transitPeriod, transitTargetMonth: action.transitTargetMonth, transitInterpretation: null }
     case 'SET_TRANSIT_INTERPRETATION':
       return { ...state, transitInterpretation: action.interpretation }
     case 'SET_SYNASTRY_DATA':
