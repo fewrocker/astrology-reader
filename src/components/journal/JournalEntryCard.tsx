@@ -9,6 +9,8 @@ import type { TransitAspect } from '../../engine/transits'
 import { getMoonSignAndPhase, resolveToUTC } from '../../engine/astronomy'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { generateJournalEntryAnnotation, getStoredApiKey } from '../../services/gptInterpretation'
+import { useAuth } from '../../context/AuthContext'
+import { syncJournalEntry } from '../../services/entrySync'
 import DreamModal from '../dream/DreamModal'
 
 // Simple concurrent annotation limiter
@@ -69,6 +71,7 @@ export default function JournalEntryCard({
   onDreamOpen,
   isPriorityEntry = false,
 }: JournalEntryCardProps) {
+  const { isAuthenticated, token } = useAuth()
   const containerRef = useRef<HTMLDivElement>(null)
   const [annotation, setAnnotation] = useState<string | null>(entry.gptAnnotation)
   const [annotationPending, setAnnotationPending] = useState(entry.gptAnnotation === null)
@@ -77,7 +80,20 @@ export default function JournalEntryCard({
   const [transits, setTransits] = useState<TransitAspect[]>([])
   const [moonInfo, setMoonInfo] = useState<{ sign: string; phase: string } | null>(null)
   const [significanceBorder, setSignificanceBorder] = useState<string>('border-mystic-border')
+  const [syncFailed, setSyncFailed] = useState(entry._syncFailed ?? false)
   const annotationStartedRef = useRef(false)
+
+  // Keep local dot state in sync with prop (parent re-reads localStorage after mount merge)
+  useEffect(() => {
+    setSyncFailed(entry._syncFailed ?? false)
+  }, [entry._syncFailed])
+
+  const handleSyncRetry = async () => {
+    if (!token || !isAuthenticated) return
+    setSyncFailed(false) // Optimistically hide dot
+    const ok = await syncJournalEntry(entry, token)
+    if (!ok) setSyncFailed(true) // Re-show if still failing
+  }
 
   // Compute sky data at entry's datetime
   useEffect(() => {
@@ -222,6 +238,26 @@ export default function JournalEntryCard({
         ref={containerRef}
         className={`group relative bg-mystic-surface/50 border ${significanceBorder} rounded-xl p-5 transition-all duration-200`}
       >
+        {/* Sync failure indicator — tap to retry */}
+        {syncFailed && isAuthenticated && (
+          <button
+            type="button"
+            onClick={handleSyncRetry}
+            title="Not yet synced — click to retry"
+            aria-label="Sync failed — click to retry"
+            className="absolute top-2 right-2"
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: 'rgba(201,168,76,0.35)',
+              cursor: 'pointer',
+              padding: 0,
+              border: 'none',
+            }}
+          />
+        )}
+
         {/* Delete button (appears on hover) */}
         <button
           type="button"

@@ -19,6 +19,9 @@ export interface JournalEntry {
   gptAnnotation: string | null  // One-sentence cosmic tag; null until GPT resolves; stored permanently on first generation
   dreamRef: string | null       // localStorage key of linked dream session, e.g. 'dream-session-2025-05-13'; null if none
   createdAt: string             // ISO 8601 UTC datetime of when the entry was created in the app
+  // --- sync state (sprint-0007+) ---
+  _serverId?: string            // set after confirmed server persistence; equals id when server uses client UUID as PK
+  _syncFailed?: boolean         // true if the most recent background sync attempt failed
 }
 
 export const JOURNAL_STORAGE_KEY = 'cosmic-journal-entries'

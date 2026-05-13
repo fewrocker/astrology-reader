@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
 import {
   getDailySnapshotInterpretation,
   getDreamInterpretation,
@@ -13,6 +14,7 @@ import { getMoonSignAndPhase } from '../../engine/astronomy'
 import type { ChartData, PlanetPosition } from '../../engine/types'
 import { isQuotaError } from '../../utils/storage'
 import { getDreamSessionKey } from '../../context/appState'
+import { syncDreamSession } from '../../services/entrySync'
 
 const todayKey = new Date().toISOString().slice(0, 10)
 const DREAM_SESSION_KEY = getDreamSessionKey(todayKey)
@@ -29,6 +31,8 @@ interface DreamSession {
   dreamContext: string
   dreamInput: string
   skyContext?: SkyContext
+  _serverId?: string
+  _syncFailed?: boolean
 }
 
 const PLANET_GLYPHS: Record<string, string> = {
@@ -105,6 +109,7 @@ function buildNatalContext(chart: ChartData, birthDate: string): string {
 export default function DreamModal({ open, onClose, chartData: chartDataProp, initialSessionKey }: DreamModalProps) {
   const { state } = useApp()
   const { birthData } = state
+  const { isAuthenticated, token } = useAuth()
   const chartData = chartDataProp ?? state.chartData
 
   const [stage, setStage] = useState<Stage>('input')
@@ -140,6 +145,10 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
         setRestoredCount(session.messages.length)
         setStage('chat')
         setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'instant' }), 80)
+        // Retry a previously failed sync on next open
+        if (session._syncFailed && isAuthenticated && token) {
+          void syncDreamSession(sessionKeyToLoad, token)
+        }
         return
       }
     } catch {
@@ -155,18 +164,21 @@ export default function DreamModal({ open, onClose, chartData: chartDataProp, in
     setTimeout(() => inputRef.current?.focus(), 120)
   }, [open, initialSessionKey])
 
-  // Persist session to localStorage whenever messages or context update
+  // Persist session to localStorage whenever messages or context update; sync in background if authenticated
   useEffect(() => {
     if (messages.length === 0) return
     try {
       const session: DreamSession = { messages, dreamContext, dreamInput, skyContext }
       localStorage.setItem(DREAM_SESSION_KEY, JSON.stringify(session))
+      if (isAuthenticated && token) {
+        void syncDreamSession(DREAM_SESSION_KEY, token)
+      }
     } catch (e) {
       if (isQuotaError(e)) {
         setError('Your browser storage is full — this dream session could not be saved. Export your data to free space.')
       }
     }
-  }, [messages, dreamContext, dreamInput, skyContext])
+  }, [messages, dreamContext, dreamInput, skyContext, isAuthenticated, token])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
