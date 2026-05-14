@@ -2,6 +2,12 @@ import OpenAI from 'openai'
 import { getDb } from '../db.js'
 import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/chartEngine.js'
 import type { ServerChartData } from '../engine/chartEngine.js'
+import {
+  calculatePersonalDay,
+  calculateLifePath,
+  calculateBirthdayNumber,
+  calculatePersonalYear,
+} from '../engine/numerologyEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types — mirrors the relevant subsets of src/engine/types for server use
@@ -349,7 +355,7 @@ async function handleAstroNumerologyCross(payload: {
   numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number }
   chartData: ChartData
   userName: string | null
-}): Promise<string> {
+}, userId?: number): Promise<string> {
   const nameStr = payload.userName ? `Name: ${payload.userName}` : 'Name: not provided'
   const planetLines = payload.chartData.planets
     .filter(p => p.name !== 'NorthNode')
@@ -364,6 +370,24 @@ async function handleAstroNumerologyCross(payload: {
     ? `Ascendant: ${payload.chartData.angles.ascendant.sign}\nMidheaven: ${payload.chartData.angles.midheaven.sign}`
     : '(birth time unknown — houses not available)'
 
+  // Attempt server-side verification of date-only numbers from stored birth_date.
+  let serverNumerology: { lifePath: number; birthdayNumber: number; personalYear: number } | null = null
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      serverNumerology = {
+        lifePath: calculateLifePath(birthCtx.birthDate),
+        birthdayNumber: calculateBirthdayNumber(birthCtx.birthDate),
+        personalYear: calculatePersonalYear(birthCtx.birthDate),
+      }
+    }
+  }
+
+  const provenanceSuffix = serverNumerology ? ' (server-computed)' : ''
+  const lifePathValue = serverNumerology ? serverNumerology.lifePath : payload.numbers.lifePath
+  const birthdayValue = serverNumerology ? serverNumerology.birthdayNumber : payload.numbers.birthdayNumber
+  const personalYearValue = serverNumerology ? serverNumerology.personalYear : payload.numbers.personalYear
+
   const expressionLine = payload.numbers.expressionNumber !== undefined
     ? `Expression Number: ${payload.numbers.expressionNumber}`
     : 'Expression Number: not provided (no birth name given)'
@@ -374,9 +398,9 @@ async function handleAstroNumerologyCross(payload: {
 ${nameStr}
 
 ## Numerology Profile
-Life Path: ${payload.numbers.lifePath}
-Birthday Number: ${payload.numbers.birthdayNumber}
-Personal Year: ${payload.numbers.personalYear}
+Life Path: ${lifePathValue}${provenanceSuffix}
+Birthday Number: ${birthdayValue}${provenanceSuffix}
+Personal Year: ${personalYearValue}${provenanceSuffix}
 ${expressionLine}
 
 ## Natal Chart
@@ -419,7 +443,25 @@ async function handleNumerologyNarrative(payload: {
     soulUrge?: number
   }
   userName: string | null
-}): Promise<string> {
+}, userId?: number): Promise<string> {
+  // Attempt server-side verification of date-only numbers from stored birth_date.
+  let serverNumerology: { lifePath: number; birthdayNumber: number; personalYear: number } | null = null
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      serverNumerology = {
+        lifePath: calculateLifePath(birthCtx.birthDate),
+        birthdayNumber: calculateBirthdayNumber(birthCtx.birthDate),
+        personalYear: calculatePersonalYear(birthCtx.birthDate),
+      }
+    }
+  }
+
+  const provenanceSuffix = serverNumerology ? ' (server-computed)' : ''
+  const lifePathValue = serverNumerology ? serverNumerology.lifePath : payload.numbers.lifePath
+  const birthdayValue = serverNumerology ? serverNumerology.birthdayNumber : payload.numbers.birthdayNumber
+  const personalYearValue = serverNumerology ? serverNumerology.personalYear : payload.numbers.personalYear
+
   const nameIntro = payload.userName ? `Reading for: ${payload.userName}` : 'Reading for: unnamed person'
   const expressionLine = payload.numbers.expressionNumber !== undefined
     ? `Expression Number: ${payload.numbers.expressionNumber}${masterLabel(payload.numbers.expressionNumber)} — how gifts and personality express outward in the world`
@@ -429,9 +471,9 @@ async function handleNumerologyNarrative(payload: {
     : 'Soul Urge Number: not provided'
 
   const hasMaster = [
-    payload.numbers.lifePath,
-    payload.numbers.birthdayNumber,
-    payload.numbers.personalYear,
+    lifePathValue,
+    birthdayValue,
+    personalYearValue,
     payload.numbers.expressionNumber,
     payload.numbers.soulUrge,
   ].some(n => n !== undefined && isMaster(n as number))
@@ -440,9 +482,9 @@ async function handleNumerologyNarrative(payload: {
 
 ## Complete Numerological Profile
 
-Life Path: ${payload.numbers.lifePath}${masterLabel(payload.numbers.lifePath)} — the fundamental nature, the overarching life theme and lesson
-Birthday Number: ${payload.numbers.birthdayNumber}${masterLabel(payload.numbers.birthdayNumber)} — a specific natural talent, a gift brought into this life
-Personal Year: ${payload.numbers.personalYear}${masterLabel(payload.numbers.personalYear)} — the current annual cycle, the dominant theme and energy of this year
+Life Path: ${lifePathValue}${masterLabel(lifePathValue)}${provenanceSuffix} — the fundamental nature, the overarching life theme and lesson
+Birthday Number: ${birthdayValue}${masterLabel(birthdayValue)}${provenanceSuffix} — a specific natural talent, a gift brought into this life
+Personal Year: ${personalYearValue}${masterLabel(personalYearValue)}${provenanceSuffix} — the current annual cycle, the dominant theme and energy of this year
 ${expressionLine}
 ${soulUrgeLine}
 
@@ -511,7 +553,20 @@ async function handleTodaySynthesis(payload: {
   aspects: TransitAspect[]
   personalDay: number
   personalDayArchetype: string
-}): Promise<string> {
+}, userId?: number): Promise<string> {
+  // Cross-check client-provided personalDay against server-computed value when birth_date is available.
+  let authorizedPersonalDay = payload.personalDay
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate)
+      if (serverPersonalDay !== payload.personalDay) {
+        console.warn(`[handleTodaySynthesis] personalDay mismatch: client=${payload.personalDay}, server=${serverPersonalDay}, userId=${userId}`)
+      }
+      authorizedPersonalDay = serverPersonalDay
+    }
+  }
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
@@ -524,14 +579,14 @@ async function handleTodaySynthesis(payload: {
 
   const prompt = `Today is ${today}.
 
-Personal Day number: ${payload.personalDay} — ${payload.personalDayArchetype}
+Personal Day number: ${authorizedPersonalDay} — ${payload.personalDayArchetype}
 
 Moon: ${payload.moon.phaseName} in ${payload.moon.moonSign}${voidNote}
 
 Top transit aspects:
 ${aspectLines}
 
-Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${payload.personalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
+Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${authorizedPersonalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
@@ -726,15 +781,15 @@ export async function handleGptRequest(
     case 'dream-discuss':
       return handleDreamDiscuss(payload as Parameters<typeof handleDreamDiscuss>[0])
     case 'astro-numerology-cross':
-      return handleAstroNumerologyCross(payload as Parameters<typeof handleAstroNumerologyCross>[0])
+      return handleAstroNumerologyCross(payload as Parameters<typeof handleAstroNumerologyCross>[0], userId)
     case 'daily-snapshot':
       return handleDailySnapshot(payload as Parameters<typeof handleDailySnapshot>[0])
     case 'numerology-narrative':
-      return handleNumerologyNarrative(payload as Parameters<typeof handleNumerologyNarrative>[0])
+      return handleNumerologyNarrative(payload as Parameters<typeof handleNumerologyNarrative>[0], userId)
     case 'numerology-sky-chart':
       return handleNumerologySkyChart(payload as Parameters<typeof handleNumerologySkyChart>[0])
     case 'today-synthesis':
-      return handleTodaySynthesis(payload as Parameters<typeof handleTodaySynthesis>[0])
+      return handleTodaySynthesis(payload as Parameters<typeof handleTodaySynthesis>[0], userId)
     case 'numerology-discuss':
       return handleNumerologyDiscuss(payload as Parameters<typeof handleNumerologyDiscuss>[0])
     case 'astro-discuss':
