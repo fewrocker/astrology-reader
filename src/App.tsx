@@ -85,11 +85,26 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="text-xl transition-colors"
+        className="text-xl transition-colors flex items-center"
         style={{ color: '#c9a84c', lineHeight: 1, filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.5))' }}
         aria-label="Account menu"
         title={displayName}
       >
+        {tier === 'free' && remaining <= 1 && (
+          <span
+            className="font-heading"
+            aria-hidden="true"
+            style={{
+              fontSize: '0.65rem',
+              color: 'rgba(201,168,76,0.55)',
+              letterSpacing: '0.04em',
+              marginRight: '0.35rem',
+              lineHeight: 1,
+            }}
+          >
+            {remaining === 1 ? '1 left' : '0 left'}
+          </span>
+        )}
         ✦
       </button>
       {open && (
@@ -213,7 +228,7 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
-  const { isAuthenticated, tier } = useAuth()
+  const { isAuthenticated, tier, incrementTodayUsed } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
@@ -320,6 +335,7 @@ function AppContent() {
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -379,6 +395,7 @@ function AppContent() {
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -426,6 +443,7 @@ function AppContent() {
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -483,6 +501,7 @@ function AppContent() {
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {

@@ -28,6 +28,7 @@ interface AuthContextType {
   displayName: string
   tier: 'free' | 'basic' | 'advanced'
   todayUsed: number
+  incrementTodayUsed: () => void
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
@@ -265,6 +266,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const dismissOauthError = useCallback(() => setOauthError(null), [])
 
+  const incrementTodayUsed = useCallback(() => setTodayUsed(prev => prev + 1), [])
+
   const dismissPaymentWelcome = useCallback(() => {
     setPaymentWelcomePending(false)
   }, [])
@@ -278,6 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName,
       tier,
       todayUsed,
+      incrementTodayUsed,
       login,
       register,
       logout,
