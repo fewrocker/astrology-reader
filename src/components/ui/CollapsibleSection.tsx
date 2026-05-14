@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 
 interface CollapsibleSectionProps {
   title: string
-  children: React.ReactNode
+  children: ReactNode
   defaultOpen?: boolean
 }
 
