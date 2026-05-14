@@ -4,6 +4,7 @@ import type { SolarReturnData } from '../../engine/solarReturn'
 import { buildSolarReturnPrompt } from '../../engine/solarReturn'
 import type { ZodiacSign, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_IN_HOUSE } from '../../data/interpretations/planetInHouse'
 import SolarReturnBiWheel from '../chart/SolarReturnBiWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import GptSkeleton from '../ui/GptSkeleton'
@@ -85,6 +86,44 @@ function KeyPlacements({ srData }: { srData: SolarReturnData }) {
           <div className="text-mystic-muted text-xs mt-0.5">{p.desc}</div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function SRStaticBriefs({ srData }: { srData: SolarReturnData }) {
+  const { srChart } = srData
+  const srSun = srChart.planets.find(p => p.name === 'Sun')
+  const srMoon = srChart.planets.find(p => p.name === 'Moon')
+
+  const sunHouse = srSun?.house
+  const moonHouse = srMoon?.house
+
+  const sunBrief = (sunHouse && sunHouse >= 1 && sunHouse <= 12)
+    ? PLANET_IN_HOUSE[`Sun_H${sunHouse}`]?.brief
+    : undefined
+
+  const moonBrief = (moonHouse && moonHouse >= 1 && moonHouse <= 12)
+    ? PLANET_IN_HOUSE[`Moon_H${moonHouse}`]?.brief
+    : undefined
+
+  if (!sunBrief && !moonBrief) return null
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+      {sunBrief && (
+        <div className="bg-amber-900/5 border border-amber-500/10 rounded-lg px-4 py-3">
+          <p className="text-amber-500/60 text-xs uppercase tracking-wider mb-1">Primary Focus</p>
+          <p className="text-amber-300/80 font-heading text-sm font-semibold mb-1">SR Sun in House {sunHouse}</p>
+          <p className="text-mystic-text/70 text-sm leading-relaxed">This year: {sunBrief}</p>
+        </div>
+      )}
+      {moonBrief && (
+        <div className="bg-amber-900/5 border border-amber-500/10 rounded-lg px-4 py-3">
+          <p className="text-amber-500/60 text-xs uppercase tracking-wider mb-1">Emotional Climate</p>
+          <p className="text-amber-300/80 font-heading text-sm font-semibold mb-1">SR Moon in House {moonHouse}</p>
+          <p className="text-mystic-text/70 text-sm leading-relaxed">This year: {moonBrief}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -218,6 +257,7 @@ export default function SolarReturnPage() {
       {/* Reading tab */}
       {activeTab === 'reading' && (
         <div>
+          <SRStaticBriefs srData={solarReturnData} />
           {solarReturnInterpretation === null || retrying ? (
             <GptSkeleton label="Tracking the Sun's return..." accentColor="amber" />
           ) : isGptError(solarReturnInterpretation) ? (
