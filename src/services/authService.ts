@@ -76,6 +76,7 @@ export interface ServerUserProfile {
   birthTime: string | null
   birthPlace: { name: string; lat: number; lng: number; tz: string; country: string } | null
   createdAt: string
+  subscriptionTier?: 'free' | 'basic' | 'advanced'
 }
 
 export interface SessionResponse {

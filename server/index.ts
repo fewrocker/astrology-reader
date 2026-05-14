@@ -8,6 +8,7 @@ import authRouter from './routes/auth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
+import stripeRouter from './routes/stripe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,12 +30,23 @@ if (!JWT_SECRET) {
   JWT_SECRET = ephemeral;
 }
 
+if (!isDev && !process.env.STRIPE_WEBHOOK_SECRET) {
+  console.error('FATAL: STRIPE_WEBHOOK_SECRET must be set in production — webhook endpoint is insecure without it');
+  process.exit(1);
+}
+
 // Warm up DB and run migrations at startup
 getDb();
 
 const app = express();
 
 app.set('trust proxy', 1);
+
+// CRITICAL: Stripe webhook route MUST be registered BEFORE express.json().
+// The webhook handler uses express.raw() so Stripe can verify the request signature
+// against the raw body bytes. Once express.json() has consumed the body, verification fails.
+app.use('/api/stripe', stripeRouter);
+
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));

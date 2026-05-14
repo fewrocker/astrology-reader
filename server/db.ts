@@ -44,5 +44,22 @@ export function getDb(): Database.Database {
       ON entries(user_id, kind, date DESC);
   `);
 
+  // Additive migrations — safe to run on existing databases
+  // SQLite does not support ALTER TABLE ADD COLUMN IF NOT EXISTS, so we catch
+  // the "duplicate column" error that fires if the column already exists.
+  const addColumnIfMissing = (sql: string) => {
+    try {
+      instance!.exec(sql);
+    } catch (err: unknown) {
+      // Ignore "duplicate column name" errors — column already exists
+      if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
+        throw err;
+      }
+    }
+  };
+
+  addColumnIfMissing("ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'");
+  addColumnIfMissing('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+
   return instance;
 }

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { calculateChart } from '../../engine/astronomy'
@@ -12,13 +12,30 @@ interface HomeScreenProps {
   onOpenAuth: () => void
 }
 
+const PAYMENT_WELCOMED_KEY = 'payment_welcomed'
+
 export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
   const { state, dispatch } = useApp()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, tier, paymentWelcomePending, dismissPaymentWelcome } = useAuth()
   const { birthData } = state
   const [readingsOpen, setReadingsOpen] = useState(false)
   const [dreamOpen, setDreamOpen] = useState(false)
   const ctaRef = useRef<HTMLButtonElement>(null)
+
+  // Post-payment welcome message — shown once, never repeated
+  const [showPaymentWelcome, setShowPaymentWelcome] = useState(false)
+
+  useEffect(() => {
+    if (
+      tier !== 'free' &&
+      paymentWelcomePending &&
+      !localStorage.getItem(PAYMENT_WELCOMED_KEY)
+    ) {
+      localStorage.setItem(PAYMENT_WELCOMED_KEY, '1')
+      setShowPaymentWelcome(true)
+      dismissPaymentWelcome()
+    }
+  }, [tier, paymentWelcomePending, dismissPaymentWelcome])
 
   const chartData = useMemo(() => {
     if (state.chartData) return state.chartData
@@ -115,7 +132,18 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
                 Save your readings ✦
               </button>
             )}
-            {isAuthenticated && <div className="mb-6" />}
+            {isAuthenticated && !showPaymentWelcome && <div className="mb-6" />}
+
+            {/* Post-payment welcome — visible once, then gone */}
+            {isAuthenticated && showPaymentWelcome && (
+              <p
+                className="text-sm font-heading text-center mb-6"
+                style={{ color: 'rgba(201,168,76,0.70)', animation: 'fadein 0.8s ease-in' }}
+                aria-live="polite"
+              >
+                The sky is wider now. ✦
+              </p>
+            )}
 
             {/* DailySnapshotCard embedded */}
             {chartData ? (

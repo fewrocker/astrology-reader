@@ -17,15 +17,19 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   displayName: string
+  tier: 'free' | 'basic' | 'advanced'
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
+  refreshSession: () => Promise<void>
   showNetworkWarning: boolean
   dismissNetworkWarning: () => void
   isMigrationPending: boolean
   migrationCandidate: MigrationCandidate | null
   notifyLoggedIn: (user: AuthUser) => void
   dismissMigration: () => void
+  paymentWelcomePending: boolean
+  dismissPaymentWelcome: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -65,10 +69,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const { state, dispatch } = useApp()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(AUTH_TOKEN_KEY))
+  const [tier, setTier] = useState<'free' | 'basic' | 'advanced'>('free')
   const [isLoading, setIsLoading] = useState(true)
   const [showNetworkWarning, setShowNetworkWarning] = useState(false)
   const [isMigrationPending, setIsMigrationPending] = useState(false)
   const [migrationCandidate, setMigrationCandidate] = useState<MigrationCandidate | null>(null)
+  const [paymentWelcomePending, setPaymentWelcomePending] = useState(false)
+
+  const applySessionResult = useCallback((profile: ServerUserProfile) => {
+    const { id, email, subscriptionTier } = profile
+    setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '' }, state.birthData.userName) })
+    const t = subscriptionTier ?? 'free'
+    setTier(t)
+    const birthData = serverProfileToBirthData(profile, state.birthData)
+    if (birthData) {
+      dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: birthData })
+      saveBirthData(birthData)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const storedToken = localStorage.getItem(AUTH_TOKEN_KEY)
@@ -77,14 +95,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // Detect Stripe payment return — must happen before session fetch
+    // so the forced re-fetch gets the newly-elevated tier from the server.
+    const params = new URLSearchParams(window.location.search)
+    const isPaymentReturn = params.get('payment') === 'success'
+    if (isPaymentReturn) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+
     getSession().then(result => {
       if (result.ok) {
-        const { id, email } = result.data.user
-        setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '' }, state.birthData.userName) })
-        const birthData = serverProfileToBirthData(result.data.user, state.birthData)
-        if (birthData) {
-          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: birthData })
-          saveBirthData(birthData)
+        applySessionResult(result.data.user)
+        if (isPaymentReturn) {
+          setPaymentWelcomePending(true)
         }
       } else {
         if (result.error === 'offline') {
@@ -97,6 +120,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refreshSession = useCallback(async (): Promise<void> => {
+    const result = await getSession()
+    if (result.ok) {
+      applySessionResult(result.data.user)
+    }
+  }, [applySessionResult])
 
   const displayName = deriveDisplayName(user, state.birthData.userName)
 
@@ -122,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.error === 'unauthorized') return { ok: false, error: 'Invalid email or password.' }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
     return { ok: false, error: 'Something went wrong. Please try again.' }
-  }, [state.birthData.userName])
+  }, [state.birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const register = useCallback(async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await apiRegister(email, password)
@@ -137,13 +167,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
     if (result.error === 'server-error' && result.status === 409) return { ok: false, error: 'An account with this email already exists.' }
     return { ok: false, error: 'Something went wrong. Please try again.' }
-  }, [state.birthData.userName])
+  }, [state.birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const logout = useCallback(async () => {
     await apiLogout()
     localStorage.removeItem(AUTH_TOKEN_KEY)
     setToken(null)
     setUser(null)
+    setTier('free')
   }, [])
 
   const dismissNetworkWarning = useCallback(() => setShowNetworkWarning(false), [])
@@ -163,6 +194,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMigrationCandidate(null)
   }, [])
 
+  const dismissPaymentWelcome = useCallback(() => {
+    setPaymentWelcomePending(false)
+  }, [])
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -170,15 +205,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: user !== null,
       displayName,
+      tier,
       login,
       register,
       logout,
+      refreshSession,
       showNetworkWarning,
       dismissNetworkWarning,
       isMigrationPending,
       migrationCandidate,
       notifyLoggedIn,
       dismissMigration,
+      paymentWelcomePending,
+      dismissPaymentWelcome,
     }}>
       {children}
     </AuthContext.Provider>
