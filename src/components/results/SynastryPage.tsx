@@ -12,22 +12,7 @@ import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
-
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border border-mystic-gold/20 rounded-lg overflow-hidden mb-4">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3 bg-mystic-gold/5 hover:bg-mystic-gold/10 transition-colors text-left"
-      >
-        <span className="font-heading text-lg text-mystic-gold">{title}</span>
-        <span className="text-mystic-muted text-xl transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▾</span>
-      </button>
-      {open && <div className="px-5 py-4">{children}</div>}
-    </div>
-  )
-}
+import CollapsibleSection from '../ui/CollapsibleSection'
 
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -126,7 +111,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
     n === 'harmonious' ? 'text-green-400' : n === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
   return (
-    <Section title={`Synastry Aspects (${aspects.length})`} defaultOpen>
+    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen>
       <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
       <div className="space-y-2">
         {aspects.map((a, i) => {
@@ -152,14 +137,14 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
           )
         })}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[]; label: string }) {
   if (entries.length === 0) return null
   return (
-    <Section title={label}>
+    <CollapsibleSection title={label}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -183,14 +168,14 @@ function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[];
           </tbody>
         </table>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
   const { compositeChart } = synastryData
   return (
-    <Section title="Composite Chart (Relationship Chart)">
+    <CollapsibleSection title="Composite Chart (Relationship Chart)">
       <p className="text-mystic-muted text-xs mb-3">
         The midpoint between both people's planets — representing the relationship itself
       </p>
@@ -227,7 +212,7 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
           {compositeChart.angles.midheaven.degree}°{compositeChart.angles.midheaven.minute}' {compositeChart.angles.midheaven.sign}
         </p>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
@@ -237,7 +222,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
   aspects: import('../../engine/aspects').Aspect[]
 }) {
   return (
-    <Section title={title}>
+    <CollapsibleSection title={title}>
       <div className="flex justify-center mb-4">
         <div className="w-full max-w-md">
           <ChartWheel chartData={chartData} aspects={aspects} />
@@ -268,7 +253,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
           </tbody>
         </table>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
