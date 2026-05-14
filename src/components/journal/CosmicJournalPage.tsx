@@ -16,6 +16,7 @@ import { getInterpretation } from '../../data/numerologyInterpretations'
 import { syncJournalEntry, deleteJournalEntry } from '../../services/entrySync'
 import { isQuotaError } from '../../utils/storage'
 import DreamModal from '../dream/DreamModal'
+import { track } from '../../services/analytics'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -90,6 +91,8 @@ export default function CosmicJournalPage({ chartData, birthData }: CosmicJourna
   const { isAuthenticated, token } = useAuth()
   const [entries, setEntries] = useState<JournalEntry[]>(() => loadEntries())
   const [composerOpen, setComposerOpen] = useState(false)
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'journal' }) }, [])
   const [body, setBody] = useState('')
   const [entryDate, setEntryDate] = useState(getTodayString())
   const [entryTime, setEntryTime] = useState(getCurrentTimeString())

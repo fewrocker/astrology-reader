@@ -9,6 +9,7 @@ import { generateAstroNumerologyCrossReading, generateNumerologyNarrative, gener
 import NumerologyDiscussModal from './NumerologyDiscussModal'
 import NumerologySkyChart, { FrequencyBar } from '../chart/NumerologySkyChart'
 import GptSkeleton from '../ui/GptSkeleton'
+import { track } from '../../services/analytics'
 
 function getChartData(state: ReturnType<typeof useApp>['state']): ChartData | null {
   if (state.chartData) return state.chartData
@@ -264,6 +265,8 @@ export default function NumerologyPage() {
   const [nameInput, setNameInput] = useState(birthData.userName ?? '')
   const [editingName, setEditingName] = useState(!birthData.userName)
   const [narrativeText, setNarrativeText] = useState<string | null>(null)
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'numerology' }) }, [])
   const [narrativeLoading, setNarrativeLoading] = useState(false)
   const [narrativeError, setNarrativeError] = useState<string | null>(null)
 

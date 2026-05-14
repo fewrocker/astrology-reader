@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import type { PlanetName } from '../../engine/types'
@@ -6,6 +6,7 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
+import { track } from '../../services/analytics'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Couple Reading',
@@ -102,6 +103,10 @@ export default function SynastryTransitPage() {
   const { state, dispatch } = useApp()
   const { birthData, partnerBirthData, synastryTransitData, synastryTransitInterpretation, synastryTransitPeriod } = state
   const [discussOpen, setDiscussOpen] = useState(false)
+
+  useEffect(() => {
+    track('reading_viewed', { reading_type: 'synastry_transit', period: synastryTransitPeriod ?? undefined })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!synastryTransitData || !synastryTransitPeriod) return null
 

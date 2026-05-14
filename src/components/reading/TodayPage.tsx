@@ -10,6 +10,7 @@ import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
 import GptSkeleton from '../ui/GptSkeleton'
+import { track } from '../../services/analytics'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -47,6 +48,8 @@ interface TodayPageProps {
 
 export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
   const { dispatch } = useApp()
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'today' }) }, [])
 
   const now = new Date()
   const dateHeader = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })

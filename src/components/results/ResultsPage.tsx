@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
@@ -9,11 +9,14 @@ import { ReadingSummary, PlanetSection, AspectSection, AspectPatternsSection, Ba
 import { NatalMoonPhaseWidget } from '../reading/MoonPhaseWidget'
 import DailySnapshotCard from '../reading/DailySnapshotCard'
 import DiscussModal from '../discuss/DiscussModal'
+import { track } from '../../services/analytics'
 
 export default function ResultsPage() {
   const { state, dispatch } = useApp()
   const { chartData, aspects, reading, birthData } = state
   const [discussOpen, setDiscussOpen] = useState(false)
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'natal' }) }, [])
 
   if (!chartData || !reading) return null
 

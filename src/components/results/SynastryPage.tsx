@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
@@ -11,6 +11,7 @@ import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
+import { track } from '../../services/analytics'
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -276,6 +277,8 @@ export default function SynastryPage() {
   const { chartData, aspects, birthData, partnerBirthData, partnerChartData, partnerAspects, synastryData, synastryInterpretation } = state
   const [discussOpen, setDiscussOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'synastry' }) }, [])
 
   async function handleRetryGpt() {
     if (!chartData || !partnerChartData || !synastryData || retrying) return

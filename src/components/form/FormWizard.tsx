@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { saveProfile } from '../../services/authService'
+import { track } from '../../services/analytics'
 import StepDate from './StepDate'
 import StepTime from './StepTime'
 import StepPlace from './StepPlace'
@@ -16,6 +18,7 @@ export default function FormWizard() {
   const { isAuthenticated } = useAuth()
   const { formStep, birthData } = state
   const StepComponent = STEPS[formStep].component
+  const formStartedRef = useRef(false)
 
   const canNext = (): boolean => {
     switch (formStep) {
@@ -26,7 +29,15 @@ export default function FormWizard() {
     }
   }
 
+  const handleFormStarted = () => {
+    if (!formStartedRef.current) {
+      formStartedRef.current = true
+      track('form_started')
+    }
+  }
+
   const handleNext = () => {
+    handleFormStarted()
     if (formStep < STEPS.length - 1) {
       dispatch({ type: 'SET_STEP', step: formStep + 1 })
     } else {

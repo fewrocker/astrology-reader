@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { calculateChart } from '../../engine/astronomy'
@@ -7,6 +7,7 @@ import SkyTodayChart from '../chart/SkyTodayChart'
 import DailySnapshotCard from '../reading/DailySnapshotCard'
 import DreamModal from '../dream/DreamModal'
 import ReadingsModal from '../navigation/ReadingsModal'
+import { track } from '../../services/analytics'
 
 interface HomeScreenProps {
   onOpenAuth: () => void
@@ -19,6 +20,27 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
   const [readingsOpen, setReadingsOpen] = useState(false)
   const [dreamOpen, setDreamOpen] = useState(false)
   const ctaRef = useRef<HTMLButtonElement>(null)
+  const nudgeRef = useRef<HTMLButtonElement>(null)
+
+  const NUDGE_COPY = 'Save your readings ✦'
+
+  // Fire auth_nudge_seen once when the nudge button enters the viewport
+  useEffect(() => {
+    if (isAuthenticated) return
+    const el = nudgeRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          track('auth_nudge_seen', { nudge_copy: NUDGE_COPY })
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.5 },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [isAuthenticated])
 
   const chartData = useMemo(() => {
     if (state.chartData) return state.chartData
@@ -107,12 +129,16 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
             {/* Auth nudge — unauthenticated only */}
             {!isAuthenticated && (
               <button
+                ref={nudgeRef}
                 type="button"
-                onClick={onOpenAuth}
+                onClick={() => {
+                  track('auth_nudge_clicked', { nudge_copy: NUDGE_COPY })
+                  onOpenAuth()
+                }}
                 className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
                 aria-label="Create an account to save your readings"
               >
-                Save your readings ✦
+                {NUDGE_COPY}
               </button>
             )}
             {isAuthenticated && <div className="mb-6" />}
