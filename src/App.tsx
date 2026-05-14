@@ -24,8 +24,8 @@ import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
-import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
-import { getGptInterpretation, RateLimitError } from './services/gptInterpretation'
+import { calculateSolarReturn } from './engine/solarReturn'
+import { getGptInterpretation, getSolarReturnInterpretation, RateLimitError } from './services/gptInterpretation'
 import type { RateLimitInfo } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
 import { track } from './services/analytics'
@@ -471,9 +471,8 @@ function AppContent() {
           dispatch({ type: 'SET_SOLAR_RETURN_DATA', data: srData, targetYear: srData.targetYear })
         }
 
-        // Get GPT interpretation asynchronously
-        const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
-        const interpretation = await getGptInterpretation(prompt)
+        // Get GPT interpretation asynchronously — server computes from stored birth data
+        const interpretation = await getSolarReturnInterpretation(srData.targetYear)
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
