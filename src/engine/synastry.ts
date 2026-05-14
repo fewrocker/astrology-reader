@@ -258,7 +258,7 @@ function elementCompat(chart1: ChartData, chart2: ChartData): string {
   for (const p of chart1.planets) count1[SIGN_ELEMENTS[p.sign]]++
   for (const p of chart2.planets) count2[SIGN_ELEMENTS[p.sign]]++
 
-  const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count2[b] - count1[a])[0]
+  const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count1[b] - count1[a])[0]
   const dom2 = (Object.keys(count2) as Element[]).sort((a, b) => count2[b] - count2[a])[0]
 
   const compatible = (
