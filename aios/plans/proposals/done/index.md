@@ -1,5 +1,15 @@
 # Done Proposals
 
+## Sprint 0009 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [code-server-production-hardening](code-server-production-hardening.md) | Code Enhancement | ✅ merged sprint-0009 |
+| [feat-funnel-analytics](feat-funnel-analytics.md) | Feature | ✅ merged sprint-0009 |
+| [feat-oauth-signup](feat-oauth-signup.md) | Feature | ✅ merged sprint-0009 |
+| [feat-stripe-checkout](feat-stripe-checkout.md) | Feature | ✅ merged sprint-0009 |
+| [feat-subscription-tiers](feat-subscription-tiers.md) | Feature | ✅ merged sprint-0009 |
+
 ## Sprint 0008 — Completed
 
 | Proposal | Type | Delivered |

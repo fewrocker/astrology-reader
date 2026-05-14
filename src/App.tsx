@@ -511,7 +511,7 @@ function AppContent() {
         <div className="w-full max-w-2xl mb-2">
           <NetworkWarningBanner />
         </div>
-        <header className={`text-center relative ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'} w-full max-w-2xl`}>
+        <header className={`text-center relative z-20 ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'} w-full max-w-2xl`}>
           <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
           <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
           <SessionBadge onOpenAuth={() => openAuth('login')} />
