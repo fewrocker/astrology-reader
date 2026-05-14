@@ -5,10 +5,12 @@ import { getDb } from '../db.js';
 import { requireAuth, AuthenticatedRequest, TokenPayload } from '../middleware/auth.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
 
-interface UserRow {
+export interface UserRow {
   id: number;
   email: string;
-  password_hash: string;
+  password_hash: string | null;
+  oauth_provider: string | null;
+  oauth_subject: string | null;
   full_name: string | null;
   birth_date: string | null;
   birth_time: string | null;
@@ -18,7 +20,7 @@ interface UserRow {
 
 const router = Router();
 
-function signToken(userId: number): string {
+export function signToken(userId: number): string {
   const secret = process.env.JWT_SECRET!;
   const payload: TokenPayload = { userId };
   return jwt.sign(payload, secret, { expiresIn: '30d' });
@@ -88,7 +90,7 @@ router.post('/login', authRateLimiter, (req: Request, res: Response): void => {
     .prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE email = ?')
     .get(email.trim().toLowerCase()) as UserRow | undefined;
 
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+  if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) {
     res.status(401).json({ error: 'Invalid email or password' });
     return;
   }

@@ -1,10 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { getDb } from './db.js';
 import authRouter from './routes/auth.js';
+import oauthRouter from './routes/oauth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
@@ -36,9 +38,11 @@ const app = express();
 
 app.set('trust proxy', 1);
 app.use(express.json());
+app.use(cookieParser());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
+app.use('/api/auth', oauthRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/gpt', gptRouter);
