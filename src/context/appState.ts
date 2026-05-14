@@ -50,6 +50,7 @@ export function getDreamSessionKey(date: string): string {
 export interface AppState {
   view: AppView
   formStep: number
+  formCompleted: boolean
   birthData: BirthData
   chartData: ChartData | null
   aspects: Aspect[]
@@ -287,6 +288,7 @@ function buildInitialState(): AppState {
   return {
     view: 'form',
     formStep: 0,
+    formCompleted: false,
     birthData: loadCachedBirthData(),
     chartData: cachedChart?.chartData ?? null,
     aspects: cachedChart?.aspects ?? [],
@@ -333,7 +335,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       clearBirthDataCache()
       return { ...initialState, birthData: { ...initialBirthData } }
     case 'COMPLETE_FORM':
-      return { ...state, view: 'form', formStep: 0 }
+      return { ...state, view: 'form', formStep: 0, formCompleted: true }
     case 'START_TRANSIT':
       return { ...state, view: 'transit-loading', transitPeriod: action.period, transitTargetMonth: action.targetMonth ?? null, transitData: null, transitInterpretation: null, transitError: null }
     case 'PENDING_TRANSIT':

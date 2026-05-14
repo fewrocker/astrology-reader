@@ -2,6 +2,15 @@
 **Type:** Issue Fix
 **Originated by:** Carmack, Taleb
 **Sprint:** 0013
+**Status:** done — 2026-05-14
+
+## Outcome
+
+Fixed in branch `sprint-0013-task-0001-issue-analytics-jwt-key-mismatch`.
+
+- `src/services/gptInterpretation.ts`: removed `JWT_STORAGE_KEY = 'astral-chart-jwt'`, imported and used `AUTH_TOKEN_KEY` from `./authService`. Fixes `callProxy()` auth header, `isAuthenticated()` return value, and `authenticated` property in `gpt_limit_hit` events.
+- `src/services/analytics.ts`: replaced local `JWT_KEY` literal with imported `AUTH_TOKEN_KEY` — no longer hardcodes the key outside `authService.ts`.
+- `npx tsc --noEmit` passes cleanly. Code review verdict: PASS.
 
 ## Problem
 

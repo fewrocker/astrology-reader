@@ -9,8 +9,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
     <title>Astral Chart — Birth Chart Reading</title>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin:0;background-color:#0a0a0f;color:#e8e6e3;">
+    <div id="root">
+      <div id="pre-render-loader" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;gap:1rem;">
+        <div style="font-size:2.5rem;animation:astral-spin 3s linear infinite;">✦</div>
+        <p style="color:#c9a84c;font-family:'Playfair Display',serif;font-size:1.25rem;margin:0;">Astral Chart</p>
+        <p style="color:#8a8694;font-size:0.8rem;margin:0;letter-spacing:0.05em;">Your birth chart, decoded</p>
+      </div>
+    </div>
+    <style>
+      @keyframes astral-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

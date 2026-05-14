@@ -213,7 +213,7 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
-  const { isAuthenticated, tier } = useAuth()
+  const { isAuthenticated, tier, isLoading: authLoading } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
@@ -501,7 +501,21 @@ function AppContent() {
   }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cachedBirthDataExists] = useState(() => hasCachedBirthData())
-  const showCachedLanding = state.view === 'form' && cachedBirthDataExists && !!state.birthData.date && !!state.birthData.city
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-mystic-bg flex flex-col items-center justify-center gap-4">
+        <div className="starfield" aria-hidden="true" />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="text-4xl animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">✦</div>
+          <p className="font-heading text-mystic-gold text-xl">Astral Chart</p>
+          <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
+        </div>
+      </div>
+    )
+  }
+
+  const showCachedLanding = state.view === 'form' && (cachedBirthDataExists || state.formCompleted) && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 
