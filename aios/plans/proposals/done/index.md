@@ -1,5 +1,18 @@
 # Done Proposals
 
+## Sprint 0011 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-synastry-element-compat-sort-bug](issue-synastry-element-compat-sort-bug.md) | Issue Fix | ✅ merged sprint-0011 |
+| [code-collapsible-section-extraction](code-collapsible-section-extraction.md) | Code Enhancement | ✅ merged sprint-0011 |
+| [code-gpt-prompt-element-profiles](code-gpt-prompt-element-profiles.md) | Code Enhancement | ✅ merged sprint-0011 |
+| [feat-couple-transit-aspect-rows](feat-couple-transit-aspect-rows.md) | Feature | ✅ merged sprint-0011 |
+| [feat-solar-return-static-interpretation](feat-solar-return-static-interpretation.md) | Feature | ✅ merged sprint-0011 |
+| [feat-synastry-aspect-row-briefs](feat-synastry-aspect-row-briefs.md) | Feature | ✅ merged sprint-0011 |
+| [feat-synastry-house-overlay-briefs](feat-synastry-house-overlay-briefs.md) | Feature | ✅ merged sprint-0011 |
+| [feat-today-sky-highlights-expand](feat-today-sky-highlights-expand.md) | Feature | ✅ merged sprint-0011 |
+
 ## Sprint 0010 — Completed
 
 | Proposal | Type | Delivered |
