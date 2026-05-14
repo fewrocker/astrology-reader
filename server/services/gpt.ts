@@ -57,6 +57,14 @@ export interface PatternReading {
   body: string
 }
 
+interface BirthContext {
+  birthDate: string
+  birthTime: string | null
+  lat: number
+  lng: number
+  tz: string
+}
+
 // ---------------------------------------------------------------------------
 // OpenAI client + call infrastructure
 // ---------------------------------------------------------------------------
@@ -171,6 +179,58 @@ function buildDreamscapeContext(chart: ChartData): string {
 }
 
 // ---------------------------------------------------------------------------
+// Birth context resolution
+// ---------------------------------------------------------------------------
+
+function resolveUserBirthContext(userId: number): BirthContext | null {
+  const db = getDb()
+  const row = db
+    .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
+    .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
+
+  if (!row) {
+    console.warn(`[resolveUserBirthContext] no user row for userId=${userId}`)
+    return null
+  }
+  if (!row.birth_date) {
+    console.warn(`[resolveUserBirthContext] missing birth_date for userId=${userId}`)
+    return null
+  }
+  if (!row.birth_place) {
+    console.warn(`[resolveUserBirthContext] missing birth_place for userId=${userId}`)
+    return null
+  }
+
+  let place: { lat?: unknown; lng?: unknown; tz?: unknown }
+  try {
+    place = JSON.parse(row.birth_place) as { lat?: unknown; lng?: unknown; tz?: unknown }
+  } catch {
+    console.warn(`[resolveUserBirthContext] birth_place not valid JSON for userId=${userId}, value=${row.birth_place}`)
+    return null
+  }
+
+  const lat = Number(place.lat)
+  const lng = Number(place.lng)
+  if (isNaN(lat) || isNaN(lng)) {
+    console.warn(`[resolveUserBirthContext] non-numeric lat/lng for userId=${userId}`)
+    return null
+  }
+
+  if (!place.tz || typeof place.tz !== 'string') {
+    console.warn(`[resolveUserBirthContext] missing tz for userId=${userId}`)
+    return null
+  }
+
+  return {
+    birthDate: row.birth_date,
+    birthTime: row.birth_time ?? null,
+    lat,
+    lng,
+    tz: place.tz,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Per-type interpretation handlers
 // All prompts are copied verbatim from the original gptInterpretation.ts.
 // No prompt content is changed — this is a transport-layer migration only.
@@ -215,29 +275,18 @@ async function handleDreamInterpretation(payload: {
   let natalCtx = payload.natalContext
 
   if (!chart && userId) {
-    try {
-      const db = getDb()
-      const row = db
-        .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
-        .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
-
-      if (row?.birth_date && row.birth_place) {
-        const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
-        if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.tz) {
-          const computed = calculateChart(
-            row.birth_date,
-            row.birth_time ?? '12:00',
-            place.lat,
-            place.lng,
-            place.tz,
-            !row.birth_time,
-          )
-          chart = computed
-          natalCtx = buildNatalContextFromChart(computed, row.birth_date)
-        }
-      }
-    } catch {
-      // Non-fatal — proceed without chart if DB lookup fails
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      const computed = calculateChart(
+        birthCtx.birthDate,
+        birthCtx.birthTime ?? '12:00',
+        birthCtx.lat,
+        birthCtx.lng,
+        birthCtx.tz,
+        !birthCtx.birthTime,
+      )
+      chart = computed
+      natalCtx = buildNatalContextFromChart(computed, birthCtx.birthDate)
     }
   }
 
