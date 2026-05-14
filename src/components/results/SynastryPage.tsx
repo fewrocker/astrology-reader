@@ -160,7 +160,6 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
 
 const INNER_PLANETS = ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury']
 const HIGH_SIGNAL_HOUSES = [1, 4, 5, 7, 8, 12]
-const INNER_PLANET_ORDER = ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury']
 const OUTER_PLANET_KEYWORDS: Record<string, string> = {
   Jupiter: 'expansive',
   Saturn: 'disciplining',
@@ -184,7 +183,7 @@ function sortOverlayEntries(entries: HouseOverlayEntry[]): HouseOverlayEntry[] {
   const high = entries
     .filter(isHighSignal)
     .sort((a, b) =>
-      INNER_PLANET_ORDER.indexOf(a.planet as string) - INNER_PLANET_ORDER.indexOf(b.planet as string)
+      INNER_PLANETS.indexOf(a.planet as string) - INNER_PLANETS.indexOf(b.planet as string)
     )
   const other = entries.filter(e => !isHighSignal(e))
   return [...high, ...other]
@@ -225,7 +224,7 @@ function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[];
               brief = lookupBrief
             } else {
               const keyword = OUTER_PLANET_KEYWORDS[entry.planet as string] ?? 'potent'
-              brief = `Your ${entry.planet} in their ${ordinal(entry.house)} House (${theme.name}) — your ${keyword} energy lands in the space where they ${theme.theme.toLowerCase()}.`
+              brief = `Your ${entry.planet} in their ${ordinal(entry.house)} House (${theme.name}) — your ${keyword} energy reaches the space they hold for ${theme.theme.toLowerCase()}.`
             }
           }
 
