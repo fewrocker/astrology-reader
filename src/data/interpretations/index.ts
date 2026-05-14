@@ -1,4 +1,6 @@
 import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData } from '../../engine/types'
+export { getNatalPlanetContext } from './natalPlanetContext'
+export type { NatalPlanetContext } from './natalPlanetContext'
 import { SIGN_ELEMENTS, SIGN_MODALITIES } from '../../engine/types'
 import type { Aspect, AspectPattern } from '../../engine/aspects'
 import { detectPatterns } from '../../engine/aspects'

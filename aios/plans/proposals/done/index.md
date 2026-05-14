@@ -1,5 +1,17 @@
 # Done Proposals
 
+## Sprint 0010 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [code-natal-house-context-utility](code-natal-house-context-utility.md) | Code Enhancement | ✅ merged sprint-0010 |
+| [code-transit-aspect-natal-house-embedding](code-transit-aspect-natal-house-embedding.md) | Code Enhancement | ✅ merged sprint-0010 |
+| [feat-transit-aspect-row-inline-briefs](feat-transit-aspect-row-inline-briefs.md) | Feature | ✅ merged sprint-0010 |
+| [feat-timeline-house-aware-event-briefs](feat-timeline-house-aware-event-briefs.md) | Feature | ✅ merged sprint-0010 |
+| [feat-daily-snapshot-key-aspect-pill-sentence](feat-daily-snapshot-key-aspect-pill-sentence.md) | Feature | ✅ merged sprint-0010 |
+| [feat-advance-tab-power-day-banner](feat-advance-tab-power-day-banner.md) | Feature | ✅ merged sprint-0010 |
+| [feat-gpt-prompt-hierarchy](feat-gpt-prompt-hierarchy.md) | Feature | ✅ merged sprint-0010 |
+
 ## Sprint 0009 — Completed
 
 | Proposal | Type | Delivered |

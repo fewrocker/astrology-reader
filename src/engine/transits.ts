@@ -5,6 +5,7 @@ import { PLANET_NAMES } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import { getHouseForLongitude } from './astronomy'
+import { analyzeElements } from '../data/interpretations/index'
 
 export type TransitPeriod = 'daily' | 'weekly' | 'monthly'
 
@@ -16,6 +17,8 @@ export interface TransitPosition extends PlanetPosition {
 export interface TransitAspect {
   transitPlanet: PlanetName | 'NorthNode'
   natalPlanet: PlanetName | 'NorthNode'
+  natalHouse: number | null   // null when chartData.unknownTime is true
+  natalSign: string
   type: AspectType
   orb: number
   exactAngle: number
@@ -116,11 +119,13 @@ export function calculateCurrentPositions(date: Date): TransitPosition[] {
 /**
  * Calculate aspects between transit planets and natal planets.
  * Uses tighter orbs for transits than natal aspects.
+ * @param unknownTime when true, natalHouse is set to null for all aspects (no birth time = no houses)
  */
 export function calculateTransitAspects(
   transitPlanets: TransitPosition[],
   natalPlanets: PlanetPosition[],
-  period: TransitPeriod
+  period: TransitPeriod,
+  unknownTime = false,
 ): TransitAspect[] {
   // Tighter orbs for transits — scale by period relevance
   const orbScale = period === 'daily' ? 0.3 : period === 'weekly' ? 0.5 : 0.7
@@ -145,6 +150,8 @@ export function calculateTransitAspects(
           aspects.push({
             transitPlanet: tp.name,
             natalPlanet: np.name,
+            natalHouse: unknownTime ? null : (np.house > 0 ? np.house : null),
+            natalSign: np.sign,
             type: def.name,
             orb: Math.round(orb * 100) / 100,
             exactAngle: def.angle,
@@ -306,10 +313,11 @@ export function buildTransitPrompt(
   prompt += `## Birth Chart (Natal)\n`
   prompt += `Birth date: ${birthDate}\n`
 
-  // Natal positions
+  // Natal positions — guard house output: only emit house number when time is known and house is valid
   prompt += `\nNatal planet positions:\n`
   for (const p of natalChart.planets) {
-    prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign} (House ${p.house})${p.retrograde ? ' [Rx]' : ''}\n`
+    const houseStr = !natalChart.unknownTime && p.house > 0 ? ` (House ${p.house})` : ''
+    prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${houseStr}${p.retrograde ? ' [Rx]' : ''}\n`
   }
 
   prompt += `\nNatal Ascendant: ${natalChart.angles.ascendant.degree}°${natalChart.angles.ascendant.minute}' ${natalChart.angles.ascendant.sign}\n`
@@ -322,7 +330,7 @@ export function buildTransitPrompt(
     prompt += `- Transit ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
   }
 
-  // Transit aspects to natal
+  // Transit aspects to natal — already sorted by orb ascending from calculateTransitAspects
   prompt += `\n## Transit Aspects to Natal Chart\n`
   if (transitData.transitAspects.length === 0) {
     prompt += `No major transit aspects within orb ${periodLabel}.\n`
@@ -349,7 +357,27 @@ export function buildTransitPrompt(
     }
   }
 
+  // Element profile — gives GPT calibration context for how to frame transits
+  const elementAnalysis = analyzeElements(natalChart.planets)
+  prompt += `\n## Natal Element Profile\n`
+  prompt += `Dominant element: ${elementAnalysis.dominant} — ${elementAnalysis.interpretation.dominant}\n`
+
+  // Find the tightest applying transit aspect — aspects already sorted by orb ascending from calculateTransitAspects
+  const tightestApplying = transitData.transitAspects.find(a => a.applying) ?? transitData.transitAspects[0]
+
   prompt += `\n## Instructions\n`
+
+  // Priority header — lead with the tightest applying aspect
+  if (tightestApplying) {
+    const natalPlanetData = natalChart.planets.find(p => p.name === tightestApplying.natalPlanet)
+    const natalHouse = natalPlanetData?.house ?? 0
+    if (!natalChart.unknownTime && natalHouse > 0) {
+      prompt += `Priority: Lead with the tightest applying aspect — Transit ${tightestApplying.transitPlanet} ${tightestApplying.symbol} Natal ${tightestApplying.natalPlanet} (${tightestApplying.orb.toFixed(1)}°, ${natalHouse}-house). Open your reading with what this aspect means for the life area named by that house. Do not begin with a general orientation or a summary of the period's themes.\n\n`
+    } else {
+      prompt += `Priority: Lead with the tightest applying aspect — Transit ${tightestApplying.transitPlanet} ${tightestApplying.symbol} Natal ${tightestApplying.natalPlanet} (${tightestApplying.orb.toFixed(1)}°). Open your reading with this aspect. Do not begin with a general orientation.\n\n`
+    }
+  }
+
   prompt += `Based on the transit aspects to the natal chart, provide a personalized ${period} reading for ${periodLabel}.\n\n`
 
   if (period === 'daily') {
@@ -376,6 +404,16 @@ export function buildTransitPrompt(
     prompt += `- Comprehensive guidance (5-6 paragraphs)\n`
   }
 
+  // House-naming instruction — gated on known birth time
+  if (!natalChart.unknownTime) {
+    prompt += `\nFor every transit aspect you interpret, name the natal house it touches and state what that house governs (e.g., "your 7th-house Venus — the zone of partnership and one-on-one relating"). Do not use sign-only language like "as a Scorpio" or "your Scorpio Mercury." Every sentence must be anchored to a house number or a specific named life area.\n`
+  } else {
+    prompt += `\nInterpret each transit in terms of the natal planet's sign and nature. House-level language is not available for this chart.\n`
+  }
+
+  // Anti-cliché constraint — applies regardless of unknownTime
+  prompt += `\nWrite as if you know this person's chart specifically — not as if you are writing a column for all people with this Sun sign. Avoid sentences that could apply equally to any person of the same sign. Every statement must be derivable from the specific degrees, planets, and configurations listed above.\n`
+
   prompt += `\nFormat your response as a direct, factual, honest reading. Use second person ("you"). `
   prompt += `Do not use headers or bullet points — write flowing paragraphs. `
   prompt += `Be specific about which planets and aspects you're interpreting. `
@@ -397,7 +435,7 @@ export function getTopActiveTransits(
   date?: Date,
 ): TransitAspect[] {
   const positions = calculateCurrentPositions(date ?? new Date())
-  const aspects = calculateTransitAspects(positions, chartData.planets, 'daily')
+  const aspects = calculateTransitAspects(positions, chartData.planets, 'daily', chartData.unknownTime)
   return aspects.filter(a => a.orb <= maxOrbDegrees).slice(0, maxCount)
 }
 
@@ -440,7 +478,7 @@ export function calculateTransits(
   const { start, end, startStr, endStr } = getDateRange(period, targetMonth)
 
   const currentPlanets = calculateCurrentPositions(start)
-  const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period)
+  const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period, natalChart.unknownTime)
   const ingresses = detectIngresses(start, end)
   const retrogrades = getRetrogradeStatus(start)
 
