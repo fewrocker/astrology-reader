@@ -165,16 +165,18 @@ function findAspectPerfection(
 
 /**
  * Find all aspect perfection events across a date range.
+ * Accepts the full natalChart so that unknownTime and house values can be embedded
+ * into each TimelineEvent for house-aware personalized brief generation.
  * @param unknownTime when true, natalHouse is set to null (no birth time = no houses)
  */
 function findAspectPerfections(
-  natalPlanets: PlanetPosition[],
+  natalChart: ChartData,
   startDate: Date,
   endDate: Date,
   period: TransitPeriod,
-  unknownTime: boolean,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = []
+  const { planets: natalPlanets, unknownTime } = natalChart
 
   // Only track meaningful transit planets (skip Sun for daily since it barely moves)
   const transitNames: (PlanetName | 'NorthNode')[] = [...PLANET_NAMES]
@@ -193,6 +195,8 @@ function findAspectPerfections(
 
         if (perfDate && perfDate >= startDate && perfDate <= endDate) {
           const dateStr = perfDate.toISOString().split('T')[0]
+          // Embed natal house — null when birth time unknown or house sentinel 0
+          const natalHouse: number | null = unknownTime ? null : (np.house > 0 ? np.house : null)
           events.push({
             id: `aspect-${tName}-${np.name}-${def.name}-${dateStr}`,
             type: 'aspect-perfection',
@@ -200,8 +204,8 @@ function findAspectPerfections(
             dateStr,
             planet: tName,
             secondPlanet: np.name,
-            natalHouse: unknownTime ? null : (np.house > 0 ? np.house : null),
-            natalSign: np.sign,
+            natalHouse,
+            natalSign: np.sign ?? '',
             aspectType: def.name,
             aspectSymbol: def.symbol,
             aspectNature: def.nature,
@@ -428,7 +432,7 @@ export function buildTransitTimeline(
   const { start, end } = getDateRange(period, targetMonth)
 
   // Gather all event types
-  const aspectEvents = findAspectPerfections(natalChart.planets, start, end, period, natalChart.unknownTime)
+  const aspectEvents = findAspectPerfections(natalChart, start, end, period)
   const ingressEvents = findIngresses(start, end, period !== 'monthly') // include Moon for daily/weekly
   const stationEvents = findStations(start, end)
   const lunarEvents = findLunarPhases(start, end)
