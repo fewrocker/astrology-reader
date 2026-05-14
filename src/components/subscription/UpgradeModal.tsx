@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AuthModal from '../auth/AuthModal'
 
 interface UpgradeModalProps {
@@ -60,11 +60,11 @@ export default function UpgradeModal({
   intendedTier,
 }: UpgradeModalProps) {
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const [pendingTierForAuth, setPendingTierForAuth] = useState<'basic' | 'advanced' | null>(null)
   const [checkoutState, setCheckoutState] = useState<'idle' | 'ceremony' | 'error'>('idle')
-  const [ceremonyStartedAt, setCeremonyStartedAt] = useState<number>(0)
   const firstFocusRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const ceremonyStartedAtRef = useRef<number>(0)
+  const pendingTierAfterAuth = useRef<{ tier: 'basic' | 'advanced'; priceId: string } | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -104,20 +104,9 @@ export default function UpgradeModal({
     return () => document.removeEventListener('keydown', handler)
   }, [isOpen, onClose])
 
-  if (!isOpen && !authModalOpen) return null
-
-  const heading = getHeading(currentTier, authenticated, intendedTier)
-  const resetTime = formatResetAt(resetAt)
-
-  const handleCheckout = async (priceId: string, tier: 'basic' | 'advanced') => {
-    if (!authenticated) {
-      setPendingTierForAuth(tier)
-      setAuthModalOpen(true)
-      return
-    }
-
+  const runCheckoutSession = useCallback(async (priceId: string) => {
     const start = Date.now()
-    setCeremonyStartedAt(start)
+    ceremonyStartedAtRef.current = start
     setCheckoutState('ceremony')
 
     try {
@@ -147,28 +136,49 @@ export default function UpgradeModal({
         return
       }
 
-      // Hold for ceremony minimum (2s), cap at 4s total
-      const waitMs = Math.max(remaining, 0)
-      await new Promise(r => setTimeout(r, waitMs))
+      await new Promise(r => setTimeout(r, Math.max(remaining, 0)))
       window.location.href = data.url
     } catch {
-      const elapsed = Date.now() - ceremonyStartedAt
+      const elapsed = Date.now() - ceremonyStartedAtRef.current
       await new Promise(r => setTimeout(r, Math.max(0, 2000 - elapsed)))
       setCheckoutState('error')
     }
+  }, [])
+
+  const handleCheckout = async (priceId: string, tier: 'basic' | 'advanced') => {
+    if (!authenticated) {
+      pendingTierAfterAuth.current = { tier, priceId }
+      setAuthModalOpen(true)
+      return
+    }
+    await runCheckoutSession(priceId)
   }
 
-  const handleAuthComplete = async () => {
+  const handleAuthComplete = () => {
     setAuthModalOpen(false)
-    if (pendingTierForAuth) {
-      const priceId = pendingTierForAuth === 'basic' ? BASIC_PRICE_ID : ADVANCED_PRICE_ID
-      const tier = pendingTierForAuth
-      setPendingTierForAuth(null)
-      // Small delay to let auth context settle
-      await new Promise(r => setTimeout(r, 300))
-      await handleCheckout(priceId, tier)
-    }
+    // pendingTierAfterAuth.current holds { tier, priceId } — useEffect below picks it up
   }
+
+  // After auth completes, authenticated prop will update to true on next render.
+  // If pendingTierAfterAuth.current is set, trigger the checkout in the React render cycle
+  // where the authenticated prop is guaranteed to be fresh — no stale closure risk.
+  const authenticatedRef = useRef(authenticated)
+  useEffect(() => {
+    authenticatedRef.current = authenticated
+  }, [authenticated])
+
+  useEffect(() => {
+    if (authenticated && pendingTierAfterAuth.current && !authModalOpen) {
+      const { priceId } = pendingTierAfterAuth.current
+      pendingTierAfterAuth.current = null
+      void runCheckoutSession(priceId)
+    }
+  }, [authenticated, authModalOpen, runCheckoutSession])
+
+  if (!isOpen && !authModalOpen) return null
+
+  const heading = getHeading(currentTier, authenticated, intendedTier)
+  const resetTime = formatResetAt(resetAt)
 
   const primaryTier: 'basic' | 'advanced' =
     intendedTier ?? (currentTier === 'basic' ? 'advanced' : 'basic')
