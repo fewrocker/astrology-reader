@@ -287,6 +287,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const dismissOauthError = useCallback(() => setOauthError(null), [])
 
+  const incrementTodayUsed = useCallback(() => setTodayUsed(prev => prev + 1), [])
+
   const dismissPaymentWelcome = useCallback(() => {
     setPaymentWelcomePending(false)
   }, [])

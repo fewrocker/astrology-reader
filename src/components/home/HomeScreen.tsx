@@ -126,20 +126,32 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
         return <div className="mb-6" />
       }
       // Free authenticated
-      if (todayUsed <= 1) {
-        // 0 or 1 used — no nudge, just spacer
-        return <div className="mb-6" />
+      if (todayUsed === 0) {
+        return (
+          <p className="text-xs text-mystic-gold/40 mb-6 self-start">
+            3 readings free today.
+          </p>
+        )
+      }
+      if (todayUsed === 1) {
+        return (
+          <p className="text-xs text-mystic-gold/40 mb-6 self-start">
+            2 readings left in your sky today.
+          </p>
+        )
       }
       if (todayUsed === 2) {
-        // One reading remaining
         return (
           <button
             type="button"
-            onClick={onOpenAuth}
+            onClick={() => {
+              track('auth_nudge_clicked', { nudge_copy: "You've come back twice today. One more reading awaits. ✦" })
+              onOpenAuth()
+            }}
             className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
-            aria-label="Upgrade your plan for more readings"
+            aria-label="One reading remaining today — upgrade for unlimited access"
           >
-            1 reading left today ✦ Upgrade for more
+            You've come back twice today. One more reading awaits. ✦
           </button>
         )
       }
@@ -147,11 +159,14 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
       return (
         <button
           type="button"
-          onClick={onOpenAuth}
+          onClick={() => {
+            track('auth_nudge_clicked', { nudge_copy: "You've read your sky for today. Continue tomorrow, or open the full sky now. ✦" })
+            onOpenAuth()
+          }}
           className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
-          aria-label="Upgrade your plan for more readings"
+          aria-label="Daily limit reached — upgrade to continue reading today"
         >
-          Daily limit reached ✦ Upgrade to continue
+          You've read your sky for today. Continue tomorrow, or open the full sky now. ✦
         </button>
       )
     }
@@ -178,13 +193,13 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
         <button
           type="button"
           onClick={() => {
-            track('auth_nudge_clicked', { nudge_copy: '1 reading left today ✦ Sign in to save more' })
+            track('auth_nudge_clicked', { nudge_copy: 'One reading left today. Sign in to pick up where you left off. ✦' })
             onOpenAuth()
           }}
           className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
-          aria-label="1 reading remaining today — sign in for more"
+          aria-label="One reading remaining today — sign in to continue"
         >
-          1 reading left today ✦ Sign in to save more
+          One reading left today. Sign in to pick up where you left off. ✦
         </button>
       )
     }
@@ -193,13 +208,13 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
       <button
         type="button"
         onClick={() => {
-          track('auth_nudge_clicked', { nudge_copy: 'Daily limit reached ✦ Sign in for more readings' })
+          track('auth_nudge_clicked', { nudge_copy: "You've had three readings today — that's a good beginning. Sign in for tomorrow. ✦" })
           onOpenAuth()
         }}
         className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
-        aria-label="Daily limit reached — sign in for more readings"
+        aria-label="Daily limit reached — sign in for tomorrow"
       >
-        Daily limit reached ✦ Sign in for more readings
+        You've had three readings today — that's a good beginning. Sign in for tomorrow. ✦
       </button>
     )
   }

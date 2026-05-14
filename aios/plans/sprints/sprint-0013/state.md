@@ -12,4 +12,4 @@
 | 0003 | issue-todayused-counter-staleness | done |
 | 0004 | code-upgrade-modal-checkout-race | done |
 | 0005 | feat-conversion-funnel-analytics | done |
-| 0006 | feat-persistent-reading-limit-display | pending |
+| 0006 | feat-persistent-reading-limit-display | done |

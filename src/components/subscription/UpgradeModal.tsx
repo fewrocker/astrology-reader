@@ -41,15 +41,15 @@ function getHeading(
     return 'This reading requires the Advanced sky.'
   }
   if (!authenticated) {
-    return "Three free readings per day. You've used yours."
+    return "You've had three readings today — that's a good beginning."
   }
   if (currentTier === 'free') {
-    return 'Your readings for today have ended.'
+    return "You've read your sky for today."
   }
   if (currentTier === 'basic') {
     return "You've explored the full sky today."
   }
-  return 'Your readings for today have ended.'
+  return "You've read your sky for today."
 }
 
 export default function UpgradeModal({
@@ -378,13 +378,13 @@ function TierPresentation({
         />
         <TierSection
           name="Basic"
-          description={`Twenty readings a day. Enough to explore every corner of your chart across a full day's reflection.`}
+          description="Every feature — natal chart, transits, synastry, solar return, journal, and dreams — is available on every plan. Basic adds twenty readings per day, enough to explore your chart from multiple angles."
           isCurrentTier={currentTier === 'basic'}
           price={`$${BASIC_PRICE}/month`}
         />
         <TierSection
           name="Advanced"
-          description="One hundred readings a day, and a new power that only time can reveal: patterns across your journal and your dreams — what the sky has been building while you were keeping it."
+          description="Every feature — natal chart, transits, synastry, solar return, journal, and dreams — is available on every plan. Advanced gives you a hundred readings per day — the depth for an astrologer's practice or a season of intensive inquiry."
           isCurrentTier={currentTier === 'advanced'}
           price={`$${ADVANCED_PRICE}/month`}
         />
