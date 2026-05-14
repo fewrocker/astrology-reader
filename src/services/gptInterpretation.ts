@@ -2,6 +2,7 @@ import type { ChartData } from '../engine/types'
 import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
 import { GPT_RATE_LIMIT, GPT_RATE_LIMIT_UNAUTH, GPT_SERVER_ERROR, GPT_OFFLINE, GPT_NUDGE } from './gptErrors'
+import { track } from './analytics'
 
 // JWT key used by auth service — injected as Authorization header when present
 const JWT_STORAGE_KEY = 'astral-chart-jwt'
@@ -54,6 +55,7 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
       const body = await response.json() as { authenticated?: boolean }
       unauthenticated = body.authenticated === false
     } catch { /* ignore — fall back to header-based detection */ }
+    track('gpt_limit_hit', { authenticated: !unauthenticated, gpt_type: type })
     throw new Error(unauthenticated ? GPT_RATE_LIMIT_UNAUTH : GPT_RATE_LIMIT)
   }
 
@@ -63,6 +65,7 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
 
   const data = await response.json() as { result: unknown }
   _sessionCalls++
+  track('gpt_request_made', { gpt_type: type })
   return data.result
 }
 

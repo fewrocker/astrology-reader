@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { AUTH_TOKEN_KEY, getSession, getProfile, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
+import { track } from '../services/analytics'
 import type { AuthUser, ServerUserProfile } from '../services/authService'
 import { saveBirthData } from './appState'
 import type { BirthData } from './appState'
@@ -108,6 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(jwt)
       const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
       setUser(loggedInUser)
+      track('login_completed', { method: 'email' })
       // Load birth data from server profile after login
       const profileResult = await getProfile()
       if (profileResult.ok) {
@@ -132,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(jwt)
       const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
       setUser(loggedInUser)
+      track('signup_completed', { method: 'email' })
       return { ok: true }
     }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }

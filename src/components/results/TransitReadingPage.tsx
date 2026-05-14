@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import { assignTransitHouses, buildTransitPrompt } from '../../engine/transits'
@@ -14,6 +14,7 @@ import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
+import { track } from '../../services/analytics'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 
@@ -188,6 +189,10 @@ export default function TransitReadingPage() {
   const [discussOpen, setDiscussOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'reading' | 'timeline' | 'advance'>('reading')
   const [retrying, setRetrying] = useState(false)
+
+  useEffect(() => {
+    track('reading_viewed', { reading_type: 'transit', period: transitPeriod ?? undefined })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleRetryGpt() {
     if (!chartData || !transitData || !transitPeriod || retrying) return

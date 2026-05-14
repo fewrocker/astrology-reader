@@ -26,6 +26,7 @@ import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
 import { getGptInterpretation } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
+import { track } from './services/analytics'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
   const { isAuthenticated, displayName, logout } = useAuth()
@@ -178,6 +179,14 @@ function AppContent() {
     setAuthModalOpen(true)
   }
 
+  // Track page_view on initial mount
+  useEffect(() => {
+    track('page_view', {
+      view: state.view,
+      has_cached_data: hasCachedBirthData(),
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const journalChartData = useMemo(() => {
     if (state.chartData) return state.chartData
     const { city } = state.birthData
@@ -209,6 +218,7 @@ function AppContent() {
         const aspects = calculateAspects(chart.planets)
         const reading = assembleReading(chart, aspects, birthData.focusAreas[0])
         dispatch({ type: 'SET_RESULTS', chartData: chart, aspects, reading })
+        track('form_completed', { has_birth_time: !birthData.unknownTime })
       } catch (e) {
         console.error('Calculation error:', e)
         dispatch({ type: 'SET_VIEW', view: 'form' })

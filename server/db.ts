@@ -42,6 +42,24 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date
       ON entries(user_id, kind, date DESC);
+
+    CREATE TABLE IF NOT EXISTS events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT    NOT NULL,
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      event      TEXT    NOT NULL,
+      properties TEXT,
+      created_at TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_session_event
+      ON events(session_id, event);
+
+    CREATE INDEX IF NOT EXISTS idx_events_user_event
+      ON events(user_id, event, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_events_created_at
+      ON events(created_at);
   `);
 
   return instance;

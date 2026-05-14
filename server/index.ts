@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
@@ -11,6 +12,7 @@ import authRouter from './routes/auth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
+import analyticsRouter from './routes/analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +53,21 @@ if (!JWT_SECRET) {
 // Warm up DB and run migrations at startup
 getDb();
 
+// Purge events older than 90 days — runs daily at server startup
+setInterval(() => {
+  try {
+    const db = getDb();
+    const result = db
+      .prepare("DELETE FROM events WHERE created_at < datetime('now', '-90 days')")
+      .run();
+    if (result.changes > 0) {
+      console.log(`[analytics] purged ${result.changes} events older than 90 days`);
+    }
+  } catch (err) {
+    console.error('[analytics] purge failed:', err);
+  }
+}, 24 * 60 * 60 * 1000); // 24 hours
+
 const app = express();
 
 app.set('trust proxy', 1);
@@ -65,16 +82,33 @@ app.use(compression());
 // Request logging: 'combined' (Apache format) in production, 'dev' (colorized) in development
 app.use(morgan(isDev ? 'dev' : 'combined'));
 
-// NOTE: Any future Stripe webhook routes (feat-stripe-checkout) MUST be mounted
-// BEFORE this express.json() middleware, using express.raw({ type: 'application/json' })
+// NOTE: The Stripe webhook route (feat-stripe-checkout) MUST be mounted
+// BEFORE express.json() middleware, using express.raw({ type: 'application/json' })
 // so that Stripe signature verification can access the raw request body.
 app.use(express.json({ limit: '50kb' }));
+app.use(cookieParser());
+
+// Session cookie middleware — sets a persistent session_id cookie on all /api/* requests
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+  if (!req.cookies?.session_id) {
+    const sessionId = crypto.randomUUID();
+    res.cookie('session_id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+    });
+  }
+  next();
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/gpt', gptRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Serve compiled frontend in production (dist/ lives one level above server/)
 const distDir = path.resolve(__dirname, '../dist');
