@@ -10,6 +10,7 @@ import {
   calculateBirthdayNumber,
   calculatePersonalYear,
 } from '../engine/numerologyEngine.js'
+import { calculateSolarReturn, buildSolarReturnPrompt } from '../engine/solarReturnEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -753,6 +754,62 @@ Do not speak statistically. Speak in present tense. Name the pattern as a qualit
 }
 
 // ---------------------------------------------------------------------------
+// Solar return handler
+// ---------------------------------------------------------------------------
+
+async function handleSolarReturnInterpretation(
+  payload: { targetYear: number },
+  userId?: number,
+): Promise<string> {
+  if (!userId) {
+    throw new GptServiceError('Authentication required for solar return interpretation', 401)
+  }
+
+  const db = getDb()
+  const row = db
+    .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
+    .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
+
+  if (!row?.birth_date || !row.birth_place) {
+    throw new GptServiceError('Birth data required for solar return interpretation', 422)
+  }
+
+  let place: { lat?: number; lng?: number; tz?: string }
+  try {
+    place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
+  } catch {
+    throw new GptServiceError('Invalid birth_place data in database', 422)
+  }
+
+  if (typeof place.lat !== 'number' || typeof place.lng !== 'number' || !place.tz) {
+    throw new GptServiceError('Incomplete birth location data (lat, lng, tz required)', 422)
+  }
+
+  const natalChart = calculateChart(
+    row.birth_date,
+    row.birth_time ?? '12:00',
+    place.lat,
+    place.lng,
+    place.tz,
+    !row.birth_time,
+  )
+
+  const { srMoment, srChart } = calculateSolarReturn(natalChart, place.lat, place.lng, payload.targetYear)
+  const prompt = buildSolarReturnPrompt(natalChart, srChart, srMoment, row.birth_date)
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are an expert astrologer providing precise, honest solar return readings. State what the chart shows directly — name the themes, challenges, and opportunities plainly without generic encouragement.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 2000 })
+  )
+  return result || 'Unable to generate solar return interpretation.'
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -790,6 +847,8 @@ export async function handleGptRequest(
       return handleJournalAnnotation(payload as Parameters<typeof handleJournalAnnotation>[0])
     case 'cosmic-pattern-reading':
       return handleCosmicPatternReading(payload as Parameters<typeof handleCosmicPatternReading>[0])
+    case 'solar-return':
+      return handleSolarReturnInterpretation(payload as Parameters<typeof handleSolarReturnInterpretation>[0], userId)
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }

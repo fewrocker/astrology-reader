@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { SolarReturnData } from '../../engine/solarReturn'
-import { buildSolarReturnPrompt } from '../../engine/solarReturn'
 import type { ZodiacSign, PlanetName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { PLANET_IN_HOUSE } from '../../data/interpretations/planetInHouse'
@@ -9,7 +8,7 @@ import SolarReturnBiWheel from '../chart/SolarReturnBiWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
-import { getGptInterpretation } from '../../services/gptInterpretation'
+import { getSolarReturnInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 
 function SRReading({ text }: { text: string }) {
@@ -146,10 +145,9 @@ export default function SolarReturnPage() {
   }
 
   async function handleRetryGpt() {
-    if (!solarReturnData || !state.chartData || retrying) return
+    if (!solarReturnData || retrying) return
     setRetrying(true)
-    const prompt = buildSolarReturnPrompt(state.chartData, solarReturnData.srChart, solarReturnData.srMoment, birthData.date)
-    const interpretation = await getGptInterpretation(prompt)
+    const interpretation = await getSolarReturnInterpretation(targetYear)
     dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
     setRetrying(false)
   }

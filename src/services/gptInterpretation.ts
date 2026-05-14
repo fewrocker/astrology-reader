@@ -311,3 +311,13 @@ export async function generateCosmicPatternReading(
   })
   return Array.isArray(result) ? (result as PatternReading[]) : []
 }
+
+export async function getSolarReturnInterpretation(targetYear: number): Promise<string> {
+  try {
+    const result = await callProxy('solar-return', { targetYear })
+    return (result as string) || 'Unable to generate solar return interpretation.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
