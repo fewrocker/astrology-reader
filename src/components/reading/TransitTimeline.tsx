@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
-import { getAspectPerfectionBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
+import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
 
 function formatTimelineDate(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -31,7 +31,7 @@ function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expand
   // Get enriched interpretation
   let detailText = ''
   if (event.type === 'aspect-perfection' && event.aspectType && event.secondPlanet) {
-    detailText = getAspectPerfectionBrief(event.aspectType, event.secondPlanet)
+    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet, event.natalHouse ?? null)
   } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && event.toSign) {
     detailText = getIngressBrief(event.planet, event.toSign)
   } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && event.stationType) {
