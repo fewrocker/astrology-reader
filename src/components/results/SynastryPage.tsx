@@ -5,6 +5,8 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
 import { buildSynastryPrompt } from '../../engine/synastry'
+import { getHouseTheme } from '../../data/interpretations/houseThemes'
+import { getSynastryHouseOverlayBrief } from '../../data/interpretations/synastryHouseOverlayBriefs'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
@@ -156,32 +158,102 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
   )
 }
 
+const INNER_PLANETS = ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury']
+const HIGH_SIGNAL_HOUSES = [1, 4, 5, 7, 8, 12]
+const INNER_PLANET_ORDER = ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury']
+const OUTER_PLANET_KEYWORDS: Record<string, string> = {
+  Jupiter: 'expansive',
+  Saturn: 'disciplining',
+  Uranus: 'disruptive',
+  Neptune: 'dissolving',
+  Pluto: 'transformative',
+  NorthNode: 'karmic',
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
+}
+
+function isHighSignal(entry: HouseOverlayEntry): boolean {
+  return INNER_PLANETS.includes(entry.planet as string) && HIGH_SIGNAL_HOUSES.includes(entry.house)
+}
+
+function sortOverlayEntries(entries: HouseOverlayEntry[]): HouseOverlayEntry[] {
+  const high = entries
+    .filter(isHighSignal)
+    .sort((a, b) =>
+      INNER_PLANET_ORDER.indexOf(a.planet as string) - INNER_PLANET_ORDER.indexOf(b.planet as string)
+    )
+  const other = entries.filter(e => !isHighSignal(e))
+  return [...high, ...other]
+}
+
 function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[]; label: string }) {
   if (entries.length === 0) return null
+
+  const highSignalCount = entries.filter(isHighSignal).length
+  const hasHighSignal = highSignalCount > 0
+  const sorted = sortOverlayEntries(entries)
+  const title = hasHighSignal
+    ? `${label} (${highSignalCount} key placement${highSignalCount === 1 ? '' : 's'})`
+    : label
+
   return (
-    <Section title={label}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-mystic-gold/10 text-mystic-muted text-xs uppercase tracking-wider">
-              <th className="text-left px-3 py-2">Planet</th>
-              <th className="text-left px-3 py-2">In Sign</th>
-              <th className="text-left px-3 py-2">Falls in House</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((h, i) => (
-              <tr key={i} className="border-b border-mystic-gold/5">
-                <td className="px-3 py-2 text-mystic-text">
-                  <span className="mr-2">{PLANET_GLYPHS[h.planet as PlanetName] ?? '☊'}</span>
-                  {h.planet}
-                </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[h.sign as ZodiacSign]} {h.sign}</td>
-                <td className="px-3 py-2 text-mystic-text font-heading">House {h.house}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <Section title={title} defaultOpen={hasHighSignal}>
+      {hasHighSignal && (
+        <p className="text-mystic-muted text-xs mb-4">
+          Showing {highSignalCount} key placement{highSignalCount === 1 ? '' : 's'} — inner planets in relationship-defining houses.
+        </p>
+      )}
+      <div>
+        {sorted.map((entry, i) => {
+          const planetGlyph = PLANET_GLYPHS[entry.planet as PlanetName] ?? '☊'
+          const zodiacGlyph = ZODIAC_GLYPHS[entry.sign as ZodiacSign]
+          const highSignal = isHighSignal(entry)
+          const invalidHouse = entry.house <= 0 || entry.house > 12
+
+          let houseLabel = ''
+          let brief: string | null = null
+
+          if (!invalidHouse) {
+            const theme = getHouseTheme(entry.house)
+            houseLabel = `${ordinal(entry.house)} House · ${theme.name}`
+            const lookupBrief = getSynastryHouseOverlayBrief(entry.planet as string, entry.house)
+            if (lookupBrief !== null) {
+              brief = lookupBrief
+            } else {
+              const keyword = OUTER_PLANET_KEYWORDS[entry.planet as string] ?? 'potent'
+              brief = `Your ${entry.planet} in their ${ordinal(entry.house)} House (${theme.name}) — your ${keyword} energy lands in the space where they ${theme.theme.toLowerCase()}.`
+            }
+          }
+
+          return (
+            <div key={i} className={`relative py-3 border-b border-mystic-gold/10 last:border-b-0 ${highSignal ? 'pl-4' : ''}`}>
+              {highSignal && (
+                <div className="absolute left-0 inset-y-0 w-0.5 bg-mystic-gold/40 rounded-sm" />
+              )}
+              <div className={`flex items-center gap-2 text-sm flex-wrap ${highSignal ? 'text-mystic-text' : 'text-mystic-muted'}`}>
+                <span className={highSignal ? 'text-lg' : 'text-base'}>{planetGlyph}</span>
+                <span className={highSignal ? 'font-medium' : ''}>{entry.planet}</span>
+                <span className="opacity-60">in</span>
+                <span className={highSignal ? 'text-mystic-gold' : ''}>{zodiacGlyph} {entry.sign}</span>
+                {!invalidHouse && (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span>{houseLabel}</span>
+                  </>
+                )}
+              </div>
+              {brief && (
+                <p className={`text-sm leading-relaxed mt-1.5 ${highSignal ? 'text-mystic-text/80' : 'text-mystic-muted/70'}`}>
+                  {brief}
+                </p>
+              )}
+            </div>
+          )
+        })}
       </div>
     </Section>
   )
