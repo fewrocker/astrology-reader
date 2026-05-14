@@ -39,7 +39,8 @@ router.post('/interpret', gptRateLimit, async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await handleGptRequest(type, payload)
+    const userId = res.locals.userId as number | undefined
+    const result = await handleGptRequest(type, payload, userId)
     res.json({ result })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'internal_error'

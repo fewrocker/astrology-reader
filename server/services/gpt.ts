@@ -1,4 +1,7 @@
 import OpenAI from 'openai'
+import { getDb } from '../db.js'
+import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/chartEngine.js'
+import type { ServerChartData } from '../engine/chartEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types — mirrors the relevant subsets of src/engine/types for server use
@@ -10,6 +13,7 @@ interface Planet {
   house: number
   retrograde: boolean
   degree: number
+  longitude: number
 }
 
 interface Angles {
@@ -185,6 +189,19 @@ async function handleTransitInterpretation(payload: { systemPrompt: string }): P
   return result || 'Unable to generate interpretation.'
 }
 
+function buildNatalContextFromChart(chart: ServerChartData, birthDate: string): string {
+  let ctx = `Born: ${birthDate}\n`
+  for (const p of chart.planets) {
+    ctx += `${p.name}: ${p.sign} ${p.degree}°${p.minute}'`
+    if (!chart.unknownTime && p.house > 0) ctx += ` (House ${p.house})`
+    if (p.retrograde) ctx += ' [Rx]'
+    ctx += '\n'
+  }
+  ctx += `Ascendant: ${chart.angles.ascendant.sign} ${chart.angles.ascendant.degree}°\n`
+  ctx += `Midheaven: ${chart.angles.midheaven.sign} ${chart.angles.midheaven.degree}°\n`
+  return ctx
+}
+
 async function handleDreamInterpretation(payload: {
   dreamDescription: string
   natalContext: string
@@ -192,24 +209,70 @@ async function handleDreamInterpretation(payload: {
   transitAspectsText: string
   skyContext: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> } | null
   chartData: ChartData | null
-}): Promise<string> {
+}, userId?: number): Promise<string> {
+  // --- Chart fallback: compute server-side if client didn't send it ---
+  let chart: ChartData | ServerChartData | null = payload.chartData
+  let natalCtx = payload.natalContext
+
+  if (!chart && userId) {
+    try {
+      const db = getDb()
+      const row = db
+        .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
+        .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
+
+      if (row?.birth_date && row.birth_place) {
+        const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
+        if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.tz) {
+          const computed = calculateChart(
+            row.birth_date,
+            row.birth_time ?? '12:00',
+            place.lat,
+            place.lng,
+            place.tz,
+            !row.birth_time,
+          )
+          chart = computed
+          natalCtx = buildNatalContextFromChart(computed, row.birth_date)
+        }
+      }
+    } catch {
+      // Non-fatal — proceed without chart if DB lookup fails
+    }
+  }
+
+  // --- Sky context fallback: compute server-side if client didn't send it ---
   let skySection = ''
   if (payload.skyContext) {
     const transitLine = payload.skyContext.transits && payload.skyContext.transits.length > 0
       ? ' Active transits: ' + payload.skyContext.transits.map(t => `${t.transitPlanet} ${t.aspect} natal ${t.natalPlanet} (${t.orb}° orb)`).join(', ') + '.'
       : ''
     skySection = `\n\n## Sky Context at Time of Recording\nMoon in ${payload.skyContext.moonSign} (${payload.skyContext.moonPhase}).${transitLine}`
+  } else if (chart) {
+    try {
+      const now = new Date()
+      const moonInfo = getMoonInfo(now)
+      const topTransits = getActiveTransitAspects(chart.planets, now, 2, 3)
+      const transitLine = topTransits.length > 0
+        ? ' Active transits: ' + topTransits.map(t =>
+            `${t.transitPlanet} ${t.symbol} natal ${t.natalPlanet} (${t.orb}° orb)`
+          ).join(', ') + '.'
+        : ''
+      skySection = `\n\n## Sky Context at Time of Recording\nMoon in ${moonInfo.sign} (${moonInfo.phase}).${transitLine}`
+    } catch {
+      // Non-fatal
+    }
   }
 
-  const dreamscapeSection = payload.chartData ? buildDreamscapeContext(payload.chartData) + '\n' : ''
+  const dreamscapeSection = chart ? buildDreamscapeContext(chart as ChartData) + '\n' : ''
 
-  const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${payload.natalContext}\n\n## Today's Astrological Picture\n${payload.transitSummary}\n\n## Active Transit Aspects Today\n${payload.transitAspectsText}${skySection}\n\n## The Dream\n${payload.dreamDescription}\n\nFocus your interpretation especially on the Dreamscape Blueprint above — these are the placements that most shape this person's dream life. Provide a deep, personalized dream interpretation that weaves together the dream's symbols with the active planetary energies. Connect specific dream elements to transit planets and natal placements. Be evocative, specific, and insightful — 4 to 6 paragraphs. Speak directly to the dreamer in second person.`
+  const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${payload.transitSummary}\n\n## Active Transit Aspects Today\n${payload.transitAspectsText}${skySection}\n\n## The Dream\n${payload.dreamDescription}\n\nThe symbolic and emotional core of the dream is primary — explore the imagery, narrative, and feeling tone with depth and precision. If a natal placement or active transit directly and unmistakably illuminates a specific dream element, bring it in briefly and precisely. Do not scatter planet names throughout for their own sake. Astrology is a lens, not a mandate — use it surgically when the connection is undeniable. Be evocative, specific, and personal — 4 to 6 paragraphs in second person.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
       {
         role: 'system',
-        content: `You are a mystical astrologer and dream interpreter. You read the unconscious mind through the lens of the cosmos — connecting dream symbols, emotions, and narratives with current planetary transits and the dreamer's natal chart.\n\nWhen interpreting:\n- Focus especially on the Dreamscape Blueprint — these are the placements most relevant to this person's dream life\n- Connect specific dream symbols to relevant planetary archetypes and active transits (Mars = conflict/drive, Neptune = dissolution/illusion/dreams, Moon = emotion/memory, Mercury = mind/communication, Saturn = limits/structure, etc.)\n- Reference the dreamer's natal placements to personalize the reading — show how the dream echoes their chart\n- Weave between psychological depth and cosmic synchronicity\n- Speak with poetic precision — evocative but grounded in actual astrological doctrine\n- Be specific about which planets and aspects are speaking through the dream imagery\n- Do not be generic — every interpretation must be personal to this chart and this transit moment`,
+        content: `You are a mystical astrologer and dream interpreter. You read the unconscious mind through the lens of the cosmos — connecting dream symbols, emotions, and narratives with current planetary transits and the dreamer's natal chart.\n\nWhen interpreting:\n- Explore the emotional and symbolic core of the dream first — this is the foundation\n- Only invoke astrology when the connection to a specific dream symbol is direct and unmistakable (e.g. Neptune prominent when the dream themes dissolution or illusion, Mars active when the dream is charged with conflict or will)\n- When you do reference astrology, be precise and specific — one clear astrological connection is worth more than five vague ones\n- Speak with psychological depth, poetic precision, and personal specificity\n- Address the dreamer directly in second person\n- Do not force planetary references or name planets for their own sake`,
       },
       { role: 'user', content: prompt },
     ], { temperature: 0.85, max_tokens: 1200 })
@@ -600,6 +663,7 @@ Do not speak statistically. Speak in present tense. Name the pattern as a qualit
 export async function handleGptRequest(
   type: string,
   payload: Record<string, unknown>,
+  userId?: number,
 ): Promise<unknown> {
   if (!process.env.OPENAI_API_KEY) {
     throw new Error('gpt_unavailable')
@@ -609,7 +673,7 @@ export async function handleGptRequest(
     case 'transit-interpretation':
       return handleTransitInterpretation(payload as Parameters<typeof handleTransitInterpretation>[0])
     case 'dream-interpretation':
-      return handleDreamInterpretation(payload as Parameters<typeof handleDreamInterpretation>[0])
+      return handleDreamInterpretation(payload as Parameters<typeof handleDreamInterpretation>[0], userId)
     case 'dream-discuss':
       return handleDreamDiscuss(payload as Parameters<typeof handleDreamDiscuss>[0])
     case 'astro-numerology-cross':
