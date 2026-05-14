@@ -12,6 +12,14 @@ import {
   type MigrationCandidate,
 } from '../services/migrationService'
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  denied: 'You chose not to connect. You can still sign in with email.',
+  state_mismatch: 'Something went wrong with the sign-in link. Please try again.',
+  exchange_failed: "We couldn't complete the sign-in. Please try again or use email.",
+  email_conflict: 'That email address is linked to a different sign-in method. Please use your original sign-in.',
+  no_email: 'Your Facebook account does not have a confirmed email address. Please add one to Facebook first, or sign in with email.',
+}
+
 interface AuthContextType {
   user: AuthUser | null
   token: string | null
@@ -27,6 +35,8 @@ interface AuthContextType {
   migrationCandidate: MigrationCandidate | null
   notifyLoggedIn: (user: AuthUser) => void
   dismissMigration: () => void
+  oauthError: string | null
+  dismissOauthError: () => void
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -70,8 +80,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [showNetworkWarning, setShowNetworkWarning] = useState(false)
   const [isMigrationPending, setIsMigrationPending] = useState(false)
   const [migrationCandidate, setMigrationCandidate] = useState<MigrationCandidate | null>(null)
+  const [oauthError, setOauthError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Handle OAuth JWT handoff and error parameters
+    const params = new URLSearchParams(window.location.search)
+    const oauthToken = params.get('token')
+    const oauthErrorCode = params.get('oauth_error')
+
+    if (oauthErrorCode) {
+      // Clean the URL immediately
+      history.replaceState(null, '', window.location.pathname)
+      const message = OAUTH_ERROR_MESSAGES[oauthErrorCode] ?? "Something went wrong with sign-in. Please try again."
+      setOauthError(message)
+      setIsLoading(false)
+      return
+    }
+
+    if (oauthToken) {
+      // Write token to localStorage and clean the URL so it doesn't linger
+      // in browser history, referrer headers, or analytics
+      localStorage.setItem(AUTH_TOKEN_KEY, oauthToken)
+      setToken(oauthToken)
+      history.replaceState(null, '', window.location.pathname)
+      // Fall through to normal session check — it will now find the token
+    }
+
     const storedToken = localStorage.getItem(AUTH_TOKEN_KEY)
     if (!storedToken) {
       setIsLoading(false)
@@ -166,6 +200,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMigrationCandidate(null)
   }, [])
 
+  const dismissOauthError = useCallback(() => setOauthError(null), [])
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -182,6 +218,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       migrationCandidate,
       notifyLoggedIn,
       dismissMigration,
+      oauthError,
+      dismissOauthError,
     }}>
       {children}
     </AuthContext.Provider>

@@ -62,5 +62,34 @@ export function getDb(): Database.Database {
       ON events(created_at);
   `);
 
+  // Apply OAuth migration if not already applied
+  // SQLite does not support ALTER COLUMN, so we recreate the table inside a transaction
+  const cols = (instance.pragma('table_info(users)') as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes('oauth_provider')) {
+    instance.exec(`
+      BEGIN;
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        oauth_provider TEXT,
+        oauth_subject TEXT,
+        full_name TEXT,
+        birth_date TEXT,
+        birth_time TEXT,
+        birth_place TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        CHECK (password_hash IS NOT NULL OR (oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL))
+      );
+      INSERT INTO users_new (id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at)
+        SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_subject) WHERE oauth_provider IS NOT NULL;
+      COMMIT;
+    `);
+  }
+
   return instance;
 }

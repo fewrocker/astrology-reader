@@ -9,6 +9,7 @@ import compression from 'compression';
 import morgan from 'morgan';
 import { getDb } from './db.js';
 import authRouter from './routes/auth.js';
+import oauthRouter from './routes/oauth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
@@ -105,6 +106,7 @@ app.use((req, res, next) => {
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
+app.use('/api/auth', oauthRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/gpt', gptRouter);
