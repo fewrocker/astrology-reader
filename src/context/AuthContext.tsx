@@ -28,6 +28,7 @@ interface AuthContextType {
   displayName: string
   tier: 'free' | 'basic' | 'advanced'
   todayUsed: number
+  incrementTodayUsed: () => void
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
@@ -89,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [oauthError, setOauthError] = useState<string | null>(null)
   const [paymentWelcomePending, setPaymentWelcomePending] = useState(false)
   const [todayUsed, setTodayUsed] = useState(0)
+
+  const incrementTodayUsed = useCallback(() => { setTodayUsed(prev => prev + 1) }, [])
 
   // After session is restored, fetch today's usage count.
   // todayUsed reflects state at session load — not a real-time counter.
@@ -230,12 +233,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       track('signup_completed', { method: 'email' })
       // Set sessionStorage flag so HomeScreen shows the first-visit welcome sentence once
       sessionStorage.setItem('just-registered', 'true')
+      // Load birth data from server profile after registration (matches pattern in login())
+      const profileResult = await getProfile()
+      if (profileResult.ok) {
+        const birthData = serverProfileToBirthData(profileResult.data, state.birthData)
+        if (birthData) {
+          dispatch({ type: 'LOAD_BIRTH_DATA_FROM_SERVER', data: birthData })
+          saveBirthData(birthData)
+        }
+      }
+      // Spec 11 — fetch today's usage after registration, matching the pattern in login().
+      // For a new account this returns todayUsed: 0 (matching initial useState(0)), making
+      // this a no-op on the happy path while ensuring structural consistency with login().
+      await fetchUsage()
       return { ok: true }
     }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
     if (result.error === 'server-error' && result.status === 409) return { ok: false, error: 'An account with this email already exists.' }
     return { ok: false, error: 'Something went wrong. Please try again.' }
-  }, [state.birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.birthData.userName, fetchUsage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const logout = useCallback(async () => {
     await apiLogout()
@@ -278,6 +294,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName,
       tier,
       todayUsed,
+      incrementTodayUsed,
       login,
       register,
       logout,

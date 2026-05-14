@@ -61,6 +61,9 @@ export function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_events_created_at
       ON events(created_at);
 
+    CREATE INDEX IF NOT EXISTS idx_events_event_created
+      ON events(event, created_at);
+
     CREATE TABLE IF NOT EXISTS gpt_usage (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       date    TEXT NOT NULL,

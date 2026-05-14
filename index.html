@@ -2,15 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Discover your natal chart — your Sun, Moon, and Rising — and what the sky reveals about love, purpose, and the patterns in your life. Free birth chart readings, daily transits, solar return, and synastry." />
+    <link rel="canonical" href="https://astralchart.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Astral Chart — Free Birth Chart &amp; Astrology Reading" />
+    <meta property="og:description" content="Discover your natal chart — your Sun, Moon, and Rising — and what the sky reveals about love, purpose, and the patterns in your life." />
+    <meta property="og:image" content="https://astralchart.app/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://astralchart.app/" />
+    <meta property="og:site_name" content="Astral Chart" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Astral Chart — Free Birth Chart &amp; Astrology Reading" />
+    <meta name="twitter:description" content="Discover your natal chart — your Sun, Moon, and Rising — and what the sky reveals about love, purpose, and the patterns in your life." />
+    <meta name="twitter:image" content="https://astralchart.app/og-image.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet" />
-    <title>Astral Chart — Birth Chart Reading</title>
+    <title>Astral Chart — Free Birth Chart &amp; Astrology Reading</title>
   </head>
-  <body>
-    <div id="root"></div>
+  <body style="margin:0;background-color:#0a0a0f;color:#e8e6e3;">
+    <div id="root">
+      <div id="pre-render-loader" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Inter',sans-serif;gap:1rem;">
+        <div style="font-size:2.5rem;animation:astral-spin 3s linear infinite;">✦</div>
+        <p style="color:#c9a84c;font-family:'Playfair Display',serif;font-size:1.25rem;margin:0;">Astral Chart</p>
+        <p style="color:#8a8694;font-size:0.8rem;margin:0;letter-spacing:0.05em;">Your birth chart, decoded</p>
+      </div>
+    </div>
+    <style>
+      @keyframes astral-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

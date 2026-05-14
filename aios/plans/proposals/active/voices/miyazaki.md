@@ -1,189 +1,230 @@
-# Hayao Miyazaki — Voice Analysis: Sprint-0012 Backend Sovereignty
+# Hayao Miyazaki — Voice Analysis: Sprint-0013 Production-Readiness
 
 ---
 
-I have been sitting with this product for a long time now. Not as someone who wants to find problems. As someone who wants to feel that the people who built it gave a damn about the person on the other side.
+I have been watching this product grow for many months now. Sprint by sprint it has deepened — the calculations became exact, the synastry engine learned to speak, the journal earned its annotations, the sky got its daily shape. The craft inside this product is real. Someone cared about the moon phases. Someone thought hard about house-aware readings. The product, at its core, is not lazy.
 
-Sprint 0011 did what it said it would. The synastry rows speak now. The house overlay entries have sentences. The Solar Return page gives the user something before GPT loads. The Today page's sky highlights expand on tap. The craft improved. I noticed.
+But now the question changes. The product is preparing to meet real people — strangers arriving from a shared link, from a search result, from a recommendation. And I want to walk through the moments those people will experience, not as a tester, but as a person.
 
-But I came back this time with a different question. Not "does this display data correctly?" — that question I already walked through. This time the question is: does this product trust the person using it? And does the person using it have any reason to trust the product?
-
-I walked through the code again, slowly. I read how a reading travels from a user's birth data to words on a screen. I found something that I cannot call a bug. It is something worse. It is a gap between what the product promises and what it actually does. And the person using it cannot see it.
+What I find, when I walk slowly, is a product that has been designed for people who are already inside it. It has not yet been designed for the moment of arrival, or for the moment of collision with a limit.
 
 ---
 
-## The Hidden Lie in Every GPT Reading
+## The Wall
 
-When a person opens the transit reading, they are asking: given the sky right now and my birth chart, what is true for me today?
+Let me describe the experience of the free user on their third reading.
 
-The product answers with GPT text. The GPT text sounds authoritative, personal, specific. It names planets. It names aspects. It sounds like someone who looked at their chart.
+They have entered their birth data. They explored their natal chart. They felt something true in the interpretation — perhaps something about Saturn in their seventh house that explained years of difficulty in relationships. They went deeper. They tried the transit reading. Something opened. They wanted more.
 
-But here is what actually happened: the browser assembled the prompt, handed it to the server as an opaque string, and the server executed it without question.
+They click "Get Your Readings." They choose Solar Return. The spinner turns. The star rotates for a few seconds. And then — the UpgradeModal appears.
 
-What does that mean? It means if the JavaScript in the browser calculated a transit aspect incorrectly, the GPT answer is incorrect. If the browser was running on a device with a wrong clock, the transits are wrong. If there was a bug in the orb sorting, the most important aspect may have been omitted from the prompt. If the calculation crashed silently — JavaScript engines do not stop the world when astronomy calculations throw — the prompt was built from incomplete data, and the reading was generated from a lie.
+The heading reads: "Your readings for today have ended."
 
-The server never knew. The server never had a chance to check. The server accepted whatever string arrived and called GPT with it.
+There was no preparation for this. The header showed a star glyph. The home screen showed the CTA button. Nothing said: *you are about to hit a wall.* The wall simply appeared, mid-motion, where the thing they wanted was supposed to be.
 
-This is the problem that `handleTransitInterpretation` in `server/services/gpt.ts` makes completely visible once you look:
+I have seen this kind of moment in products before. It is not cruel. It is not intentional. But it has the same emotional shape as being told "no" by a stranger who gives no reason. The person feels caught, not cared for.
 
-```typescript
-async function handleTransitInterpretation(payload: { systemPrompt: string }): Promise<string>
-```
+Compare this to how a good innkeeper behaves. They do not let you order a meal and then, when the plate should arrive, tell you the kitchen is closed. They mention, when you sit down: the kitchen closes in thirty minutes. There is care in the warning. There is respect for the person's time and dignity.
 
-The server is an envelope-opener. It opens what arrives and executes it. It has no visibility into whether the transit calculation was correct, whether it was complete, whether the aspects were sorted properly, whether the orbs match what is actually in the sky at this moment. The server is a post office, not an astrologer.
+The `SessionBadge` in `App.tsx` has the information. It knows `remaining`. It renders `"${remaining} reading${remaining !== 1 ? 's' : ''} left today"`. But it buries this information in a dropdown that requires a click to open. The star glyph in the header gives no hint of the count. The user must already know to click it, already know there is something to find inside. A person arriving for the first time does not know this.
 
-And the user, on the other side, receives a reading that sounds like it was computed from their specific chart and the current sky — because it was, in the browser, in this session, if nothing went wrong. They trust it. They act on it. They might share it with someone they love.
+This is a small failing, but it is felt. The product knows how many readings remain. It has chosen not to say so until the moment the person clicks a glyph — or until the wall appears. That is a choice that disrespects the user's time.
 
-That trust is real. The reliability behind it is not.
+The sprint vision names the fix precisely: when `remaining <= 1`, show the count inline in the header bar, without requiring a click. This is right. But I want to name the quality this fix would add, because numbers alone are not enough. The label should not say "1 reading left today" as a bureaucratic count. It should be a small, warm sentence. Something like "1 sky left today" — using the product's own vocabulary. Or simply the number shown as a soft glow alongside the star glyph, fading from gold to amber as the limit approaches. Not an alarm. A gentle signal. The difference between a product that informs and a product that accompanies.
 
 ---
 
-## Where This Shows Up in the User's Experience
+## The UpgradeModal as a Wall Rather Than an Invitation
 
-### The Daily Snapshot
+When the UpgradeModal finally appears, it says:
 
-`DailySnapshotCard.tsx` builds the prompt itself, then calls `getDailySnapshotInterpretation(prompt)`. The server receives:
+> "Your readings for today have ended."
 
-```
-handleDailySnapshot(payload: { prompt: string })
-```
+And then it presents three tier cards — Free, Basic, Advanced — each with a name, a price, and a few sentences.
 
-The server's job is to pass this string to GPT. The prompt was assembled by the browser from `calculateCurrentPositions`, `calculateTransitAspects`, and `getCurrentMoonPhase` — three client-side functions that produce astrological data the server has never verified.
+I want to sit with what it does not say.
 
-Now consider: this card is cached to `localStorage` by sun-longitude and date. If the cache exists, the GPT result from a previous session is served, no recalculation happens. The sky has changed. The user's phone says today is Wednesday. But the cached reading from Tuesday is what they see. They do not know this. The small "↻ ask again" button exists, but nothing tells them the reading may be stale. Nothing on the screen signals that the sky it was computed from is from yesterday.
+The Free card says: "Three readings a day — a morning consultation with the sky. No cost, no card." This is good. It is honest about what free means.
 
-A person who reads "Venus is softening your interactions today" on a Wednesday when Venus was softening things yesterday is being quietly misled. Not maliciously. But carelessly.
+The Basic card says: "Twenty readings a day. Enough to explore every corner of your chart across a full day's reflection."
 
-The server, if it computed its own sky context, could check: was this reading generated from the current sky? Does the stored cache key match today's planetary positions? The server never asks this question because it cannot — it does not know what "today's planetary positions" are.
+But it does not say: *what you were just trying to do — Solar Return — is available on Basic.* It does not say whether synastry is available on Basic. It does not say whether the Journal and Dream features require a higher tier. A person standing at this modal, deciding whether $9 a month is worth it, is deciding based on incomplete information. They know they want more readings. They do not know if more readings will give them access to the features they have not yet tried, or if those features are locked to Advanced.
 
-### The Journal Annotation
+The product currently treats all features as reading-count-limited, not tier-gated. But the user standing at this modal cannot know that. They see three tiers. They see different prices. They assume the more expensive tier unlocks more features, not merely more readings. And the modal does nothing to correct this assumption.
 
-`JournalEntryCard.tsx` calls `generateJournalEntryAnnotation` with `topTransits` and `moon` computed by the browser for the entry's historical date. The server receives these as `topTransits: TransitAspect[]` and `moonPhase: string` — pre-computed, pre-filtered, handed over.
+A person spending $9 who later discovers that Advanced at $29 does not add more feature access — only more reading count — will feel misled. Not because the product lied. Because the product was vague at the moment when clarity would have meant the most.
 
-The annotation that arrives is permanently attached to this journal entry. It is stored. It is re-read. Weeks later, the person reads: "Saturn pressing on your Mercury at this time called for deliberate communication." That annotation was written from three transit aspects the browser selected, with the orbs the browser calculated, filtered by the browser's `getTopActiveTransits` function. If the browser selected the wrong three aspects — because it had a bug, because the historical transit calculation had an edge case, because the orb sorting was affected by retrograde motion it did not fully account for — the annotation is permanently wrong. It lives in the journal. It becomes part of the person's understanding of that moment in their life.
-
-The server cannot verify this. The server received a list. It trusted the list.
-
-### The Dream Interpretation
-
-The dream handler is the one place where the server learned to check. If the client sends no `chartData`, the server now computes the natal chart from stored birth data. If the client sends no `skyContext`, the server computes the moon and top transits itself.
-
-This is the dream handler that was fixed in sprint-0011's referenced commits. It shows what is possible. It shows the pattern. And it makes every other handler look more naked by comparison.
-
-When the person logs a dream, the server stands behind them and checks: did you send me what I need? If not, I will compute it myself. I will not serve you a reading built on nothing.
-
-When the person asks for a transit reading, the server does not stand behind them. It opens the envelope and reads whatever is inside.
-
-This inconsistency is not a technical problem. It is a trust problem. The product is more reliable in one dark corner than in its main features.
+The `TierSection` component renders `description` as a paragraph. It would take one sentence per tier to say: "All features — natal chart, transits, synastry, solar return, journal, dreams — are available on every tier. This plan adds more readings per day." That sentence would transform the modal from an obstacle into a clear invitation. It would also be true. And it would prevent the frustration of a user who upgrades to Basic hoping to unlock synastry, and then wonders why they are not seeing anything new.
 
 ---
 
-## What It Means to Compute Without a Witness
+## The Dismissal Button
 
-I want to name what I am describing in plain terms, because I think the sprint vision understands it technically but I want to say what it means for a person.
+At the bottom of the UpgradeModal, there is a dismiss button:
 
-When you compute a reading only in the browser, the reading has no witness. The browser ran the calculation, assembled the words, sent them. The server received words. There is no record of what calculation was performed. There is no authority that can say: yes, this reading was computed correctly. Yes, the aspects in this journal annotation reflect what was actually in the sky on that date. Yes, the transits in this daily snapshot are the transits that are active right now.
+> "Continue with free — your sky resets at {resetTime}"
 
-The person using this product deserves a witness. Not because they will ever ask for one. Not because they would understand the difference. But because craftspeople do not build things that lie to users without their knowledge. The lie does not have to be malicious. It does not have to be discovered. It is still a lie.
+This is a beautiful sentence. It does exactly what a good product should do: it tells you when you can come back, it uses the product's language ("your sky"), and it does not make you feel punished for not paying.
 
-The server that can compute its own transits, its own aspects, its own solar return, its own synastry cross-aspects — that server is a witness. Not a backup. A witness. When the client computes and the server verifies, the reading has integrity. When only the client computes and the server executes blindly, the reading is good-faith guesswork at best.
+But it is the smallest element on the screen. It is styled with `rgba(201,168,76,0.35)` — a very dim gold. The visual hierarchy says: the important things are the upgrade buttons. The dismiss is the afterthought.
 
----
+I understand the commercial impulse. Make the paid option prominent. But there is a cost to this visual hierarchy that the commercial thinking does not account for. When a person feels they are being pressured rather than invited, they do not upgrade. They leave. They remember the feeling of being cornered. They do not come back.
 
-## The Soul the Infrastructure Work Must Have
+The dismiss button, made only slightly more present — not brighter, not bigger, but given space to breathe, perhaps its own visual moment before the CTA — would communicate something important: *we know you may not be ready, and that is fine.* That trust, offered freely, builds more goodwill than a slightly louder CTA.
 
-Sprint 0012 is described as infrastructure. The sprint vision is careful to say: this is not a new feature. No new pages. No new GPT prompts. No frontend changes. Just the backend becoming sovereign.
-
-I understand why it has to be said that way. It is true in the technical sense. But I want to say something the sprint vision does not say: this work, done well, will change what this product is.
-
-Not visibly. The user will not see a new screen. The daily snapshot will look the same. The transit reading will look the same. The journal annotations will look the same.
-
-What will change is what happens when something goes wrong. Right now, when something goes wrong on the client side — when a calculation misses an aspect, when a prompt is assembled from stale data, when a historical date is computed at the wrong UTC boundary — the product fails silently. It serves a reading that is wrong, and no one knows.
-
-After this sprint, when the server can compute its own transits and aspects and solar return and synastry, the server can catch what the client missed. Not by replacing the client — the sprint vision is explicit that the client-side calculations stay in place for instantaneous UI. But by standing behind them. By being the authority that checks.
-
-That is the soul of this work: the product stops being a post office and becomes an astrologer.
+The product's language is good. "Your sky resets at midnight UTC" is poetry. It is not punishing language. But the visual weight around it turns good language into small language.
 
 ---
 
-## What Would Show Care
+## The Counter That Does Not Follow the Person
 
-I am going to name five specific things that, if done with care, would make this sprint give something to the person on the other end — even if they never see it.
+There is a quiet problem in how the usage counter works. It is described in the sprint vision as a technical gap — `todayUsed` is session-loaded only, never incremented after a reading completes — but I want to describe what it feels like from the other side.
 
-**The daily snapshot should be computable entirely server-side for authenticated users.** Not because the user will notice. Because it is wrong for a personalized daily reading to be entirely dependent on the client having run correctly. An authenticated user whose birth data is stored should be able to receive a daily snapshot that the server assembled from its own transit calculation, with its own sky context, verified against its own chart computation. The product would then know: this reading is correct. Not "I hope the browser got it right."
+A free user makes their natal reading. The header's dropdown (if they know to open it) shows "2 readings left today." They make their transit reading. They return to the home screen. The badge still says "2 readings left today." They make another attempt. The wall appears.
 
-**Journal annotations, once generated server-side, should never degrade.** Right now the annotation is computed from whatever the browser sends. If the browser sends three transits, the annotation reflects three transits. If the browser had a calculation error and sent the wrong three, the annotation reflects the wrong three, permanently. A server that can compute `getTopActiveTransits` for any historical date can verify what was sent against what it calculates independently. If they match, great. If they diverge, the server's version takes precedence. The journal entry is permanent. It deserves computation that is permanent in quality.
+The counter did not follow them. It told them they had two remaining when they had one. The product gave them false confidence, and then a wall.
 
-**The transit reading prompt should not be an opaque string.** The current architecture of `handleTransitInterpretation` receiving `{ systemPrompt: string }` is the single most visible symbol of the problem. That endpoint is a vending machine: insert string, receive GPT response. The backend cannot improve the prompt, cannot verify it, cannot add context the client missed. After this sprint, the endpoint should receive birth data and a transit period and a target date, and the server should compute the prompt. Not because the frontend prompt was wrong — it may have been perfectly correct — but because the server having computed it means there is an authority behind the words.
+This is the small version of the hidden lie I wrote about in the sprint-0012 analysis. The product knows the truth — the server tracks usage correctly. The UI does not surface that truth after each reading. The person is therefore navigating by a map that stopped updating.
 
-**The `buildTransitPrompt`, `buildSynastryPrompt`, and `buildSolarReturnPrompt` functions must not live only on the client.** These functions are where astrological judgment is encoded in language. They decide which aspects to prioritize, how to frame the house context, what element analysis to include. Right now, if a new type of user session is introduced — a background notification, a scheduled weekly reading, a journal pattern analysis — those features must either call the client or rebuild the prompt logic from scratch. The prompt builders are the grammar of this product's voice. That grammar should live where the product lives: on the server.
-
-**Error states should never present as authoritative.** I looked at what happens when `getDailySnapshotInterpretation` fails in `DailySnapshotCard.tsx`:
-
-```typescript
-} catch (err) {
-  if (!cancelled) {
-    setError(err instanceof Error ? err.message : 'Failed to load daily snapshot.')
-  }
-}
-```
-
-The error state renders as `<p className="text-mystic-muted text-sm italic">{error}</p>`. A dismissive italic line. Nothing that tells the person what happened or what they can do. The error message itself may be a raw technical string — "GPT_SERVER_ERROR" — or the fallback string "Failed to load daily snapshot." Neither of these tells the person anything useful. Neither of them shows care.
-
-When the server can compute its own context, some error states become unnecessary — the server can fall back to its own calculation rather than returning nothing. But where errors genuinely cannot be recovered, the product should say something that does not sound like a machine that gave up. Not a long apology. One sentence that acknowledges the person waiting: "The sky is a little out of reach right now. Try again in a moment." That is the difference between a product that hid when something went wrong and a product that stayed present.
+The fix is described in the sprint vision: after each successful GPT call, increment `todayUsed` locally. This is correct and sufficient. But I want to name the quality this fix adds: it turns the counter from a snapshot into a companion. A companion that walks with you and tells you where you stand, after each step, not just at the beginning of the journey.
 
 ---
 
-## The Question I Always Ask
+## The SEO/Meta Tag Surface as a Moment of Care
 
-Would I be proud to put my name on this?
+When someone pastes a link to Astral Chart into iMessage, or into Slack, or into a tweet, the current result is this:
 
-Not on the visual design. The visual design has real beauty in it. The dark backgrounds, the gold accents, the way the moon phases are rendered. Someone cared about those things.
+- Title: `Astral Chart — Birth Chart Reading`
+- Description: (none)
+- Image: (none, or the Vite logo from `/vite.svg`)
 
-I am asking about the thing underneath. The thing the user never sees. The calculation that produces the transit list that becomes the prompt that becomes the words they read on a Wednesday morning and carry into their day.
+This is the product's handshake with the world. It is the first impression a stranger has before they decide whether to click. And it is entirely generic.
 
-Right now, if I had to answer honestly: no. Not because the reading is wrong. It is probably right most of the time. But "probably right most of the time" is the standard of a product that hopes for the best. It is not the standard of a product that stands behind what it says.
+Consider what this product actually is. It is a product that gives someone their Sun, Moon, and Rising — the three things many people use to introduce themselves online. It is a product where a person discovers that they are a Scorpio Sun with Cancer Rising and Virgo Moon, and this combination finally explains something about themselves they have been trying to articulate for years. That is the promise of this product. That is what should be in the description.
 
-Sprint 0012 is the sprint where the backend stops hoping and starts knowing. That is not a small thing. That is the difference between a product that generates readings and a product that computes truth.
+The `<meta name="description">` tag should say something close to: "Discover your natal chart — your Sun, Moon, and Rising — and what the sky reveals about love, purpose, and the patterns in your life." Not a mission statement. A sentence that speaks to the person who has always been curious about astrology but has not yet found a product that takes it seriously.
 
-The user will never see it. But they will feel it — in the consistency, in the reliability, in the quiet absence of subtle wrongness. In the way the daily snapshot for Tuesday and Wednesday and Thursday feel like they were computed from the actual sky, not from whatever the browser happened to calculate in that session.
+The Open Graph image should be a real asset — even a simple SVG of the chart wheel against the dark background with the gold accents — not a Vite default. The moment someone shares a link and a beautiful chart image appears in the preview, the product has communicated something: *we thought about how we would look when introduced to your friends.* That is a form of care that takes five minutes to implement and lasts forever.
 
-That quiet reliability is what care looks like when it is not performing.
+The title could be more specific to what people actually search for: "Astral Chart — Free Birth Chart & Astrology Reading." Not because keyword optimization is inherently good, but because a person searching for "free birth chart reading" deserves to find this product and immediately understand what it is.
+
+The canonical URL and the favicon — currently `/vite.svg`, the Vite.js default — are details that say, implicitly: *we did not finish this.* Vite.svg as a favicon is the equivalent of leaving scaffolding outside a finished building. It tells anyone who notices: the people who built this were focused on the inside, not the entrance.
 
 ---
 
-## Proposals
+## The Loading State as a Missed Conversation
 
-**Proposal 1 — Server-Assembled Transit Prompts**
+The product has beautiful loading states. The spinning star (`✦`), the crescent moon (`☽`), the heart (`♡`) for synastry — each one is matched to the reading type. Someone cared about this.
 
-`handleTransitInterpretation` should stop accepting `{ systemPrompt: string }`. It should accept `{ transitPeriod, targetDate? }` for authenticated users and compute the prompt entirely server-side: the natal chart from stored birth data, the transits for the period, the aspects sorted and filtered by the same logic as the frontend, the element profile, the house context. The `buildTransitPrompt` function should be ported to `server/engine/` as part of the transit engine addition. The client can still build its own prompt for instantaneous display — but the server's computation is the one that actually reaches GPT.
+But the copy underneath does not always match the care in the symbol.
 
-**Proposal 2 — Server-Computed Daily Snapshot for Authenticated Users**
+For transit loading:
 
-`handleDailySnapshot` should accept `{}` for authenticated users (no payload required) and compute the daily snapshot entirely server-side: current positions calculated with `calculateCurrentPositions`-equivalent server logic, aspects via `getActiveTransitAspects`, moon info via `getMoonInfo`, personal day via the server-side numerology port. The client-assembled prompt path can remain as a fallback for unauthenticated sessions. But authenticated users should receive readings the server knows are correct.
+> "Consulting the stars..."
+> "Mapping the sky for your chart..."
 
-**Proposal 3 — Journal Annotation with Server-Side Transit Verification**
+For synastry loading:
 
-`handleJournalAnnotation` currently accepts `topTransits` from the client without question. It should optionally verify by computing `getActiveTransitAspects` for the entry's date server-side, and if the server-computed transits differ meaningfully from what the client sent, use the server's version. The verification should be lightweight — not a full engine call for every annotation — but the capability should exist. For authenticated users annotating historical entries, the server has birth data and the entry date; it has everything it needs.
+> "Reading your celestial bond..."
+> "Aligning two cosmic blueprints..."
 
-**Proposal 4 — Explicit Loading State Language That Acknowledges the Person**
+For solar return loading:
 
-In `DailySnapshotCard.tsx`, the loading state says "Reading today's sky for your chart…" — this is fine. But the error state is a bare italic line. Error states across the reading surfaces should acknowledge the person: "The stars are momentarily quiet — try again in a moment" is one sentence that shows the product stayed present when something went wrong. This is a small change but it is the kind of small change that distinguishes a product that cares from a product that processes.
+> "Tracking the Sun's return..."
+> "Calculating your solar threshold..."
 
-**Proposal 5 — No Silent Fallbacks Without Signal**
+These are fine. Some are quite good. "Calculating your solar threshold" has real texture. But they are all in the same mode: they describe what the machine is doing. They do not address the person waiting.
 
-When the server falls back to a partial reading — when it computed the natal chart but could not compute transits, or when it served yesterday's cached snapshot because today's computation failed — the user should have a small, non-alarming signal. Not an error. A note. Something like "Computed from last available sky data." They do not need to understand what it means. But the product should not present a fallback reading with the same visual confidence as a reading it verified. That gap between what is displayed and what was computed is the gap between a product that shows care and a product that shows its work only to the people who already know what to look for.
+A loading state is a moment of suspension. The person is in a state of anticipation — they submitted themselves, their birth data, their question, and they are waiting to be answered. This is a moment when the product can either pass in silence or say something that acknowledges the waiting.
+
+"Reading two charts to understand the space between them" is closer to the person than "Aligning two cosmic blueprints." The difference is grammatical: the second one describes a process; the first one names a human concern. The person asking for synastry is asking: *why is it hard between me and this person? Why do we connect in some ways and struggle in others?* The loading copy could hold that question for a moment, rather than narrating technical steps.
+
+This is a small thing. I raise it not because it is critical for the sprint, but because the sprint vision asks where mechanical moments should feel human, and loading states are exactly those moments.
+
+---
+
+## The Auth Nudge as an Interruption
+
+The home screen's `renderAuthNudge()` function shows a small button above the primary CTA when the user has one reading remaining or has hit their limit.
+
+When `todayUsed === 2`:
+> "1 reading left today ✦ Upgrade for more"
+
+When `todayUsed >= 3`:
+> "Daily limit reached ✦ Upgrade to continue"
+
+The button is tiny — `text-xs`, left-aligned, slightly transparent gold. It sits above the "Get Your Readings ✦" CTA as an afterthought. It is not visually integrated with anything. It floats between the change-birth-information link and the DailySnapshotCard.
+
+The problem is not the copy — the copy is fine. The problem is what it communicates by its visual weight: this information is optional. You can look at it or not. It is not important enough to take up real space on the screen.
+
+But the information it holds is the most practically important information on the home screen for a free user who is about to hit a wall. It is the only thing that could prevent the wall experience. And it is rendered at `text-xs` in `rgba(201,168,76,0.60)`, smaller than the "Welcome back" label at the top of the panel.
+
+I am not asking for a large warning banner. I am asking that the information about remaining readings be given the same visual dignity as the information about their Sun sign. The identity line at the top of the panel says: "Sun in ♏ Scorpio · ♋ Cancer Rising · Moon in ♍ Virgo." This is rendered in `font-heading text-lg`. The remaining-readings information is rendered in `text-xs`. The visual hierarchy says: your sign placements matter; your remaining readings do not.
+
+A person who sees "1 reading left today" rendered with the same care as their identity line will treat it differently. Not with alarm. But with awareness. They will make their last reading choice consciously, not accidentally hit the wall in the middle of trying Solar Return.
+
+---
+
+## The `getHeading` Function and What It Does Not Acknowledge
+
+The UpgradeModal has a function called `getHeading` that produces the title shown at the top of the modal. For a free unauthenticated user who has used their three readings:
+
+> "Three free readings per day. You've used yours."
+
+For a free authenticated user who has used their three readings:
+
+> "Your readings for today have ended."
+
+For a basic tier user who has used their twenty readings:
+
+> "You've explored the full sky today."
+
+The third one is the best. "You've explored the full sky today" acknowledges the person's action rather than describing an administrative event. It turns a limit into a completed journey. Someone thought about this.
+
+But "Your readings for today have ended" is passive and cold. It sounds like a service announcement. The readings did not end — the person used them. The distinction matters because one phrasing respects what the person did (they engaged, they read, they explored) and the other sounds like something was taken away.
+
+"You've read your sky for today" would be one word away from the basic tier's beautiful copy. It would match the product's voice. It would acknowledge the person's action rather than the system's response.
+
+The unauthenticated variant is sharper: "Three free readings per day. You've used yours." The second sentence is slightly accusing. "You've used yours" — as though the readings were rationed and they consumed their ration. Compare: "You've had three readings today. Ready for more?" The question opens a door; "You've used yours" closes it.
+
+These are not large changes. They are the difference between copy that was written and copy that was felt. Every word in the UpgradeModal is a word that a person reads at the moment when they wanted something and encountered a limit. Those words deserve the most care in the product, not the least.
 
 ---
 
 ## What This Sprint Could Be
 
-There is a version of this product where every GPT reading that reaches a user was computed by a server that knows what it computed. Where the daily snapshot says "today Jupiter is sextile your natal Venus, orb 1.3°, applying" and the server that sent those words is the same authority that calculated those words. Where the journal annotation from three months ago reflects what the server computed was in the sky on that date, not what the browser happened to calculate in that session.
+I want to say this plainly.
 
-That version of the product respects the person using it. Not because they can tell the difference. Because the people who built it decided that being trustworthy mattered even when no one was watching.
+This sprint is not about features. It is about whether this product respects the people who use it. Respects their time — by showing them how many readings remain before they need it, not after. Respects their intelligence — by being honest in the UpgradeModal about what each tier includes and what it does not. Respects their arrival — by having a title and description and image in the HTML that says "we thought about how you would first see us." Respects their trust — by having a usage counter that tells the truth after every reading, not just at the start of a session.
 
-The frontend will still run fast. The browser will still compute transits the moment the chart loads, before the server has time to respond. Nothing visible changes. The user experience stays instantaneous.
+None of these are hard. None of them require rethinking the architecture. They are the last five percent of care that separates a product someone built from a product someone finished.
 
-But behind the screen, there will be an authority that checked. That computed its own numbers. That can stand behind the words.
+The spinning star in the loading screen is beautiful. The dark background with gold accents is beautiful. The language in the "your sky resets at midnight" dismiss button is beautiful. The foundation has care in it.
 
-That is the soul infrastructure work earns.
+What is missing is the care that operates in the periphery — in the places where the product has to say something difficult (you've hit your limit), or announce itself to strangers (the meta tags), or keep a counter honest (the usage badge). In those places, the product has been practical rather than thoughtful. Functional rather than felt.
+
+This sprint is the chance to close that gap. Not by adding new things. By caring about the things that are already there.
+
+---
+
+## Proposals
+
+**Proposal 1 — The Limit Should Walk With the Person**
+
+The `SessionBadge` should show the remaining readings count inline in the header, always visible, without requiring a click, when `remaining <= 2` for free-tier authenticated users. The label should use the product's own vocabulary — not "2 readings left today" but "2 skies left today" — to make the limit feel like an extension of the product's language rather than a bureaucratic constraint. For unauthenticated users, the same inline signal should appear after the second reading is consumed, using the IP-based `todayUsed` that already exists in context.
+
+**Proposal 2 — The UpgradeModal Should Name What Is True**
+
+Add a single honest sentence to the `TierSection` for both Basic and Advanced: "All features — natal chart, transits, synastry, solar return, journal, dreams — are available on every plan. This plan gives you more readings each day." This removes the implicit feature-gating assumption and makes the upgrade decision about what it actually is: frequency of use, not capability.
+
+**Proposal 3 — The Headings Should Acknowledge What the Person Did**
+
+Change `getHeading` for `currentTier === 'free'` (authenticated) from "Your readings for today have ended" to "You've read your sky for today." Change the unauthenticated heading from "Three free readings per day. You've used yours." to "You've had three readings today — that is a good beginning." These are not softer. They are more honest: they acknowledge the person's action rather than the system's limit.
+
+**Proposal 4 — The index.html Should Earn Its Impression**
+
+Add `<meta name="description">` with copy that speaks to what the product actually offers. Add Open Graph and Twitter Card tags with a title, description, and image that would produce a meaningful preview card when pasted into iMessage or Slack. Replace the `/vite.svg` favicon reference with an actual asset — even a 32x32 SVG of the star glyph in gold on a dark background is better than the Vite default. None of this is cosmetic: this is the product's first impression with everyone who arrives from a shared link.
+
+**Proposal 5 — The Counter Should Tell the Truth After Every Reading**
+
+After every successful GPT interpretation call, increment `todayUsed` in `AuthContext` locally. This is a one-line change with one condition: the change should happen in the place where a reading is confirmed to have succeeded, not where it was attempted. The counter that does not update is a companion that stopped walking with the person. This fix makes it walk again.

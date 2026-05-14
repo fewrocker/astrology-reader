@@ -23,8 +23,8 @@ import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
-import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
-import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
+import { calculateSynastry } from './engine/synastry'
+import { calculateSolarReturn } from './engine/solarReturn'
 import { getGptInterpretation, getSolarReturnInterpretation, getSynastryInterpretation, getCoupleTransitInterpretation, RateLimitError } from './services/gptInterpretation'
 import type { RateLimitInfo } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
@@ -79,17 +79,31 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
   const remaining = (tierLimits[tier] ?? 3) - todayUsed
   const tierLabel = tier === 'basic' ? 'Basic ✦' : tier === 'advanced' ? 'Advanced ✦' : null
   const readingsLabel = tier === 'free' ? `${remaining} reading${remaining !== 1 ? 's' : ''} left today` : null
-
   return (
     <div ref={ref} className="absolute right-0 top-1/2 -translate-y-1/2">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="text-xl transition-colors"
+        className="flex items-center text-xl transition-colors"
         style={{ color: '#c9a84c', lineHeight: 1, filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.5))' }}
         aria-label="Account menu"
         title={displayName}
       >
+        {tier === 'free' && remaining <= 1 && (
+          <span
+            className="font-heading"
+            aria-hidden="true"
+            style={{
+              fontSize: '0.65rem',
+              color: 'rgba(201,168,76,0.55)',
+              letterSpacing: '0.04em',
+              marginRight: '0.35rem',
+              lineHeight: 1,
+            }}
+          >
+            {remaining === 1 ? '1 left' : '0 left'}
+          </span>
+        )}
         ✦
       </button>
       {open && (
@@ -213,7 +227,7 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
-  const { isAuthenticated, tier } = useAuth()
+  const { isAuthenticated, tier, isLoading: authLoading, incrementTodayUsed } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
@@ -317,9 +331,15 @@ function AppContent() {
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         void prompt // built for local display only; server recomputes from period
         const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
+        incrementTodayUsed()
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        // Must fire only on success (not on RateLimitError or network error).
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -376,9 +396,14 @@ function AppContent() {
           { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
           { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
         )
+        incrementTodayUsed()
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -423,9 +448,14 @@ function AppContent() {
           state.synastryTransitPeriod!,
           state.synastryTransitTargetMonth ?? undefined,
         )
+        incrementTodayUsed()
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -480,9 +510,14 @@ function AppContent() {
 
         // Get GPT interpretation asynchronously — server computes from stored birth data
         const interpretation = await getSolarReturnInterpretation(srData.targetYear)
+        incrementTodayUsed()
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
+          incrementTodayUsed()
         }
       } catch (e) {
         if (e instanceof RateLimitError) {
@@ -501,7 +536,21 @@ function AppContent() {
   }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cachedBirthDataExists] = useState(() => hasCachedBirthData())
-  const showCachedLanding = state.view === 'form' && cachedBirthDataExists && !!state.birthData.date && !!state.birthData.city
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-mystic-bg flex flex-col items-center justify-center gap-4">
+        <div className="starfield" aria-hidden="true" />
+        <div className="relative z-10 flex flex-col items-center gap-4">
+          <div className="text-4xl animate-spin" style={{ animationDuration: '3s' }} aria-hidden="true">✦</div>
+          <p className="font-heading text-mystic-gold text-xl">Astral Chart</p>
+          <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
+        </div>
+      </div>
+    )
+  }
+
+  const showCachedLanding = state.view === 'form' && (cachedBirthDataExists || state.formCompleted) && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 

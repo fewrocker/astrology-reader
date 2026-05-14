@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AuthModal from '../auth/AuthModal'
+import { track } from '../../services/analytics'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -40,15 +41,15 @@ function getHeading(
     return 'This reading requires the Advanced sky.'
   }
   if (!authenticated) {
-    return "Three free readings per day. You've used yours."
+    return "You've had three readings today — that's a good beginning."
   }
   if (currentTier === 'free') {
-    return 'Your readings for today have ended.'
+    return "You've read your sky for today."
   }
   if (currentTier === 'basic') {
     return "You've explored the full sky today."
   }
-  return 'Your readings for today have ended.'
+  return "You've read your sky for today."
 }
 
 export default function UpgradeModal({
@@ -60,11 +61,25 @@ export default function UpgradeModal({
   intendedTier,
 }: UpgradeModalProps) {
   const [authModalOpen, setAuthModalOpen] = useState(false)
-  const [pendingTierForAuth, setPendingTierForAuth] = useState<'basic' | 'advanced' | null>(null)
   const [checkoutState, setCheckoutState] = useState<'idle' | 'ceremony' | 'error'>('idle')
-  const [ceremonyStartedAt, setCeremonyStartedAt] = useState<number>(0)
   const firstFocusRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const ceremonyStartedAtRef = useRef<number>(0)
+  const pendingTierAfterAuth = useRef<{ tier: 'basic' | 'advanced'; priceId: string } | null>(null)
+
+  // Spec 5 — handleDismiss wraps onClose with upgrade_dismissed tracking.
+  // The checkoutState property captures whether the user dismissed during an error
+  // (tried and failed) vs at idle (decided not to upgrade) — qualitatively different signals.
+  // Defined before the keyboard useEffect so the handler closure can reference it.
+  const handleDismiss = useCallback(() => {
+    track('upgrade_dismissed', {
+      currentTier,
+      authenticated,
+      intendedTier: intendedTier ?? null,
+      checkoutState,
+    })
+    onClose()
+  }, [currentTier, authenticated, intendedTier, checkoutState, onClose])
 
   useEffect(() => {
     if (isOpen) {
@@ -73,10 +88,25 @@ export default function UpgradeModal({
     }
   }, [isOpen])
 
+  // Spec 1 — fire upgrade_modal_seen when modal opens.
+  // Separate from the reset effect above so the analytics call is never coupled
+  // to focus management. The heading property is the exact string shown, which
+  // enables future copy-experiment attribution without a new deploy.
+  useEffect(() => {
+    if (!isOpen) return
+    track('upgrade_modal_seen', {
+      currentTier,
+      authenticated,
+      intendedTier: intendedTier ?? null,
+      heading: getHeading(currentTier, authenticated, intendedTier),
+    })
+  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!isOpen) return
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      // Spec 5 — Escape key calls handleDismiss so the dismissal is tracked.
+      if (e.key === 'Escape') handleDismiss()
       // Trap focus inside modal
       if (e.key === 'Tab' && containerRef.current) {
         const focusable = Array.from(
@@ -102,22 +132,11 @@ export default function UpgradeModal({
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [isOpen, onClose])
+  }, [isOpen, handleDismiss])
 
-  if (!isOpen && !authModalOpen) return null
-
-  const heading = getHeading(currentTier, authenticated, intendedTier)
-  const resetTime = formatResetAt(resetAt)
-
-  const handleCheckout = async (priceId: string, tier: 'basic' | 'advanced') => {
-    if (!authenticated) {
-      setPendingTierForAuth(tier)
-      setAuthModalOpen(true)
-      return
-    }
-
+  const runCheckoutSession = useCallback(async (priceId: string, tier: 'basic' | 'advanced') => {
     const start = Date.now()
-    setCeremonyStartedAt(start)
+    ceremonyStartedAtRef.current = start
     setCheckoutState('ceremony')
 
     try {
@@ -135,6 +154,9 @@ export default function UpgradeModal({
       const remaining = Math.max(0, 2000 - elapsed)
 
       if (!res.ok) {
+        // Spec 4 — upgrade_checkout_failed with reason 'server_error' (non-2xx response).
+        // Fires before the ceremony wait so the event is not suppressed by the timer.
+        track('upgrade_checkout_failed', { tier, currentTier, authenticated, reason: 'server_error' })
         await new Promise(r => setTimeout(r, remaining))
         setCheckoutState('error')
         return
@@ -142,33 +164,74 @@ export default function UpgradeModal({
 
       const data = await res.json() as { url?: string }
       if (!data.url) {
+        // Spec 4 — upgrade_checkout_failed with reason 'no_url' (2xx but no url in body).
+        track('upgrade_checkout_failed', { tier, currentTier, authenticated, reason: 'no_url' })
         await new Promise(r => setTimeout(r, remaining))
         setCheckoutState('error')
         return
       }
+
+      // Spec 3 — upgrade_checkout_started fires after data.url is confirmed, before redirect.
+      // This event represents a Stripe session successfully created.
+      track('upgrade_checkout_started', { tier, currentTier, authenticated })
 
       // Hold for ceremony minimum (2s), cap at 4s total
       const waitMs = Math.max(remaining, 0)
       await new Promise(r => setTimeout(r, waitMs))
       window.location.href = data.url
     } catch {
-      const elapsed = Date.now() - ceremonyStartedAt
+      // Spec 4 — upgrade_checkout_failed with reason 'network_error' (fetch threw).
+      track('upgrade_checkout_failed', { tier, currentTier, authenticated, reason: 'network_error' })
+      const elapsed = Date.now() - ceremonyStartedAtRef.current
       await new Promise(r => setTimeout(r, Math.max(0, 2000 - elapsed)))
       setCheckoutState('error')
     }
+  }, [])
+
+  const handleCheckout = async (priceId: string, tier: 'basic' | 'advanced') => {
+    // Spec 2 — upgrade_cta_clicked fires as the FIRST statement, before any auth guard.
+    // This ensures the event fires even for unauthenticated users who are redirected to
+    // the auth flow, not just for users who proceed directly to Stripe.
+    track('upgrade_cta_clicked', {
+      tier,
+      currentTier,
+      authenticated,
+      intendedTier: intendedTier ?? null,
+    })
+
+    if (!authenticated) {
+      pendingTierAfterAuth.current = { tier, priceId }
+      setAuthModalOpen(true)
+      return
+    }
+    await runCheckoutSession(priceId, tier)
   }
 
-  const handleAuthComplete = async () => {
+  const handleAuthComplete = () => {
     setAuthModalOpen(false)
-    if (pendingTierForAuth) {
-      const priceId = pendingTierForAuth === 'basic' ? BASIC_PRICE_ID : ADVANCED_PRICE_ID
-      const tier = pendingTierForAuth
-      setPendingTierForAuth(null)
-      // Small delay to let auth context settle
-      await new Promise(r => setTimeout(r, 300))
-      await handleCheckout(priceId, tier)
-    }
+    // pendingTierAfterAuth.current holds { tier, priceId } — useEffect below picks it up
   }
+
+  // After auth completes, authenticated prop will update to true on next render.
+  // If pendingTierAfterAuth.current is set, trigger the checkout in the React render cycle
+  // where the authenticated prop is guaranteed to be fresh — no stale closure risk.
+  const authenticatedRef = useRef(authenticated)
+  useEffect(() => {
+    authenticatedRef.current = authenticated
+  }, [authenticated])
+
+  useEffect(() => {
+    if (authenticated && pendingTierAfterAuth.current && !authModalOpen) {
+      const { priceId, tier } = pendingTierAfterAuth.current
+      pendingTierAfterAuth.current = null
+      void runCheckoutSession(priceId, tier)
+    }
+  }, [authenticated, authModalOpen, runCheckoutSession])
+
+  if (!isOpen && !authModalOpen) return null
+
+  const heading = getHeading(currentTier, authenticated, intendedTier)
+  const resetTime = formatResetAt(resetAt)
 
   const primaryTier: 'basic' | 'advanced' =
     intendedTier ?? (currentTier === 'basic' ? 'advanced' : 'basic')
@@ -180,7 +243,7 @@ export default function UpgradeModal({
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.80)', backdropFilter: 'blur(4px)' }}
-          onClick={e => { if (e.target === e.currentTarget) onClose() }}
+          onClick={e => { if (e.target === e.currentTarget) handleDismiss() }}
         >
           <div
             ref={containerRef}
@@ -194,10 +257,10 @@ export default function UpgradeModal({
             aria-modal="true"
             aria-label="Upgrade your sky"
           >
-            {/* Close */}
+            {/* Close — Spec 5: calls handleDismiss instead of onClose directly */}
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleDismiss}
               className="absolute top-4 right-4 text-lg transition-colors z-10"
               style={{ color: 'rgba(201,168,76,0.35)' }}
               onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.75)')}
@@ -220,7 +283,7 @@ export default function UpgradeModal({
                   showSecondaryAdvanced={showSecondaryAdvanced}
                   checkoutError={checkoutState === 'error'}
                   onCheckout={handleCheckout}
-                  onClose={onClose}
+                  onDismiss={handleDismiss}
                   firstFocusRef={firstFocusRef}
                 />
               )}
@@ -267,7 +330,7 @@ interface TierPresentationProps {
   showSecondaryAdvanced: boolean
   checkoutError: boolean
   onCheckout: (priceId: string, tier: 'basic' | 'advanced') => void
-  onClose: () => void
+  onDismiss: () => void
   firstFocusRef: React.RefObject<HTMLButtonElement>
 }
 
@@ -280,7 +343,7 @@ function TierPresentation({
   showSecondaryAdvanced,
   checkoutError,
   onCheckout,
-  onClose,
+  onDismiss,
   firstFocusRef,
 }: TierPresentationProps) {
   return (
@@ -315,13 +378,13 @@ function TierPresentation({
         />
         <TierSection
           name="Basic"
-          description={`Twenty readings a day. Enough to explore every corner of your chart across a full day's reflection.`}
+          description="Every feature — natal chart, transits, synastry, solar return, journal, and dreams — is available on every plan. Basic adds twenty readings per day, enough to explore your chart from multiple angles."
           isCurrentTier={currentTier === 'basic'}
           price={`$${BASIC_PRICE}/month`}
         />
         <TierSection
           name="Advanced"
-          description="One hundred readings a day, and a new power that only time can reveal: patterns across your journal and your dreams — what the sky has been building while you were keeping it."
+          description="Every feature — natal chart, transits, synastry, solar return, journal, and dreams — is available on every plan. Advanced gives you a hundred readings per day — the depth for an astrologer's practice or a season of intensive inquiry."
           isCurrentTier={currentTier === 'advanced'}
           price={`$${ADVANCED_PRICE}/month`}
         />
@@ -386,10 +449,10 @@ function TierPresentation({
           </button>
         )}
 
-        {/* Dismiss */}
+        {/* Dismiss — Spec 5: calls onDismiss (wraps onClose with analytics) */}
         <button
           type="button"
-          onClick={onClose}
+          onClick={onDismiss}
           className="w-full py-2 text-xs transition-colors text-center"
           style={{ color: 'rgba(201,168,76,0.35)' }}
           onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.6)')}
