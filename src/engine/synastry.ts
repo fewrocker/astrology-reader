@@ -204,7 +204,9 @@ export function calculateCompositeChart(
       ...zodiac,
       name,
       retrograde: false, // Composite planets aren't retrograde
-      house: 0, // Will be calculated from composite angles if available
+      house: 0, // Deferred: composite house cusps require Placidus derivation from composite Ascendant.
+                // Until computed, computeTransitAspectBrief falls to generic ASPECT_BRIEFS fallback.
+                // See feat-couple-transit-aspect-rows proposal — known gap, sprint 0011.
     })
   }
 
