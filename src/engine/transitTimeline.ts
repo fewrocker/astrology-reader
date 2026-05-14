@@ -1,6 +1,6 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData } from './types'
+import type { PlanetName, ChartData } from './types'
 import { PLANET_NAMES } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'

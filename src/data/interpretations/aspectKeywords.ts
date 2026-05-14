@@ -114,8 +114,8 @@ export function buildKeyAspectSentence(aspect: TransitAspect): string {
 
   const nature = aspect.nature as 'harmonious' | 'challenging' | 'neutral'
   const phraseEntry = TRANSIT_PLANET_PHRASES[aspect.transitPlanet]
-  const actionPhrase = phraseEntry?.[nature]
-    ?? getAspectPerfectionBrief(aspect.type as AspectType, aspect.natalPlanet as PlanetName | 'NorthNode')
+  const actionPhrase = (phraseEntry?.[nature]
+    ?? getAspectPerfectionBrief(aspect.type as AspectType, aspect.natalPlanet as PlanetName | 'NorthNode'))
     || `${aspect.transitPlanet} ${aspect.symbol} natal ${aspect.natalPlanet}`
 
   return `${aspect.transitPlanet} ${verb} your natal ${aspect.natalPlanet} — ${actionPhrase}`

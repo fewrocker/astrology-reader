@@ -151,11 +151,11 @@ const HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE: Record<string, string> = {
   'trine_Sun_H12': 'Spiritual clarity and inner peace flow in — meditation, art, or quiet time is deeply restorative.',
 
   // ── Sun oppositions ──────────────────────────────────────────────────────────
-  'opposition_Sun_H1': 'Someone else's energy or opinion challenges your sense of self — stay grounded.',
+  'opposition_Sun_H1': "Someone else's energy or opinion challenges your sense of self — stay grounded.",
   'opposition_Sun_H2': 'A financial or value clash with another person asks for honest negotiation.',
   'opposition_Sun_H3': 'An opposing view in conversation or from a sibling demands you listen and reflect.',
   'opposition_Sun_H4': 'Home or family expectations conflict with your outer commitments — find balance.',
-  'opposition_Sun_H5': 'A creative or romantic tension reveals what you've been suppressing — acknowledge it.',
+  'opposition_Sun_H5': "A creative or romantic tension reveals what you've been suppressing — acknowledge it.",
   'opposition_Sun_H6': 'Work duties and personal needs pull in opposite directions — reclaim some balance.',
   'opposition_Sun_H7': 'A partnership places demands on your identity — the other person is holding up a mirror.',
   'opposition_Sun_H8': 'Power dynamics or shared-resource tensions surface — clarity and honesty are needed.',
