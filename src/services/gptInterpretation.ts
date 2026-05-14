@@ -26,7 +26,6 @@ export class RateLimitError extends Error {
   }
 }
 
-
 // Session-level GPT call counter for unauthenticated nudge (spec section 9)
 let _sessionCalls = 0
 

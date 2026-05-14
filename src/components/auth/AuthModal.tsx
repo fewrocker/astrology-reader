@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
+import { track } from '../../services/analytics'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -53,6 +54,9 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }: Aut
       setForgotShown(false)
       setShowPassword(false)
       setTimeout(() => emailRef.current?.focus(), 50)
+      // Spec 6 — auth_modal_seen fires once per modal open.
+      // initialTab distinguishes upgrade flow (opens at 'register') from direct sign-in ('login').
+      track('auth_modal_seen', { initialTab })
     }
   }, [isOpen, initialTab])
 
@@ -95,6 +99,9 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }: Aut
   }
 
   const handleClose = () => {
+    // Spec 7 — auth_modal_dismissed fires only when the modal closes WITHOUT successful auth.
+    // Successful auth calls onClose() directly from handleSubmit, not via handleClose.
+    track('auth_modal_dismissed', { tab })
     dismissOauthError()
     onClose()
   }
@@ -135,7 +142,11 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }: Aut
             <button
               key={t}
               type="button"
-              onClick={() => setTab(t)}
+              onClick={() => {
+                // Spec 8 — auth_tab_switched fires only when switching to a different tab.
+                if (t !== tab) track('auth_tab_switched', { from: tab, to: t })
+                setTab(t)
+              }}
               className="flex-1 py-4 text-xs uppercase tracking-widest font-heading transition-colors"
               style={{
                 color: tab === t ? '#c9a84c' : 'rgba(201,168,76,0.35)',
@@ -348,7 +359,11 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }: Aut
                   New here?{' '}
                   <button
                     type="button"
-                    onClick={() => setTab('register')}
+                    onClick={() => {
+                      // Spec 8 — auth_tab_switched from login to register via hint link
+                      track('auth_tab_switched', { from: 'login', to: 'register' })
+                      setTab('register')
+                    }}
                     className="transition-colors underline underline-offset-2"
                     style={{ color: 'rgba(201,168,76,0.55)' }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.85)')}
@@ -362,7 +377,11 @@ export default function AuthModal({ isOpen, onClose, initialTab = 'login' }: Aut
                   Already have an account?{' '}
                   <button
                     type="button"
-                    onClick={() => setTab('login')}
+                    onClick={() => {
+                      // Spec 8 — auth_tab_switched from register to login via hint link
+                      track('auth_tab_switched', { from: 'register', to: 'login' })
+                      setTab('login')
+                    }}
                     className="transition-colors underline underline-offset-2"
                     style={{ color: 'rgba(201,168,76,0.55)' }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.85)')}
