@@ -47,7 +47,7 @@ function TransitAspectsToComposite({ transitData }: { transitData: TransitData }
             a.transitPlanet as PlanetName,
             a.type,
             a.natalPlanet as PlanetName,
-            a.natalHouse ?? 0,
+            a.natalHouse ?? null,
             a.nature,
             a.applying,
           )
