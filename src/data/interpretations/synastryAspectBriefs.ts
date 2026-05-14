@@ -228,7 +228,8 @@ function truncateToLimit(text: string, limit: number): string {
 
 function buildKey(p1: string, p2: string, aspectType: string): string {
   const [a, b] = [p1, p2].sort()
-  return `${a}_${aspectType}_${b}`
+  const normalizedType = aspectType.charAt(0).toUpperCase() + aspectType.slice(1)
+  return `${a}_${normalizedType}_${b}`
 }
 
 // ─── Public compute function ─────────────────────────────────────────────────
@@ -237,7 +238,7 @@ export function computeSynastryAspectBrief(
   person1Planet: PlanetName | 'NorthNode',
   aspectType: AspectType,
   person2Planet: PlanetName | 'NorthNode',
-  nature: 'harmonious' | 'challenging' | 'neutral',
+  _nature: 'harmonious' | 'challenging' | 'neutral',
 ): string {
   try {
     const key = buildKey(person1Planet, person2Planet, aspectType)
@@ -247,7 +248,8 @@ export function computeSynastryAspectBrief(
     // Fallback: assemble from archetypes
     const a1 = PLANET_ARCHETYPES[person1Planet] ?? 'planetary force'
     const a2 = PLANET_ARCHETYPES[person2Planet] ?? 'planetary force'
-    const clause = ASPECT_NATURE_CLAUSES[aspectType] ?? 'the contact shapes the space between them'
+    const normalizedType = aspectType.charAt(0).toUpperCase() + aspectType.slice(1)
+    const clause = ASPECT_NATURE_CLAUSES[normalizedType] ?? 'the contact shapes the space between them'
     const fallback = `${a1} and ${a2} meet in ${aspectType.toLowerCase()} — ${clause}.`
     return truncateToLimit(fallback, 200)
   } catch {
