@@ -1,3 +1,3 @@
-# Active Proposals Index
+# Active Proposals
 
-No active proposals. All sprint-0010 proposals have been completed and moved to `done/`.
+No active proposals. Sprint 0011 complete — all proposals moved to done.

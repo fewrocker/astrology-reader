@@ -1,5 +1,6 @@
 import { findSolarReturn, calculateChart } from './astronomy'
 import type { ChartData } from './types'
+import { analyzeElements } from '../data/interpretations/index'
 
 export interface SolarReturnData {
   srMoment: Date
@@ -73,6 +74,10 @@ export function buildSolarReturnPrompt(
   }
   prompt += `Natal ASC: ${natalChart.angles.ascendant.degree}°${natalChart.angles.ascendant.minute}' ${natalChart.angles.ascendant.sign}\n`
   prompt += `Natal MC: ${natalChart.angles.midheaven.degree}°${natalChart.angles.midheaven.minute}' ${natalChart.angles.midheaven.sign}\n`
+
+  const elementAnalysis = analyzeElements(natalChart.planets)
+  prompt += `\n## Natal Element Profile\n`
+  prompt += `Dominant element: ${elementAnalysis.dominant} — ${elementAnalysis.interpretation.dominant}\n`
 
   prompt += `\n## Solar Return Chart\n`
   prompt += `Solar Return moment: ${srMoment.toUTCString()}\n`

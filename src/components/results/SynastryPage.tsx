@@ -5,6 +5,10 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
 import { buildSynastryPrompt } from '../../engine/synastry'
+import AspectRow from '../reading/AspectRow'
+import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
+import { getHouseTheme } from '../../data/interpretations/houseThemes'
+import { getSynastryHouseOverlayBrief } from '../../data/interpretations/synastryHouseOverlayBriefs'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
@@ -12,22 +16,7 @@ import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
-
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border border-mystic-gold/20 rounded-lg overflow-hidden mb-4">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3 bg-mystic-gold/5 hover:bg-mystic-gold/10 transition-colors text-left"
-      >
-        <span className="font-heading text-lg text-mystic-gold">{title}</span>
-        <span className="text-mystic-muted text-xl transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▾</span>
-      </button>
-      {open && <div className="px-5 py-4">{children}</div>}
-    </div>
-  )
-}
+import CollapsibleSection from '../ui/CollapsibleSection'
 
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -122,75 +111,134 @@ function InterpretationSection({ text }: { text: string }) {
 function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
   if (aspects.length === 0) return null
 
-  const natureColor = (n: string) =>
-    n === 'harmonious' ? 'text-green-400' : n === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
-
   return (
-    <Section title={`Synastry Aspects (${aspects.length})`} defaultOpen>
+    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen>
       <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
-      <div className="space-y-2">
-        {aspects.map((a, i) => {
-          const g1 = PLANET_GLYPHS[a.person1Planet as PlanetName] ?? '☊'
-          const g2 = PLANET_GLYPHS[a.person2Planet as PlanetName] ?? '☊'
-          return (
-            <div key={i} className="flex items-center gap-2 py-2 border-b border-mystic-gold/5 last:border-0">
-              <span className="text-mystic-muted text-xs w-6">P1</span>
-              <span className="text-lg">{g1}</span>
-              <span className={`text-lg ${natureColor(a.nature)}`}>{a.symbol}</span>
-              <span className="text-lg">{g2}</span>
-              <span className="text-mystic-muted text-xs w-6">P2</span>
-              <div className="flex-1">
-                <span className="text-mystic-text text-sm">
-                  {a.person1Planet} {a.type} {a.person2Planet}
-                </span>
-              </div>
-              <span className="text-mystic-muted text-xs">{a.orb}° orb</span>
-              <span className={`text-xs px-2 py-0.5 rounded capitalize ${natureColor(a.nature)}`}>
-                {a.nature}
-              </span>
-            </div>
-          )
-        })}
+      <div>
+        {aspects.map((a, i) => (
+          <AspectRow
+            key={i}
+            transitPlanet={a.person1Planet}
+            natalPlanet={a.person2Planet}
+            aspectType={a.type}
+            nature={a.nature}
+            symbol={a.symbol}
+            orb={a.orb}
+            applying={false}
+            showApplyingBadge={false}
+            labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
+            brief={computeSynastryAspectBrief(a.person1Planet, a.type, a.person2Planet, a.nature)}
+          />
+        ))}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
+}
+
+const INNER_PLANETS = ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury']
+const HIGH_SIGNAL_HOUSES = [1, 4, 5, 7, 8, 12]
+const OUTER_PLANET_KEYWORDS: Record<string, string> = {
+  Jupiter: 'expansive',
+  Saturn: 'disciplining',
+  Uranus: 'disruptive',
+  Neptune: 'dissolving',
+  Pluto: 'transformative',
+  NorthNode: 'karmic',
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
+}
+
+function isHighSignal(entry: HouseOverlayEntry): boolean {
+  return INNER_PLANETS.includes(entry.planet as string) && HIGH_SIGNAL_HOUSES.includes(entry.house)
+}
+
+function sortOverlayEntries(entries: HouseOverlayEntry[]): HouseOverlayEntry[] {
+  const high = entries
+    .filter(isHighSignal)
+    .sort((a, b) =>
+      INNER_PLANETS.indexOf(a.planet as string) - INNER_PLANETS.indexOf(b.planet as string)
+    )
+  const other = entries.filter(e => !isHighSignal(e))
+  return [...high, ...other]
 }
 
 function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[]; label: string }) {
   if (entries.length === 0) return null
+
+  const highSignalCount = entries.filter(isHighSignal).length
+  const hasHighSignal = highSignalCount > 0
+  const sorted = sortOverlayEntries(entries)
+  const title = hasHighSignal
+    ? `${label} (${highSignalCount} key placement${highSignalCount === 1 ? '' : 's'})`
+    : label
+
   return (
-    <Section title={label}>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-mystic-gold/10 text-mystic-muted text-xs uppercase tracking-wider">
-              <th className="text-left px-3 py-2">Planet</th>
-              <th className="text-left px-3 py-2">In Sign</th>
-              <th className="text-left px-3 py-2">Falls in House</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((h, i) => (
-              <tr key={i} className="border-b border-mystic-gold/5">
-                <td className="px-3 py-2 text-mystic-text">
-                  <span className="mr-2">{PLANET_GLYPHS[h.planet as PlanetName] ?? '☊'}</span>
-                  {h.planet}
-                </td>
-                <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[h.sign as ZodiacSign]} {h.sign}</td>
-                <td className="px-3 py-2 text-mystic-text font-heading">House {h.house}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <CollapsibleSection title={title} defaultOpen={hasHighSignal}>
+      {hasHighSignal && (
+        <p className="text-mystic-muted text-xs mb-4">
+          Showing {highSignalCount} key placement{highSignalCount === 1 ? '' : 's'} — inner planets in relationship-defining houses.
+        </p>
+      )}
+      <div>
+        {sorted.map((entry, i) => {
+          const planetGlyph = PLANET_GLYPHS[entry.planet as PlanetName] ?? '☊'
+          const zodiacGlyph = ZODIAC_GLYPHS[entry.sign as ZodiacSign]
+          const highSignal = isHighSignal(entry)
+          const invalidHouse = entry.house <= 0 || entry.house > 12
+
+          let houseLabel = ''
+          let brief: string | null = null
+
+          if (!invalidHouse) {
+            const theme = getHouseTheme(entry.house)
+            houseLabel = `${ordinal(entry.house)} House · ${theme.name}`
+            const lookupBrief = getSynastryHouseOverlayBrief(entry.planet as string, entry.house)
+            if (lookupBrief !== null) {
+              brief = lookupBrief
+            } else {
+              const keyword = OUTER_PLANET_KEYWORDS[entry.planet as string] ?? 'potent'
+              brief = `Your ${entry.planet} in their ${ordinal(entry.house)} House (${theme.name}) — your ${keyword} energy reaches the space they hold for ${theme.theme.toLowerCase()}.`
+            }
+          }
+
+          return (
+            <div key={i} className={`relative py-3 border-b border-mystic-gold/10 last:border-b-0 ${highSignal ? 'pl-4' : ''}`}>
+              {highSignal && (
+                <div className="absolute left-0 inset-y-0 w-0.5 bg-mystic-gold/40 rounded-sm" />
+              )}
+              <div className={`flex items-center gap-2 text-sm flex-wrap ${highSignal ? 'text-mystic-text' : 'text-mystic-muted'}`}>
+                <span className={highSignal ? 'text-lg' : 'text-base'}>{planetGlyph}</span>
+                <span className={highSignal ? 'font-medium' : ''}>{entry.planet}</span>
+                <span className="opacity-60">in</span>
+                <span className={highSignal ? 'text-mystic-gold' : ''}>{zodiacGlyph} {entry.sign}</span>
+                {!invalidHouse && (
+                  <>
+                    <span className="opacity-40">·</span>
+                    <span>{houseLabel}</span>
+                  </>
+                )}
+              </div>
+              {brief && (
+                <p className={`text-sm leading-relaxed mt-1.5 ${highSignal ? 'text-mystic-text/80' : 'text-mystic-muted/70'}`}>
+                  {brief}
+                </p>
+              )}
+            </div>
+          )
+        })}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
   const { compositeChart } = synastryData
   return (
-    <Section title="Composite Chart (Relationship Chart)">
+    <CollapsibleSection title="Composite Chart (Relationship Chart)">
       <p className="text-mystic-muted text-xs mb-3">
         The midpoint between both people's planets — representing the relationship itself
       </p>
@@ -227,7 +275,7 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
           {compositeChart.angles.midheaven.degree}°{compositeChart.angles.midheaven.minute}' {compositeChart.angles.midheaven.sign}
         </p>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
@@ -237,7 +285,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
   aspects: import('../../engine/aspects').Aspect[]
 }) {
   return (
-    <Section title={title}>
+    <CollapsibleSection title={title}>
       <div className="flex justify-center mb-4">
         <div className="w-full max-w-md">
           <ChartWheel chartData={chartData} aspects={aspects} />
@@ -268,7 +316,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
           </tbody>
         </table>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 

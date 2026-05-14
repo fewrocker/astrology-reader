@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import type { ChartData, PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import type { ChartData } from '../../engine/types'
+import { ZODIAC_GLYPHS } from '../../engine/types'
 import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits, computeEnergyRating } from '../../engine/transits'
 import type { TransitAspect, EnergyRating } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
@@ -9,8 +9,9 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
-import { ASPECT_KEYWORDS } from '../../data/interpretations/aspectKeywords'
 import GptSkeleton from '../ui/GptSkeleton'
+import AspectRow from '../reading/AspectRow'
+import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import { track } from '../../services/analytics'
 
 const PHASE_EMOJIS: Record<string, string> = {
@@ -22,11 +23,6 @@ const PHASE_EMOJIS: Record<string, string> = {
   'Waning Gibbous': '🌖',
   'Last Quarter': '🌗',
   'Waning Crescent': '🌘',
-}
-
-
-function getAspectKeyword(transitPlanet: string, nature: string): string {
-  return ASPECT_KEYWORDS[transitPlanet]?.[nature] ?? nature
 }
 
 interface TodayPageProps {
@@ -59,7 +55,7 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
     setMoon(currentMoon)
 
     if (chartData) {
-      const top = getTopActiveTransits(chartData, 3, 8)
+      const top = getTopActiveTransits(chartData, 3, 5)
       setTransits(top)
       const all = calculateTransitAspects(calculateCurrentPositions(now), chartData.planets, 'daily')
       setEnergy(computeEnergyRating(all))
@@ -164,26 +160,21 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
         <p className="text-mystic-muted text-xs uppercase tracking-widest mb-4">Sky Highlights</p>
         {chartData ? (
           transits.length > 0 ? (
-            <div className="space-y-3">
-              {transits.map((a, i) => {
-                const g1 = PLANET_GLYPHS[a.transitPlanet as PlanetName | 'NorthNode'] ?? a.transitPlanet
-                const g2 = PLANET_GLYPHS[a.natalPlanet as PlanetName | 'NorthNode'] ?? a.natalPlanet
-                const keyword = getAspectKeyword(a.transitPlanet, a.nature)
-                const natureColor = a.nature === 'harmonious'
-                  ? 'text-emerald-400'
-                  : a.nature === 'challenging'
-                    ? 'text-orange-400'
-                    : 'text-mystic-muted'
-                return (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="font-heading text-lg text-mystic-gold/90 tracking-widest">
-                      {g1} {a.symbol} {g2}
-                    </span>
-                    <span className={`text-xs font-medium ${natureColor}`}>{keyword}</span>
-                  </div>
-                )
-              })}
-            </div>
+            <>
+              {transits.map((a) => (
+                <AspectRow
+                  key={`${a.transitPlanet}-${a.natalPlanet}-${a.type}`}
+                  transitPlanet={a.transitPlanet}
+                  natalPlanet={a.natalPlanet}
+                  aspectType={a.type}
+                  nature={a.nature}
+                  symbol={a.symbol}
+                  orb={a.orb}
+                  applying={a.applying}
+                  brief={computeTransitAspectBrief(a.transitPlanet, a.type, a.natalPlanet, a.natalHouse, a.nature, a.applying)}
+                />
+              ))}
+            </>
           ) : (
             <p className="text-mystic-muted text-sm italic">No tight transit aspects active right now.</p>
           )
