@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { calculateChart } from '../../engine/astronomy'
@@ -14,11 +14,21 @@ interface HomeScreenProps {
 
 export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
   const { state, dispatch } = useApp()
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, tier, todayUsed } = useAuth()
   const { birthData } = state
   const [readingsOpen, setReadingsOpen] = useState(false)
   const [dreamOpen, setDreamOpen] = useState(false)
   const ctaRef = useRef<HTMLButtonElement>(null)
+
+  // First-visit welcome sentence — appears once after registration (spec §45-46).
+  // Reads sessionStorage flag set by register() in AuthContext.
+  const [showWelcome, setShowWelcome] = useState(false)
+  useEffect(() => {
+    if (isAuthenticated && todayUsed === 0 && sessionStorage.getItem('just-registered') === 'true') {
+      setShowWelcome(true)
+      sessionStorage.removeItem('just-registered')
+    }
+  }, [isAuthenticated, todayUsed])
 
   const chartData = useMemo(() => {
     if (state.chartData) return state.chartData
@@ -69,6 +79,82 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
     year: 'numeric',
   })
 
+  // Derive auth nudge content based on auth state, tier, and usage (spec §44)
+  function renderAuthNudge() {
+    if (isAuthenticated) {
+      // Paid tiers — no nudge
+      if (tier === 'basic' || tier === 'advanced') {
+        return <div className="mb-6" />
+      }
+      // Free authenticated
+      if (todayUsed <= 1) {
+        // 0 or 1 used — no nudge, just spacer
+        return <div className="mb-6" />
+      }
+      if (todayUsed === 2) {
+        // One reading remaining
+        return (
+          <button
+            type="button"
+            onClick={onOpenAuth}
+            className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
+            aria-label="Upgrade your plan for more readings"
+          >
+            1 reading left today ✦ Upgrade for more
+          </button>
+        )
+      }
+      // todayUsed >= 3 — at limit
+      return (
+        <button
+          type="button"
+          onClick={onOpenAuth}
+          className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
+          aria-label="Upgrade your plan for more readings"
+        >
+          Daily limit reached ✦ Upgrade to continue
+        </button>
+      )
+    }
+
+    // Unauthenticated — nudge based on IP-based usage (best-effort, uses todayUsed from context)
+    if (todayUsed === 0 || todayUsed === 1) {
+      return (
+        <button
+          type="button"
+          onClick={onOpenAuth}
+          className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
+          aria-label="Sign in to save your readings"
+        >
+          Save your readings ✦
+        </button>
+      )
+    }
+    if (todayUsed === 2) {
+      return (
+        <button
+          type="button"
+          onClick={onOpenAuth}
+          className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
+          aria-label="1 reading remaining today — sign in for more"
+        >
+          1 reading left today ✦ Sign in to save more
+        </button>
+      )
+    }
+    // todayUsed >= 3
+    return (
+      <button
+        type="button"
+        onClick={onOpenAuth}
+        className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
+        aria-label="Daily limit reached — sign in for more readings"
+      >
+        Daily limit reached ✦ Sign in for more readings
+      </button>
+    )
+  }
+
   return (
     <div className="w-full max-w-7xl mx-auto">
       <div className="flex flex-col lg:flex-row items-center lg:items-stretch gap-8 lg:gap-0">
@@ -93,6 +179,13 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
             {/* Spacer when identity falls back to secondary (no chartData) */}
             {!identityLine && <div className="mb-4" />}
 
+            {/* First-visit welcome sentence — appears once after registration (spec §45-46) */}
+            {showWelcome && (
+              <p className="text-xs text-mystic-muted/70 italic mb-4">
+                Your chart is ready. Everything you explore from here is yours.
+              </p>
+            )}
+
             {/* Change birth information */}
             <button
               type="button"
@@ -104,18 +197,8 @@ export default function HomeScreen({ onOpenAuth }: HomeScreenProps) {
               Change birth information
             </button>
 
-            {/* Auth nudge — unauthenticated only */}
-            {!isAuthenticated && (
-              <button
-                type="button"
-                onClick={onOpenAuth}
-                className="text-xs text-left mb-6 transition-colors self-start text-mystic-gold/60 hover:text-mystic-gold"
-                aria-label="Create an account to save your readings"
-              >
-                Save your readings ✦
-              </button>
-            )}
-            {isAuthenticated && <div className="mb-6" />}
+            {/* Auth/tier nudge — usage-aware copy (spec §43-44) */}
+            {renderAuthNudge()}
 
             {/* DailySnapshotCard embedded */}
             {chartData ? (
