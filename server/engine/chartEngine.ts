@@ -1,26 +1,11 @@
 import * as Astronomy from 'astronomy-engine'
+import {
+  PLANET_NAMES, BODY_MAP,
+  normalizeAngle, longitudeToZodiac, getPlanetLongitude, getMeanNodeLongitude, getHouseForLongitude,
+} from './astroCore.js'
+import type { ZodiacSign, ZodiacPosition, PlanetName } from './astroCore.js'
 
 // ---------- Types ----------
-
-const ZODIAC_SIGNS = [
-  'Aries', 'Taurus', 'Gemini', 'Cancer', 'Leo', 'Virgo',
-  'Libra', 'Scorpio', 'Sagittarius', 'Capricorn', 'Aquarius', 'Pisces',
-] as const
-type ZodiacSign = typeof ZODIAC_SIGNS[number]
-
-const PLANET_NAMES = [
-  'Sun', 'Moon', 'Mercury', 'Venus', 'Mars',
-  'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto',
-] as const
-type PlanetName = typeof PLANET_NAMES[number]
-
-interface ZodiacPosition {
-  longitude: number
-  sign: ZodiacSign
-  signIndex: number
-  degree: number
-  minute: number
-}
 
 interface PlanetPosition extends ZodiacPosition {
   name: PlanetName | 'NorthNode'
@@ -61,19 +46,6 @@ export interface TransitAspectBrief {
 
 // ---------- Utilities ----------
 
-const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
-  Sun: Astronomy.Body.Sun,
-  Moon: Astronomy.Body.Moon,
-  Mercury: Astronomy.Body.Mercury,
-  Venus: Astronomy.Body.Venus,
-  Mars: Astronomy.Body.Mars,
-  Jupiter: Astronomy.Body.Jupiter,
-  Saturn: Astronomy.Body.Saturn,
-  Uranus: Astronomy.Body.Uranus,
-  Neptune: Astronomy.Body.Neptune,
-  Pluto: Astronomy.Body.Pluto,
-}
-
 // Tight transit orbs (0.3x of natal orbs) — matches client transits.ts daily period scaling
 const ASPECT_DEFS = [
   { angle: 0,   orb: 2.4, symbol: '☌', name: 'conjunction'  },
@@ -82,19 +54,6 @@ const ASPECT_DEFS = [
   { angle: 120, orb: 2.4, symbol: '△', name: 'trine'        },
   { angle: 180, orb: 2.4, symbol: '☍', name: 'opposition'   },
 ]
-
-function normalizeAngle(a: number): number {
-  return ((a % 360) + 360) % 360
-}
-
-function longitudeToZodiac(lon: number): ZodiacPosition {
-  const norm = ((lon % 360) + 360) % 360
-  const signIndex = Math.floor(norm / 30)
-  const degInSign = norm - signIndex * 30
-  const degree = Math.floor(degInSign)
-  const minute = Math.floor((degInSign - degree) * 60)
-  return { longitude: norm, sign: ZODIAC_SIGNS[signIndex], signIndex, degree, minute }
-}
 
 export function resolveToUTC(
   year: number, month: number, day: number,
@@ -126,12 +85,6 @@ export function resolveToUTC(
 
 // ---------- Planet position helpers ----------
 
-function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
-  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
-  return Astronomy.Ecliptic(Astronomy.GeoVector(body, time, true)).elon
-}
-
 function isRetrograde(body: Astronomy.Body, time: Astronomy.AstroTime): boolean {
   if (body === Astronomy.Body.Sun || body === Astronomy.Body.Moon) return false
   const lon1 = getPlanetLongitude(body, time)
@@ -141,17 +94,6 @@ function isRetrograde(body: Astronomy.Body, time: Astronomy.AstroTime): boolean 
   if (diff > 180) diff -= 360
   if (diff < -180) diff += 360
   return diff < 0
-}
-
-function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  const T = time.tt / 36525
-  return normalizeAngle(
-    125.0445479
-    - 1934.1362891 * T
-    + 0.0020754 * T * T
-    + T * T * T / 467441
-    - T * T * T * T / 60616000,
-  )
 }
 
 // ---------- House calculation ----------
@@ -249,17 +191,6 @@ function calculatePlacidusHouses(
   cusps[7] = normalizeAngle(cusps[1] + 180)
   cusps[8] = normalizeAngle(cusps[2] + 180)
   return { cusps, system: 'placidus' }
-}
-
-function getHouseForLongitude(longitude: number, cusps: number[]): number {
-  for (let i = 0; i < 12; i++) {
-    const start = cusps[i]
-    const end = cusps[(i + 1) % 12]
-    if (start < end ? longitude >= start && longitude < end : longitude >= start || longitude < end) {
-      return i + 1
-    }
-  }
-  return 1
 }
 
 // ---------- Main chart calculation ----------
