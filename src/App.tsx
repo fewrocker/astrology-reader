@@ -79,18 +79,31 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
   const remaining = (tierLimits[tier] ?? 3) - todayUsed
   const tierLabel = tier === 'basic' ? 'Basic ✦' : tier === 'advanced' ? 'Advanced ✦' : null
   const readingsLabel = tier === 'free' ? `${remaining} reading${remaining !== 1 ? 's' : ''} left today` : null
+  // Spec 13 — show remaining count inline in the button when threshold is reached.
+  // Threshold is remaining <= 2 (not <= 1): showing the count from the second-to-last
+  // reading gives the user an extra decision point before hitting the wall.
+  const showInlineCount = tier === 'free' && remaining <= 2
 
   return (
     <div ref={ref} className="absolute right-0 top-1/2 -translate-y-1/2">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="text-xl transition-colors"
+        className="flex items-center gap-1 text-xl transition-colors"
         style={{ color: '#c9a84c', lineHeight: 1, filter: 'drop-shadow(0 0 6px rgba(201,168,76,0.5))' }}
         aria-label="Account menu"
         title={displayName}
       >
         ✦
+        {showInlineCount && (
+          <span
+            aria-hidden="true"
+            className="text-xs font-heading"
+            style={{ color: 'rgba(201,168,76,0.75)', filter: 'none', fontSize: '0.7rem' }}
+          >
+            {remaining} left
+          </span>
+        )}
       </button>
       {open && (
         <div
@@ -213,7 +226,7 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
-  const { isAuthenticated, tier } = useAuth()
+  const { isAuthenticated, tier, incrementTodayUsed } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
@@ -318,6 +331,10 @@ function AppContent() {
         void prompt // built for local display only; server recomputes from period
         const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
 
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        // Must fire only on success (not on RateLimitError or network error).
+        incrementTodayUsed()
+
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
         }
@@ -377,6 +394,9 @@ function AppContent() {
           { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
         )
 
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
+
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
         }
@@ -423,6 +443,9 @@ function AppContent() {
           state.synastryTransitPeriod!,
           state.synastryTransitTargetMonth ?? undefined,
         )
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
@@ -480,6 +503,9 @@ function AppContent() {
 
         // Get GPT interpretation asynchronously — server computes from stored birth data
         const interpretation = await getSolarReturnInterpretation(srData.targetYear)
+
+        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
