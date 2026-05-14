@@ -1,11 +1,11 @@
-// Matches the key used by authService.ts and AuthContext.tsx
-const JWT_KEY = 'astral-auth-token'
+import { AUTH_TOKEN_KEY } from './authService'
+
 const ENDPOINT = '/api/analytics/event'
 
 export function track(event: string, properties?: Record<string, unknown>): void {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   try {
-    const token = localStorage.getItem(JWT_KEY)
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
     if (token) headers['Authorization'] = `Bearer ${token}`
   } catch { /* localStorage unavailable */ }
 
