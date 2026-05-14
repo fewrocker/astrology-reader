@@ -4,8 +4,13 @@ import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/
 import type { ServerChartData } from '../engine/chartEngine.js'
 import {
   calculateTransits, buildTransitPrompt, getTopActiveTransits,
+  calculateCurrentPositions, calculateTransitAspects,
   type TransitData, type TransitPeriod,
 } from '../engine/transitEngine.js'
+import {
+  calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt,
+  type SynastryData,
+} from '../engine/synastryEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -743,6 +748,51 @@ Do not speak statistically. Speak in present tense. Name the pattern as a qualit
 }
 
 // ---------------------------------------------------------------------------
+// Synastry handlers
+// ---------------------------------------------------------------------------
+
+async function handleSynastryInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+  const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+}
+
+async function handleCoupleTransitInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  period: string
+  targetMonth?: string
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+
+  const transitPositions = calculateCurrentPositions(new Date())
+  const transitAspects = calculateTransitAspects(transitPositions, synastryData.compositeChart.planets, payload.period as TransitPeriod, true)
+  const transitData: TransitData = {
+    period: payload.period as TransitPeriod,
+    dateRange: {
+      start: new Date().toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0],
+    },
+    currentPlanets: transitPositions,
+    transitAspects,
+    ingresses: [],
+    retrogrades: [],
+  }
+
+  const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -780,6 +830,10 @@ export async function handleGptRequest(
       return handleJournalAnnotation(payload as Parameters<typeof handleJournalAnnotation>[0], userId)
     case 'cosmic-pattern-reading':
       return handleCosmicPatternReading(payload as Parameters<typeof handleCosmicPatternReading>[0])
+    case 'synastry-interpretation':
+      return handleSynastryInterpretation(payload as Parameters<typeof handleSynastryInterpretation>[0])
+    case 'couple-transit-interpretation':
+      return handleCoupleTransitInterpretation(payload as Parameters<typeof handleCoupleTransitInterpretation>[0])
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }
