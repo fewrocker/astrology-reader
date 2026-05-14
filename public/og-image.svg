@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <radialGradient id="bg" cx="33%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#1a0a2e"/>
+      <stop offset="100%" stop-color="#0a0a0f"/>
+    </radialGradient>
+    <clipPath id="outer-clip">
+      <circle cx="400" cy="315" r="221"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- ─── Chart wheel (centered at 400, 315) ─── -->
+
+  <!-- Outer zodiac ring borders -->
+  <circle cx="400" cy="315" r="220" fill="none" stroke="#c9a84c" stroke-width="1.5"/>
+  <circle cx="400" cy="315" r="190" fill="none" stroke="#c9a84c" stroke-width="1"/>
+
+  <!-- 12 zodiac segment radii — 6 diameters at 30° intervals, clipped to outer ring -->
+  <g clip-path="url(#outer-clip)" stroke="#c9a84c" stroke-width="1" opacity="0.85">
+    <line x1="400" y1="95"  x2="400" y2="535"/>
+    <line x1="510" y1="124" x2="290" y2="506"/>
+    <line x1="591" y1="205" x2="209" y2="425"/>
+    <line x1="620" y1="315" x2="180" y2="315"/>
+    <line x1="591" y1="425" x2="209" y2="205"/>
+    <line x1="510" y1="506" x2="290" y2="124"/>
+  </g>
+
+  <!-- House ring circle -->
+  <circle cx="400" cy="315" r="155" fill="none" stroke="#c9a84c" stroke-width="0.8" opacity="0.35"/>
+
+  <!-- 12 house lines — 6 diameters at 30° intervals, r=155, low opacity -->
+  <g stroke="#c9a84c" stroke-width="0.8" opacity="0.22">
+    <line x1="400" y1="160" x2="400" y2="470"/>
+    <line x1="478" y1="181" x2="322" y2="449"/>
+    <line x1="534" y1="238" x2="266" y2="392"/>
+    <line x1="555" y1="315" x2="245" y2="315"/>
+    <line x1="534" y1="392" x2="266" y2="238"/>
+    <line x1="478" y1="449" x2="322" y2="181"/>
+  </g>
+
+  <!-- Inner circle -->
+  <circle cx="400" cy="315" r="80" fill="none" stroke="#c9a84c" stroke-width="0.8" opacity="0.4"/>
+
+  <!-- Center glyph -->
+  <text x="400" y="332" text-anchor="middle" dominant-baseline="auto" font-family="serif" font-size="38" fill="#c9a84c" opacity="0.55">✦</text>
+
+  <!-- ─── Right third ─── -->
+
+  <!-- Subtle divider -->
+  <line x1="800" y1="100" x2="800" y2="530" stroke="#c9a84c" stroke-width="0.5" opacity="0.12"/>
+
+  <!-- Large ✦ glyph -->
+  <text x="1000" y="265" text-anchor="middle" font-family="serif" font-size="80" fill="#c9a84c">✦</text>
+
+  <!-- Gold rule above wordmark -->
+  <line x1="860" y1="302" x2="1140" y2="302" stroke="#c9a84c" stroke-width="0.9" opacity="0.75"/>
+
+  <!-- Wordmark -->
+  <text x="1000" y="350" text-anchor="middle" font-family="'Palatino Linotype', Georgia, Palatino, serif" font-size="38" font-weight="600" fill="#e8e6e3" letter-spacing="1">Astral Chart</text>
+
+  <!-- Gold rule below wordmark -->
+  <line x1="860" y1="372" x2="1140" y2="372" stroke="#c9a84c" stroke-width="0.9" opacity="0.75"/>
+
+  <!-- Tagline -->
+  <text x="1000" y="408" text-anchor="middle" font-family="'Arial', Helvetica, sans-serif" font-size="16" font-weight="300" fill="#8a8694" letter-spacing="0.5">Your birth chart, decoded</text>
+</svg>
