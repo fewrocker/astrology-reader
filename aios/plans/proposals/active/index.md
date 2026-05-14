@@ -1,6 +1,6 @@
 # Active Proposals — Index
 
-_Sprint 0012 proposals. All originated from the Backend Sovereignty sprint vision._
+_Sprint 0013 proposals. Production-Readiness sprint — conversion funnel, analytics, and UX clarity._
 
 ---
 
@@ -8,7 +8,9 @@ _Sprint 0012 proposals. All originated from the Backend Sovereignty sprint visio
 
 | Proposal | Originated by | Summary |
 |---|---|---|
-| `issue-birth-place-silent-failure` | Taleb, Miyazaki | `birth_place` DB field fails silently when null, string-encoded, or missing `tz` — extract `resolveUserBirthContext()` |
+| `issue-analytics-jwt-key-mismatch` | Carmack, Taleb | `gptInterpretation.ts` uses wrong localStorage key (`astral-chart-jwt` instead of `astral-auth-token`) — all GPT requests sent without auth header, breaking tier enforcement and analytics attribution |
+| `issue-index-html-missing-meta` | Jobs, Carmack, Miyazaki, Taleb | `index.html` has no description, OG tags, Twitter Card, or real favicon — every shared link produces a blank preview card |
+| `issue-todayused-counter-staleness` | All voices | `todayUsed` never increments after readings in a session; `SessionBadge` shows frozen count, `HomeScreen` nudge never fires |
 
 ---
 
@@ -16,7 +18,7 @@ _Sprint 0012 proposals. All originated from the Backend Sovereignty sprint visio
 
 | Proposal | Originated by | Summary |
 |---|---|---|
-| `code-server-astrocore-module` | Carmack, Taleb | Extract shared server primitives into `server/engine/astroCore.ts` before porting engine files — eliminates 6× duplication |
+| `code-upgrade-modal-checkout-race` | Carmack, Taleb | Stale `authenticated` prop closure in `handleAuthComplete → handleCheckout`; 300ms band-aid does not close the race; `ceremonyStartedAt` useState bug |
 
 ---
 
@@ -24,8 +26,5 @@ _Sprint 0012 proposals. All originated from the Backend Sovereignty sprint visio
 
 | Proposal | Originated by | Summary |
 |---|---|---|
-| `feat-server-aspect-engine` | Carmack, Jobs | Port `calculateAspects` + `detectPatterns` to `server/engine/aspectEngine.ts` |
-| `feat-server-numerology-engine` | Carmack, Taleb | Port birth-date numerology to server (life path, personal year/month/day); name-dependent numbers labeled as client-provided |
-| `feat-server-solar-return-engine` | Jobs, Carmack, Miyazaki, Taleb | Port solar return stack + create `handleSolarReturnInterpretation` |
-| `feat-server-synastry-engine` | Jobs, Carmack, Miyazaki, Taleb | Port synastry stack + create `handleSynastryInterpretation`; accepts raw birth data for both people |
-| `feat-server-transit-engine` | Jobs, Carmack, Miyazaki, Taleb | Port complete transit stack + upgrade `handleTransitInterpretation` to compute from DB — highest-leverage port |
+| `feat-conversion-funnel-analytics` | All voices | Add `track()` to UpgradeModal and AuthModal + read-only `GET /api/analytics/funnel` endpoint with date-range filtering |
+| `feat-persistent-reading-limit-display` | All voices | Always-visible reading counter in header + HomeScreen nudge for all `todayUsed` states + UpgradeModal copy improvements |

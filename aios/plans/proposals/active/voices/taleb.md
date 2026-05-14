@@ -1,265 +1,169 @@
-# Nassim Taleb — Voice Analysis
+# Nassim Taleb — Voice Analysis: Sprint 0013
 
-## Sprint 0012 Focus: Backend Sovereignty
+## Sprint 0013 Focus: Production-Readiness
 
 ---
 
 ## Preamble
 
-The sprint vision has identified a real fragility. The server is an execution node, not a knowledge node. The client builds the prompts, assembles the data, does the astronomy — and the server obediently fires the GPT call with whatever string arrived. That is not sovereignty. That is a proxy.
+I study fragility for a living. The question I ask is not "what is the plan" but "what breaks the plan, when, and under which conditions nobody bothered to test." This sprint — production-readiness for a free-to-paid conversion funnel — is exactly the kind of sprint where teams congratulate themselves on shipping five things and discover six months later that none of them measured what they thought they were measuring, and one of them quietly corrupted the data they depended on.
 
-The correction is conceptually correct. Now let me tell you what everyone is assuming that is not true, what breaks when porting is done half-heartedly, and where this sprint introduces its own fragilities.
+Let me go through the failure modes in order of severity.
 
 ---
 
-## What Everyone Is Assuming
+## 1. The Analytics Event System Is Antifragile in Theory and Brittle in Practice
 
-### The central assumption nobody has examined: `birth_place` will always be a valid, parseable JSON object with `lat`, `lng`, and `tz` present
+The `track()` function in `src/services/analytics.ts` is a fire-and-forget POST. The `.catch(() => {})` at line 17 is explicit about this: analytics failures are silent. The sprint vision correctly notes that the UpgradeModal has zero `track()` calls and treats this as a gap to fill.
 
-The entire server-side calculation path for every ported handler begins at the same point in `gpt.ts` line 225:
+Here is what nobody is asking: **when `track()` fires and the network swallows it, how does anyone know?**
+
+They do not. The architecture makes this impossible to distinguish from success. If the server is briefly unreachable — a cold start, a deployment restart, a network hiccup — every analytics event fired during that window disappears with no trace. The post-upgrade funnel will show `upgrade_modal_seen` events with a gap, and the team will interpret the gap as "users didn't visit during that window." The data is quietly lying.
+
+The deeper problem: the analytics endpoint at `server/routes/analytics.ts` returns `200 { ok: true }` even when the session_id cookie is absent (lines 10–14). It returns success before it has done anything. A misconfigured cookie setup, a reverse proxy stripping cookies, a browser in strict same-site mode — all of these silently drop the event while returning 200 to the client. The client's `.catch()` will never fire. The event is simply not recorded.
+
+**The failure scenario:** You ship UpgradeModal tracking. You watch the dashboard. The `upgrade_modal_seen` event shows 12 views over 3 days. Meanwhile the server logs show 140 GPT rate limit hits. You have a 91% data loss problem you will spend two weeks attributing to "users who hit the wall but didn't engage." The real answer is that session cookies are not being sent from a subset of browsers.
+
+**What makes this fragile:** The silent-success pattern in `analytics.ts` was designed to prevent analytics from breaking the user experience. That is correct. But it does so by making analytics invisible when it fails. The right model is: fire-and-forget is fine, but add a server-side counter of events received vs. events attempted. Even a single server log line `[analytics] recorded event X for session Y` would make the data loss visible.
+
+---
+
+## 2. The `todayUsed` Stale Counter Has a Trust-Destroying Worst Case
+
+The sprint vision accurately diagnoses the stale counter problem: `fetchUsage()` in `AuthContext.tsx` runs once at login and once at session restore. The proposed fix is a local increment after each GPT call.
+
+What the vision does not address is the **negative case**: what happens when the local increment is applied but the server rejects the call?
+
+Walk through the code path:
+
+1. User has `todayUsed = 2`, limit is 3.
+2. User triggers a GPT call.
+3. The GPT call fails — not with a rate limit 429, but with a network error, a 500, or an OpenAI timeout.
+4. The `gptRateLimit` middleware's `releaseSlot` mechanism fires on 5xx, decrementing the server's `gpt_usage` row back to 2.
+5. If the UI increment was applied optimistically (before the response), the UI now shows `todayUsed = 3` while the server has 2. The user is told they have no readings left when they actually have one.
+6. If the UI increment fires only on 200 response, a failed call does not increment. But if the call failed with a 429 — meaning the server did NOT decrement — and the UI did not sync the `used` count from the 429 response body, the UI says "1 reading remaining" while the server is at limit.
+
+This is the worst case: **the UI and the server are contradicting each other at the exact moment of maximum user frustration**. A user who hits the wall unexpectedly is already irritated. A user who hits the wall when the UI told them they had readings remaining is now mistrustful of the entire product.
+
+The current `gptRateLimit` middleware returns `{ used, limit, tier, authenticated }` in every 429 response (lines 168–176 of `gptRateLimit.ts`). The UI increment logic must use this: on 429, do not increment — instead sync `todayUsed` to `response.used`. On 200, increment. On 5xx or network error, do nothing. The sprint vision says "local increment, instant, always correct within a session." This is right directionally but underspecified. "Always correct" requires knowing exactly which HTTP response code triggers the increment and which resets from the server body.
+
+---
+
+## 3. The Admin Analytics Endpoint Is One Misconfigured Environment Variable Away from Public Exposure
+
+The sprint proposes a `GET /api/analytics/funnel` endpoint gated behind an `ANALYTICS_ADMIN_SECRET` header. Good. Now let me describe exactly how this fails in production.
+
+The secret is read from an environment variable. If that variable is not set in the deployment environment — which happens during the first deploy after the sprint ships, before someone has added the variable — the behavior of the check determines whether the endpoint is open to the world.
+
+**Failure mode A (fail-open):** The check reads `process.env.ANALYTICS_ADMIN_SECRET` and compares it to the header. If the env var is not set, `undefined === undefined` passes. Every request to `/api/analytics/funnel` with no header returns full funnel data including user counts, event timestamps, and session IDs. This is a data exposure vulnerability.
+
+**Failure mode B (fail-closed but invisible):** The check gates on the env var. If the env var is missing, it returns 403. The endpoint silently does nothing for days until someone notices it is not working. The team believes analytics is being tracked but cannot verify because the read endpoint is broken.
+
+Both failures are invisible until someone specifically tests them. The analytics write path (`POST /event`) has no admin gate and continues working regardless, so the team will not notice from write-side behavior.
+
+The correct implementation checks for missing secret first, fails with 503 (not 403), and logs loudly:
 
 ```typescript
-const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
-if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.tz) {
+const secret = process.env.ANALYTICS_ADMIN_SECRET
+if (!secret) {
+  console.error('[analytics] ANALYTICS_ADMIN_SECRET not set — /funnel endpoint disabled')
+  res.status(503).json({ error: 'endpoint_not_configured' })
+  return
+}
+if (req.headers['x-analytics-secret'] !== secret) {
+  res.status(403).json({ error: 'forbidden' })
+  return
+}
 ```
 
-This is the sole data source for server-side chart computation. The field is `TEXT` in SQLite. It is stored by the client. It is never validated on write beyond what the profile route accepts. There is no schema constraint enforcing that `lat`, `lng`, and `tz` are present.
+The order matters: 503 for misconfigured, 403 for unauthorized. These are not the same error. Monitoring can detect a 503 and page someone. A 403 in a monitoring script just looks like a permissions problem.
 
-Now consider: What is `birth_place` for a user who registered via OAuth and skipped the birth profile? It is `null`. The guard handles `null` correctly — `row.birth_place` check catches it. Fine.
-
-What is `birth_place` for a user who registered early in the product's lifecycle, before the current JSON structure was canonical? It depends on what the client sent. What if the client sent `{"lat": "40.71", "lng": "-74.00", "tz": "America/New_York"}` — string lat/lng instead of numbers? The `typeof place.lat === 'number'` guard fails silently. The server falls back to empty context or no context. No error is logged. The GPT call proceeds with empty astrological data. Nobody knows.
-
-What is `birth_place` for a user whose city lookup returned a result without a timezone — a legitimate edge case for certain cities near timezone boundaries? `place.tz` is falsy. The guard fails. Silent fallback.
-
-The dream handler had one server-side computation path. Sprint 0012 proposes adding this same fragile DB read as the foundation for transit, synastry, solar return, and numerology computations. Every new handler that reads `birth_place` inherits this silent failure mode. The failure mode is not an error — it is a degraded response. The user submits a transit request, the server falls back to empty natal context, GPT produces a generic response, nobody logs anything, nobody knows the DB field was unusable.
-
-This is the highest-leverage fragility in the sprint. The fix is one function, written once, that either returns a validated `{ lat: number; lng: number; tz: string }` or throws a typed error. Every handler calls this function. Silences are audible.
+Additionally: the `writeRateLimiter` in `server/middleware/rateLimiter.ts` applies at 100 req/min and is currently applied to write routes. The new `GET /funnel` endpoint is a read route, but it needs to be explicitly excluded from or added to the correct rate limiting bucket. An automated monitoring script polling every 30 seconds will exhaust the write limiter if it is accidentally included there. The current architecture has no "read admin route exempt from write limiter" category — this is a small but real gap to close at registration time.
 
 ---
 
-### The assumption about synastry: both people's birth data will be in the DB
+## 4. The UpgradeModal + Stripe Unreachability: The Ceremony Has No Recovery Path
 
-For server-side synastry computation, the server needs two natal charts: the authenticated user's and their partner's. The authenticated user's birth data is in the DB. The partner's birth data is entered in the frontend form and has never been stored anywhere.
+`handleCheckout` in `UpgradeModal.tsx` has a ceremony state — a minimum 2-second wait before showing an error. This was designed to make the upgrade flow feel deliberate. Let me describe what it does when Stripe is unreachable.
 
-The sprint vision does not mention this. It describes `buildSynastryPrompt` as a port target and says "the server can produce the same data structure the frontend produces for any authenticated user whose birth data is stored." But synastry requires two users. The partner is not a user. They have no account. They have no DB row. Their birth data exists only in the client's state for the duration of the session.
+The user clicks "Open Basic." The modal enters the ceremony state. The fetch to `/api/stripe/create-checkout-session` is made. Stripe's API is unreachable. The server returns 500. The client receives the 500 response. After the 2-second ceremony wait, `setCheckoutState('error')` fires and a small red error banner says "Something went wrong — please try again."
 
-There are two paths here: (a) accept the partner's birth data as a payload from the client (meaning the client still does or at least validates some data), or (b) restrict server-side synastry to registered couples — which does not exist as a product feature. Path (a) is the only workable option, and it means the synastry handler will take a different shape than every other handler — it cannot be purely DB-sovereign; it must accept partner data from the client.
+There are three problems:
 
-If the implementer does not notice this, they will write a synastry handler that queries only the primary user's birth data and cannot compute Person 2's chart at all. The handler will either fail or produce a Person 1-only reading labeled as a synastry reading. Neither is acceptable, and neither will be obvious in code review.
+**First:** The error state has no recovery path other than "try again." No "come back in a few minutes," no countdown, no "use a different tier" option. The user clicked the upgrade button, waited 2 seconds, and was told it failed with no information. They do not know if their card was charged (it was not — checkout never started), if the issue is temporary, or if the product is broken. They close the modal and probably do not return.
 
----
+**Second:** There is no `track()` call on the error state. The sprint is adding `upgrade_cta_clicked` and `upgrade_checkout_started`. But `upgrade_checkout_failed` is equally important. If 20% of upgrade attempts fail due to Stripe connectivity problems, you will not see this in the funnel. You will see `upgrade_cta_clicked` events with no corresponding `upgrade_checkout_started` completions and conclude users are abandoning at the last step — when in fact they are failing due to infrastructure.
 
-### The assumption about solar return: the birth location is the return location
-
-In `src/engine/solarReturn.ts`, `calculateSolarReturn` takes `birthLat` and `birthLng` — the birth location — as the observation point for the solar return chart. This matches standard relocation-birthplace practice.
-
-But some astrological traditions and some calculation tools compute the solar return for the location where the person currently lives, not where they were born. This question is live among practitioners.
-
-More concretely: the server has `birth_lat` and `birth_lng` from the stored `birth_place`. It does not have the user's current location. When the frontend calculates the solar return, it uses the birth coordinates because that is what it has. The server will use the same. For now, these match. But the fragility is that a user who is aware of relocation SR charts cannot get one from either the client or the server, and the server port will silently cement the birth-location assumption into the backend with no way to override it — not because someone decided this, but because nobody noticed the assumption was being ported along with the calculation.
+**Third:** The `ceremonyStartedAt` variable is `useState<number>(0)` (line 65). In the catch block on line 155, elapsed time is computed as `Date.now() - ceremonyStartedAt`. But `ceremonyStartedAt` holds the value from the previous render cycle — `setCeremonyStartedAt(start)` on line 121 is asynchronous state and may not have triggered a re-render before the catch block reads it. If `ceremonyStartedAt` is still 0 at catch time, `Math.max(0, 2000 - elapsed)` computes to 2000ms regardless of how long the fetch took. On fast failures (immediate network rejection), the ceremony always waits the full 2 seconds before showing the error. Use `useRef` instead of `useState` for `ceremonyStartedAt` — refs read synchronously and do not re-render.
 
 ---
 
-## The Specific Fragilities
+## 5. The Rate Limiting Logic Has Three Silent Failure Modes Under Real User Behavior
 
-### 1. The duplicate utilities problem will get worse before it gets better
+The `gptRateLimit` middleware in `server/middleware/gptRateLimit.ts` is the most carefully engineered piece in the codebase. The `releaseSlot` pattern is correct. The atomic DB upsert with `WHERE count < limit` is correct. The fail-open behavior on DB errors is a deliberate and defensible choice for v1. But there are three failure modes not covered:
 
-Count how many times `normalizeAngle`, `longitudeToZodiac`, `getPlanetLongitude`, and `getMeanNodeLongitude` already appear in the codebase:
+**Failure mode A — Server restart mid-request leaks a slot.**
 
-- `src/engine/astronomy.ts` — all four
-- `src/engine/transits.ts` — `getPlanetLongitude`, `getMeanNodeLongitude` (local copies)
-- `server/engine/chartEngine.ts` — all four (local copies)
+When the server restarts, the in-memory `authenticated` Map is cleared. The next GPT call re-reads `gpt_usage` from DB and reconstitutes the entry. This is correct. But what about the `releaseSlot` closure held by an in-flight request that was pending at restart time?
 
-The sprint vision acknowledges this and says "duplicate logic should be resolved by establishing a clean shared module structure in `server/engine/`, not by accumulating more copies."
+The closure is gone. If the request was pending when the server restarted, `releaseSlot` never fires. The DB has a count that is 1 higher than it should be. The user consumed a slot that was never converted into a GPT response. They will hit their limit one reading earlier than expected, with no explanation. This is an acceptable tradeoff for v1 but is completely undocumented. When a user files a support ticket saying "the app says I've used 3 readings today but I only got 2 responses," this comment is what explains it.
 
-Here is what will actually happen: the sprint ports five engine files. Each port starts from the corresponding frontend file. Each frontend file has local copies of `getPlanetLongitude` and `getMeanNodeLongitude`. The porter copies the file, adjusts imports, verifies the output matches the frontend. They do not extract the shared utilities because that requires changing `chartEngine.ts` and all new files simultaneously — a refactor that touches more surface area than the vision scoped.
+**Failure mode B — Unauthenticated limits are per-process, not per-deployment.**
 
-Result: after sprint 0012, there will be six copies of `normalizeAngle` and five copies of `getMeanNodeLongitude` across `server/engine/`. The shared module recommendation in the vision will remain a recommendation. The next sprint will inherit five files with divergent copies of the same 8-line function, and when a precision bug is found in `normalizeAngle`, the fix will be applied to one copy and missed in four.
+The `unauthenticated` Map stores per-IP counts in memory. If the server runs multiple processes or replicas — even two dynos on Heroku — each process has its own Map. A user making 3 requests distributed across 3 processes gets 9 total GPT calls instead of 3. The free tier is the acquisition funnel. If it silently allows 3× its intended limit because of deployment topology, the economics of the free tier change without anyone making that decision.
 
-This is textbook accumulation of fragility through incremental shortcuts. The sprint vision correctly identifies the problem and incorrectly scopes the solution as something that can be deferred.
+Currently the deployment is presumably single-process. The fragility is latent: the moment someone adds a second process, free-tier limits become advisory.
 
-The fix is simple: write `server/engine/astroUtils.ts` first, before porting a single engine file. It contains `normalizeAngle`, `longitudeToZodiac`, `getMeanNodeLongitude`, and the `BODY_MAP`. Every ported file imports from it. This is not extra work — it is the same work done once instead of five times.
+**Failure mode C — The midnight UTC reset is correct but the user's experience may not be.**
 
----
+`todayUTC()` uses `new Date().toISOString().slice(0, 10)`, which is UTC. The UpgradeModal displays the reset time as a localized string with `timeZone: 'UTC'` forced — it always shows "12:00 AM UTC" regardless of the user's timezone. For a user in Tokyo (UTC+9), this means the reset they are shown is 9:00 AM their local time. For a user in Los Angeles (UTC-7), it is 5:00 PM local.
 
-### 2. The orb tables are not consistent between frontend and backend, and nobody has written a test to prove they are
-
-The vision's quality bar: "server-assembled prompts must be identical in information density to frontend-assembled prompts."
-
-Look at `server/engine/chartEngine.ts` lines 78–84:
-
-```typescript
-const ASPECT_DEFS = [
-  { angle: 0,   orb: 2.4, symbol: '☌', name: 'conjunction'  },
-  { angle: 60,  orb: 1.8, symbol: '⚹', name: 'sextile'      },
-  { angle: 90,  orb: 2.4, symbol: '□', name: 'square'       },
-  { angle: 120, orb: 2.4, symbol: '△', name: 'trine'        },
-  { angle: 180, orb: 2.4, symbol: '☍', name: 'opposition'   },
-]
-```
-
-Now look at `src/engine/aspects.ts` lines 22–29:
-
-```typescript
-export const ASPECT_DEFINITIONS: AspectDefinition[] = [
-  { name: 'conjunction', angle: 0, orb: 8, symbol: '☌', nature: 'neutral' },
-  { name: 'sextile', angle: 60, orb: 6, symbol: '⚹', nature: 'harmonious' },
-  { name: 'square', angle: 90, orb: 8, symbol: '□', nature: 'challenging' },
-  { name: 'trine', angle: 120, orb: 8, symbol: '△', nature: 'harmonious' },
-  { name: 'opposition', angle: 180, orb: 8, symbol: '☍', nature: 'challenging' },
-  { name: 'semi-sextile', angle: 30, orb: 2, symbol: '⚺', nature: 'neutral' },
-  { name: 'quincunx', angle: 150, orb: 3, symbol: '⚻', nature: 'challenging' },
-]
-```
-
-The server's orbs are tight (designed for transit snapshots at `getActiveTransitAspects`). The frontend natal orbs are 8°. The server currently applies its tight orbs correctly — for the purpose of the dream handler's sky context. But when the sprint ports `calculateTransitAspects` and `calculateSynastryAspects`, those functions have their own orb tables derived from the 8° natal table scaled by a period multiplier (`0.3` for daily, `0.5` for weekly, `0.7` for monthly). If the porter copies the transit engine file and imports from `chartEngine.ts`'s `ASPECT_DEFS` instead of recreating the frontend's `ASPECT_DEFINITIONS` as the base, the scaling chain will produce different aspect lists than the frontend.
-
-The frontend produces: "Mars square natal Mercury" (7.2° orb, monthly scaling at 0.7 → max 5.6°). Wait, that does not pass either. Let me be more precise: the frontend's daily period uses `orb: 8 * 0.3 = 2.4` for conjunction, which happens to match the server's hardcoded 2.4. That is a coincidence for conjunction, not a design match. For sextile: frontend daily is `6 * 0.3 = 1.8`, server is `1.8`. Also coincidental. For the monthly period: frontend monthly conjunction orb is `8 * 0.7 = 5.6`. The server has 2.4. These are not the same.
-
-Nobody will notice because the current server only uses tight orbs for the dream handler. The moment a monthly transit handler is ported and the server uses `getActiveTransitAspects` with `maxOrb: 2` instead of `maxOrb: 5.6`, it will miss aspects the frontend shows, and the GPT response will not mention "that Jupiter trine" the user saw on their transit page. The reading will not match.
-
-The vision says "identical in information density." This is achievable only if the orb tables are explicitly verified to match for each use case.
+This is not a bug but it is a UX friction point at the exact moment of highest user frustration. The user who just hit their reading limit and sees "resets at 12:00 AM UTC" has no idea when that is in their day. The correct implementation converts the UTC reset timestamp to the user's local time using `toLocaleTimeString()` without the `timeZone: 'UTC'` override, so the user sees the reset in their own clock.
 
 ---
 
-### 3. The "no schema change" constraint is a ticking clock for the numerology case
+## 6. The SEO Fix Has One Non-Obvious, Irreversible Failure Mode
 
-The sprint vision explicitly says: "Not a database schema change. No new tables, no new columns. The sprint reads from `birth_date`, `birth_time`, `birth_place` which already exist."
+The `index.html` SEO work is straightforward meta tag additions. But there is one failure mode specific to the `og:image` tag.
 
-Now look at what numerology requires on the server side. The server can compute `calculateLifePath` from `birth_date`. It can compute `calculateBirthdayNumber` from `birth_date`. It can compute `calculatePersonalYear` from `birth_date`.
+Social scrapers (Twitter, Slack, iMessage) do not follow relative paths. `<meta property="og:image" content="/og-image.png">` requires an absolute URL. If the team puts a relative path, the scraper fetches nothing and caches the empty result.
 
-It cannot compute `calculateExpressionNumber` or `calculateSoulUrge` without the user's full name as entered — specifically, the birth name used for Pythagorean reduction. The `full_name` column exists in the DB. But `full_name` is the display name or registered name. It may or may not be the birth name. For many users these differ. For OAuth users who registered with their social media name, they almost certainly differ.
+The irreversibility: Twitter caches failed card fetches for approximately 7 days. Slack caches them indefinitely for some clients. If `og:image` points to a URL that returns 404 or is not yet deployed when the first scraper hits it — which will happen if someone shares the link on the day of deploy before the image asset is in place — the social preview will not appear for a week even after everything is fixed. This is disproportionate damage from a 10-minute oversight.
 
-So: the backend can compute partial numerology (life path, birthday number, personal year) from stored data. It cannot compute expression number or soul urge without a birth name the DB may not have accurately.
-
-The current frontend `astro-numerology-cross` handler receives `numbers` from the client, including `expressionNumber`. The server has no way to verify or recompute this. If the sprint ports a numerology handler that claims server sovereignty over numerology calculations, it will produce a partial computation (3 of 5 numbers) while silently omitting the two numbers that require birth name data not stored in canonical form.
-
-The partial result is worse than the current client-sends-all approach because it will be presented as server-computed without the user or the GPT prompt knowing that two numbers are client-computed. The reading will mix server-verified and client-unverified data in the same payload with no labeling.
-
-The constraint "no schema change" means the numerology backend sovereignty is inherently partial. This should be documented explicitly, not discovered after shipping.
+The safe path: use a small (< 100KB), aggressively cached image at a stable absolute URL. Set `cache-control: max-age=604800, public` on the static asset. Validate with the Twitter Card Validator and Facebook Sharing Debugger before sharing any links publicly. The image must be deployed and the server must be returning it with correct headers before the meta tag is shipped.
 
 ---
 
-### 4. The half-hearted port is more dangerous than no port at all
+## 7. The Single Largest Point of Failure the Sprint Does Not Address
 
-The vision warns: "A handler that builds only a partial prompt, or relies on the client for orb sorting, or skips house context, fails the bar."
+The entire conversion funnel — upgrade modal analytics, stale counter fix, rate limit visibility — depends on one assumption: the JWT stored in `localStorage` is available when analytics events fire.
 
-Here is the specific failure mode that will occur at sprint's end if the quality bar is not enforced rigorously: a porter writes a `handleTransitInterpretation` server handler that computes the natal chart from DB, computes transit positions, computes transit aspects — but uses the wrong orb table, or omits the ingress detection that `calculateTransits` includes, or skips the retrograde status section that `buildTransitPrompt` appends.
+`analytics.ts` reads `localStorage.getItem(JWT_KEY)` and attaches the Bearer token if found. The server uses this token to resolve `user_id` for the analytics event. Without a user_id, the event is stored with `user_id = null`. A `null` user_id event cannot be correlated with the user's other funnel events across the conversion chain.
 
-The resulting server-side prompt is 80% equivalent to the client prompt. The GPT response reads well. The sprint ships with this handler marked as complete.
+When does this fail for logged-in users? Consider the payment return flow: user completes Stripe checkout, is redirected to `/?payment=success`. `AuthContext.tsx` starts loading. `getSession()` on line 153 is async. While it is pending, the UI renders and any `useEffect` that fires a `track()` call — say, a `page_view` from `HomeScreen.tsx` — sends the event with no JWT attached. The user is authenticated in the server's database, but the analytics event lands as anonymous.
 
-Now the system has two code paths that diverge in unspecified ways:
-1. The client still assembles the full prompt (correctly, as always) and sends it via `getGptInterpretation`
-2. The server assembles a partial prompt for some future use case (subscriptions, journal annotations, scheduled readings)
+Immediately after `getSession()` resolves, the user is authenticated and all subsequent events carry user_id. But the `page_view` event from the payment return — the single highest-value event in the entire funnel — is anonymous. If you build a funnel query correlating `page_view` → `upgrade_modal_seen` → `upgrade_cta_clicked` → `upgrade_checkout_started` by `user_id`, the payment-return `page_view` falls out of the chain.
 
-In six months, when the server path is used for a paid feature, users on that path receive readings that omit ingresses and retrograde context that the client path always included. Nobody knows why the readings feel different. Nobody can bisect back to the orb table discrepancy from sprint 0012.
-
-A partial port that ships as complete creates a category of invisible regressions that are impossible to detect without a reference comparison test.
+The fix does not require changing the analytics architecture. The `events` table already has `session_id` on every row. The session_id cookie persists across the Stripe redirect. The funnel query should join on `session_id` for the conversion correlation, not `user_id`. The pre-authentication anonymous event and the post-authentication events share the same session_id. The user_id is available on the post-authentication events to identify which user it was. Use both fields in the query: `session_id` to stitch the funnel path, `user_id` to identify who converted.
 
 ---
 
-### 5. The `resolveToUTC` function is the most dangerous shared function and nobody is testing it
+## Summary: What Will Bite, and When
 
-Both `src/engine/astronomy.ts` and `server/engine/chartEngine.ts` contain implementations of timezone-aware UTC resolution. The function takes a date string, a time string, and an IANA timezone identifier, and returns a UTC Date.
+In order of probability that it causes problems within 30 days of shipping:
 
-This function is the single most fragile piece of the entire calculation chain. The rest of the astronomy is deterministic given a UTC time. The timezone resolution is not. It is subject to:
+1. **Analytics silent data loss via session cookie.** The session cookie path is fragile in ways that will not surface in local development. Before concluding that tracking is working, verify server-side that events are landing with non-null session_id values from real browsers.
 
-- DST transitions (is a time in the gap or fold during spring/fall transitions?)
-- Historical timezone changes (IANA database evolves; a timezone that existed in 1985 may have different rules than today)
-- Ambiguous times in the fold (2:30 AM on fall-back day maps to two UTC moments)
+2. **`todayUsed` increment on wrong event.** If the increment fires before the 200 response, a network error leaves the UI showing one fewer reading than the user has. If it does not sync from 429 response bodies, the counter will diverge from server state mid-session. Specify the exact event that triggers the increment.
 
-The server and client currently run different JavaScript engines with potentially different IANA timezone database versions. The server uses Node.js. The client uses the browser's `Intl.DateTimeFormat`. For most birth dates and locations, these produce identical results. For birth times during DST transitions in jurisdictions that have changed timezone rules since the birth occurred, they may not.
+3. **Admin analytics endpoint with missing env var.** The first deployment will almost certainly not have `ANALYTICS_ADMIN_SECRET` set. Write the fail-closed-with-503 path before writing the auth check, and document the environment variable in the deployment runbook.
 
-Nobody is testing this. There is no automated comparison of server-computed vs client-computed chart positions for any birth date. The vision says "the backend should be able to compute the same chart data structure that the frontend produces." The vision does not say "verify this is true for boundary cases."
+4. **Stripe unreachability with no recovery path and no `upgrade_checkout_failed` event.** Add the failure event. Give the user actionable text, not just "something went wrong."
 
-The fragility here is not theoretical. Someone born at 2:15 AM on October 4, 1987 in São Paulo (Brazil had complex DST rules that changed multiple times in the 1980s and 1990s) will receive a different chart from the server than from the client if their IANA database versions diverge on historical Brazilian DST. The chart difference may be 1 hour = approximately 15° ASC shift = completely different rising sign. This is not an edge case for anyone born in South America, Eastern Europe, or parts of Asia between 1970 and 1995.
+5. **The `ceremonyStartedAt` useState timing bug.** Use a ref. The state version creates a race condition on fast network failures that makes the 2-second ceremony always fire the full wait, masking fast failures.
 
-The fix is a contract test: for a fixed set of known birth data with known astrological outputs (e.g., "Audrey Hepburn, born May 4, 1929, 03:00, Brussels, Belgium — should have Cancer ASC"), run both the client and server calculations and assert identical planet positions within 0.1°. Without this test, "identical" is a claim, not a fact.
+6. **The payment-return `page_view` being anonymous in the funnel.** Use `session_id` as the correlation key for funnel queries, not `user_id` alone.
 
----
+The sprint is directionally correct. The risk is not that it fails to ship — it is that it ships cleanly and measures the wrong things with false precision, and the team makes product decisions based on data that has a systematic gap in it.
 
-## Where the Sprint Will Underestimate Scope
-
-### The `buildTransitPrompt` function alone is 200+ lines
-
-Read the frontend `buildTransitPrompt` in `src/engine/transits.ts` carefully. It includes:
-- Natal position formatting with retrograde markers
-- Transit positions with daily motion and retrograde status
-- Aspect lists with applying/separating distinctions and house context
-- Ingress detection across the period
-- Retrograde status changes for every planet
-- Element and modality analysis of the natal chart
-- Period-appropriate orb scaling
-
-This is not a function. It is a small report assembler. Porting it faithfully while also porting `calculateTransits` (which calls `detectIngresses`, `getRetrogradeStatus`, `assignTransitHouses`, `calculateCurrentPositions`, `calculateTransitAspects`) means porting at minimum 5 interconnected functions before a single transit handler can match the frontend's output.
-
-The vision shows a table of 7 missing engine files. Each row in that table represents not one function but an ecosystem of 3–8 interconnected functions. The scope is 4–5x what the table suggests.
-
-### The `calculateSynastry` function requires a composite chart, house overlay, and compatibility score
-
-`calculateSynastry` in `src/engine/synastry.ts` returns a `SynastryData` object containing:
-- `synastryAspects` (cross-chart aspects)
-- `houseOverlay` (person 1's planets in person 2's houses and vice versa)
-- `compositeChart` (midpoint chart)
-- `compatibility` (scored summary)
-
-Porting `buildSynastryPrompt` faithfully requires all four of these. The house overlay requires both charts' house cusps. The composite chart requires midpoint calculations for angles and planets. None of this is trivially additive.
-
-On top of this: as noted above, Person 2's chart comes from client-provided data, not the DB. The sprint's architecture cannot be purely "query DB, compute, return" for synastry.
-
----
-
-## Where Backend Sovereignty Introduces Its Own Fragilities
-
-### The fallback pattern makes failures invisible
-
-The dream handler introduced a fallback pattern: if the client sends no chart data, fall back to server-computed data; if the server computation fails, fall through silently. This is operationally gentle but diagnostically opaque.
-
-When sprint 0012 extends this pattern to transit, synastry, and solar return handlers, the operational question becomes: how often is the server computing the data independently? How often is it falling through? Is the fallback actually working for 95% of users or 30% of users?
-
-There is no observability into this. No metric tracks "server computed natal chart from DB" vs "server received client-provided chart data" vs "server fell through without chart". A fallback that silently degrades is indistinguishable from a fallback that never succeeds. You cannot fix what you cannot see.
-
-### Making the server sovereign creates a new dependency on DB data quality that did not exist before
-
-Before this sprint, a user with corrupted `birth_place` data had a working application. The client computed everything locally; the DB was only consulted for auth and journal entries. GPT calls relied entirely on client-provided data, and the client always had access to the user's locally-entered birth data even if it never reached the DB properly.
-
-After this sprint, certain server-side features will depend on DB-stored birth data being correct and complete. A user who updated their birth city through a third-party tool, or who has a DB row from a migration that lost their timezone, or who never completed their profile — that user will receive degraded server-side readings from a source they do not know exists.
-
-The sovereignty model transfers correctness responsibility from the client (which has direct user input) to the DB (which has stored and potentially stale data). This is the right direction for long-term reliability, but it requires a data quality baseline that does not currently exist. There is no validation job that verifies all users' `birth_place` fields are valid, complete, and parseable. There is no UI that tells a user their birth data is incomplete for server-side computation.
-
----
-
-## What Would Make This Sprint Antifragile
-
-An antifragile port is one that gets more reliable under adversarial conditions — bad data, missing fields, unexpected inputs — rather than one that fails when inputs deviate from assumptions.
-
-**One function, validated early.** Write `resolveUserBirthContext(userId: number): BirthContext | null` as the first function of the sprint. It reads `birth_date`, `birth_time`, `birth_place` from the DB, validates all required fields including `typeof lat === 'number'`, handles string-encoded coordinates gracefully, logs when fields are missing or malformed, and returns a typed object or null. Every server handler that needs birth context calls this function. The DB read pattern is written once, validated once, monitored once.
-
-**A contract test.** Before any ported engine function is merged, it must pass a reference test: given the same inputs, the server function and the frontend function produce identical planetary longitudes within 0.1° for a fixed set of known birth dates. This catches timezone resolution divergence before it ships. Five test cases takes two hours to write and catches the class of error that is otherwise invisible for years.
-
-**Explicit partial computation labels.** For numerology and any other domain where the server cannot compute all fields from stored data, the handler should label what is server-computed and what was client-provided. The GPT prompt should state which numbers were verified server-side. Silence about data provenance is the mechanism by which degraded readings become trusted readings.
-
-**A `server/engine/astroUtils.ts` shared module, written first.** This prevents the six-copies-of-normalizeAngle problem before it forms. It is not extra work. It is discipline applied before the copy-paste reflex fires.
-
-**Structured logging for fallback events.** Every time a handler falls back from server-computed to client-provided data (or from client-provided to empty), it should emit a structured log event with the fallback reason. Not an error — a metric. After one week in production, you know whether the server computation is working. Before structured logging, you are flying blind.
-
----
-
-## What This Sprint Will Actually Look Like When It Ships
-
-The transit handler gets ported first. It is the most canonical case and the vision spends the most time on it. The orb tables will not be carefully verified — the porter will see that daily orbs match by coincidence and assume the monthly period also matches. They do not.
-
-The synastry handler will be discovered to require partner data from the client, and the handler will accept it as a payload parameter. This is the right solution, but it means the handler has a different shape than the pure "DB-sovereign" vision implies. The sprint will ship with a comment saying "partner data from client, server computes chart." The semantic difference between "client provides data" and "client builds prompt" will be blurred.
-
-The numerology handler will compute 3 of 5 numbers. The handler comment will say "expression number and soul urge are client-provided when name is unavailable." Nobody will ask whether the DB `full_name` field is actually the correct birth name for numerology calculation.
-
-The shared utility duplication will not be resolved. The vision says it should be; the sprint will have six files open simultaneously and nobody will want to restructure imports while also verifying calculation outputs. The `server/engine/astroUtils.ts` file will remain a recommendation.
-
-`resolveToUTC` will not be contract-tested. The server and client will produce identical results for the birth dates used in manual testing. They will produce different results for specific historical dates in certain jurisdictions. Nobody will know.
-
-The sprint ships. The backend is more sovereign than before. The fragilities above will not surface for six months, and when they do, they will be attributed to "edge cases" and "unexpected user data" rather than to assumptions that were baked in without verification during sprint 0012.
-
----
-
-## The One Thing to Get Right
-
-If this sprint does only one thing well, it should be the `resolveUserBirthContext` function and a contract test for `resolveToUTC`. Everything else can be incrementally improved. An unverified timezone resolution function is a silent, user-specific error that produces authoritative-looking wrong output, and there is no category of error more destructive to user trust in an astrology application than a wrong rising sign.
+Ship the tracking. Then verify it is actually recording before trusting it.
