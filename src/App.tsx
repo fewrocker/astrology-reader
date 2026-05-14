@@ -313,9 +313,10 @@ function AppContent() {
           dispatch({ type: 'SET_TRANSIT_DATA', transitData, transitPeriod: state.transitPeriod!, transitTargetMonth: state.transitTargetMonth })
         }
 
-        // Get GPT interpretation asynchronously
+        // Get GPT interpretation asynchronously (server computes prompt from period + birth data)
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
-        const interpretation = await getGptInterpretation(prompt)
+        void prompt // built for local display only; server recomputes from period
+        const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
