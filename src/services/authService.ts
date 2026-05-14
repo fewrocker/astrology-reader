@@ -40,7 +40,7 @@ export async function apiClient<T>(
 
 interface AuthResponse {
   token: string
-  user: { id: number; email: string }
+  user: { id: number; email: string; subscriptionTier?: 'free' | 'basic' | 'advanced' }
 }
 
 export function login(email: string, password: string) {
