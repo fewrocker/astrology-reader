@@ -324,3 +324,19 @@ export async function getSolarReturnInterpretation(targetYear: number): Promise<
     return err instanceof Error ? err.message : GPT_SERVER_ERROR
   }
 }
+
+export async function getSynastryInterpretation(
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+): Promise<string> {
+  return callProxy('synastry-interpretation', { person1, person2 }) as Promise<string>
+}
+
+export async function getCoupleTransitInterpretation(
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  period: string,
+  targetMonth?: string,
+): Promise<string> {
+  return callProxy('couple-transit-interpretation', { person1, person2, period, targetMonth }) as Promise<string>
+}

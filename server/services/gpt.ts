@@ -13,8 +13,13 @@ import {
 import { calculateSolarReturn, buildSolarReturnPrompt } from '../engine/solarReturnEngine.js'
 import {
   calculateTransits, buildTransitPrompt, getTopActiveTransits,
+  calculateCurrentPositions, calculateTransitAspects,
   type TransitData, type TransitPeriod,
 } from '../engine/transitEngine.js'
+import {
+  calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt,
+  type SynastryData,
+} from '../engine/synastryEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -811,37 +816,22 @@ async function handleSolarReturnInterpretation(
     throw new GptServiceError('Authentication required for solar return interpretation', 401)
   }
 
-  const db = getDb()
-  const row = db
-    .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
-    .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
-
-  if (!row?.birth_date || !row.birth_place) {
+  const ctx = resolveUserBirthContext(userId)
+  if (!ctx) {
     throw new GptServiceError('Birth data required for solar return interpretation', 422)
   }
 
-  let place: { lat?: number; lng?: number; tz?: string }
-  try {
-    place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
-  } catch {
-    throw new GptServiceError('Invalid birth_place data in database', 422)
-  }
-
-  if (typeof place.lat !== 'number' || typeof place.lng !== 'number' || !place.tz) {
-    throw new GptServiceError('Incomplete birth location data (lat, lng, tz required)', 422)
-  }
-
   const natalChart = calculateChart(
-    row.birth_date,
-    row.birth_time ?? '12:00',
-    place.lat,
-    place.lng,
-    place.tz,
-    !row.birth_time,
+    ctx.birthDate,
+    ctx.birthTime,
+    ctx.lat,
+    ctx.lng,
+    ctx.tz,
+    ctx.unknownTime,
   )
 
-  const { srMoment, srChart } = calculateSolarReturn(natalChart, place.lat, place.lng, payload.targetYear)
-  const prompt = buildSolarReturnPrompt(natalChart, srChart, srMoment, row.birth_date)
+  const { srMoment, srChart } = calculateSolarReturn(natalChart, ctx.lat, ctx.lng, payload.targetYear)
+  const prompt = buildSolarReturnPrompt(natalChart, srChart, srMoment, ctx.birthDate)
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
@@ -853,6 +843,51 @@ async function handleSolarReturnInterpretation(
     ], { temperature: 0.8, max_tokens: 2000 })
   )
   return result || 'Unable to generate solar return interpretation.'
+}
+
+// ---------------------------------------------------------------------------
+// Synastry handlers
+// ---------------------------------------------------------------------------
+
+async function handleSynastryInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+  const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+}
+
+async function handleCoupleTransitInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  period: string
+  targetMonth?: string
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+
+  const transitPositions = calculateCurrentPositions(new Date())
+  const transitAspects = calculateTransitAspects(transitPositions, synastryData.compositeChart.planets, payload.period as TransitPeriod, true)
+  const transitData: TransitData = {
+    period: payload.period as TransitPeriod,
+    dateRange: {
+      start: new Date().toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0],
+    },
+    currentPlanets: transitPositions,
+    transitAspects,
+    ingresses: [],
+    retrogrades: [],
+  }
+
+  const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
 }
 
 // ---------------------------------------------------------------------------
@@ -895,6 +930,10 @@ export async function handleGptRequest(
       return handleCosmicPatternReading(payload as Parameters<typeof handleCosmicPatternReading>[0])
     case 'solar-return':
       return handleSolarReturnInterpretation(payload as Parameters<typeof handleSolarReturnInterpretation>[0], userId)
+    case 'synastry-interpretation':
+      return handleSynastryInterpretation(payload as Parameters<typeof handleSynastryInterpretation>[0])
+    case 'couple-transit-interpretation':
+      return handleCoupleTransitInterpretation(payload as Parameters<typeof handleCoupleTransitInterpretation>[0])
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }
