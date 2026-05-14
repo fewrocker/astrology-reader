@@ -16,6 +16,10 @@ export interface AspectRowProps {
   applying: boolean
   /** Pre-computed interpretation brief. Null → no expand toggle shown. */
   brief: string | null
+  /** When false, the applying/separating badge is not rendered. Default: true. */
+  showApplyingBadge?: boolean
+  /** When present, renders instead of "Transit {transitPlanet} {aspectType} Natal {natalPlanet}". */
+  labelOverride?: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -50,6 +54,8 @@ export default function AspectRow({
   orb,
   applying,
   brief,
+  showApplyingBadge = true,
+  labelOverride,
 }: AspectRowProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -83,7 +89,7 @@ export default function AspectRow({
         {/* Label */}
         <div className="flex-1 min-w-0">
           <span className="text-mystic-text text-sm">
-            Transit {transitPlanet} {aspectType} Natal {natalPlanet}
+            {labelOverride ?? `Transit ${transitPlanet} ${aspectType} Natal ${natalPlanet}`}
           </span>
         </div>
 
@@ -91,15 +97,17 @@ export default function AspectRow({
         <span className="text-mystic-muted text-xs flex-shrink-0">{orb}° orb</span>
 
         {/* Applying/Separating badge */}
-        <span
-          className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
-            applying
-              ? 'bg-mystic-gold/20 text-mystic-gold'
-              : 'bg-mystic-surface text-mystic-muted'
-          }`}
-        >
-          {applying ? 'applying' : 'separating'}
-        </span>
+        {showApplyingBadge && (
+          <span
+            className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${
+              applying
+                ? 'bg-mystic-gold/20 text-mystic-gold'
+                : 'bg-mystic-surface text-mystic-muted'
+            }`}
+          >
+            {applying ? 'applying' : 'separating'}
+          </span>
+        )}
 
         {/* Expand chevron — only shown when brief is available (spec 14) */}
         {hasBrief && (
