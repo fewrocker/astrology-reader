@@ -125,3 +125,27 @@ The function should be placed before any handler function so that it is availabl
 ## Dependencies
 
 None — fully self-contained within `server/services/gpt.ts`. No frontend changes. No schema changes. No new packages.
+
+---
+
+## Outcome
+
+**Status:** done  
+**Branch:** sprint-0012-task-0001-issue-birth-place-silent-failure  
+**Commit:** 27e9d51
+
+**Implemented:**
+- `BirthContext` interface added at line 60 in types section
+- `resolveUserBirthContext(userId: number): BirthContext | null` function added at line 185, before all handler functions
+- All 4 silent failure modes addressed with `console.warn` logs including `userId`:
+  1. No user row → warns `[resolveUserBirthContext] no user row for userId=...`
+  2. Missing `birth_date` → warns with appropriate message
+  3. Missing `birth_place` → warns with appropriate message
+  4. Malformed JSON → warns including the raw value
+  5. Non-numeric `lat`/`lng` (including string-encoded) → `Number()` coercion + NaN check + warn
+  6. Missing `tz` → warns with appropriate message
+- Inline DB block in `handleDreamInterpretation` (formerly lines 218–242) replaced with clean 10-line call to `resolveUserBirthContext`
+- TypeScript check passes with no errors
+
+**Notes:**  
+Function is synchronous (better-sqlite3 is synchronous). The `BirthContext` interface and function are positioned before all handlers so every future handler in sprint-0012 can call it without import changes.
