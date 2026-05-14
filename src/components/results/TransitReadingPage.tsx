@@ -3,12 +3,13 @@ import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import { assignTransitHouses, buildTransitPrompt } from '../../engine/transits'
 import { buildTransitTimeline } from '../../engine/transitTimeline'
-import type { PlanetName, ZodiacSign } from '../../engine/types'
+import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import TransitTimeline from '../reading/TransitTimeline'
 import AdvanceTab from '../reading/AdvanceTab'
+import AspectRow from '../reading/AspectRow'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
@@ -17,6 +18,7 @@ import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
+import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Reading',
@@ -60,33 +62,47 @@ function TransitInterpretation({ text }: { text: string }) {
   )
 }
 
-function TransitAspectsSection({ transitData }: { transitData: TransitData }) {
+function TransitAspectsSection({
+  transitData,
+  chartData,
+}: {
+  transitData: TransitData
+  chartData: ChartData
+}) {
   if (transitData.transitAspects.length === 0) return null
-
-  const natureColor = (n: string) =>
-    n === 'harmonious' ? 'text-green-400' : n === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
   return (
     <Section title={`Transit Aspects (${transitData.transitAspects.length})`} defaultOpen>
-      <div className="space-y-2">
+      <div>
         {transitData.transitAspects.map((a, i) => {
-          const g1 = PLANET_GLYPHS[a.transitPlanet as PlanetName] ?? '☊'
-          const g2 = PLANET_GLYPHS[a.natalPlanet as PlanetName] ?? '☊'
+          // Spec 9: unknownTime guard — house is null when time is unknown
+          // Spec 10: natal planet house lookup with house-0 guard (spec 17)
+          const rawHouse = chartData.unknownTime
+            ? null
+            : (chartData.planets.find(p => p.name === a.natalPlanet)?.house ?? null)
+          const natalHouse = rawHouse && rawHouse > 0 ? rawHouse : null
+
+          const brief = computeTransitAspectBrief(
+            a.transitPlanet,
+            a.type,
+            a.natalPlanet,
+            natalHouse,
+            a.nature,
+            a.applying,
+          )
+
           return (
-            <div key={i} className="flex items-center gap-2 py-2 border-b border-mystic-gold/5 last:border-0">
-              <span className="text-lg">{g1}</span>
-              <span className={`text-lg ${natureColor(a.nature)}`}>{a.symbol}</span>
-              <span className="text-lg">{g2}</span>
-              <div className="flex-1">
-                <span className="text-mystic-text text-sm">
-                  Transit {a.transitPlanet} {a.type} Natal {a.natalPlanet}
-                </span>
-              </div>
-              <span className="text-mystic-muted text-xs">{a.orb}° orb</span>
-              <span className={`text-xs px-2 py-0.5 rounded ${a.applying ? 'bg-mystic-gold/20 text-mystic-gold' : 'bg-mystic-surface text-mystic-muted'}`}>
-                {a.applying ? 'applying' : 'separating'}
-              </span>
-            </div>
+            <AspectRow
+              key={i}
+              transitPlanet={a.transitPlanet}
+              natalPlanet={a.natalPlanet}
+              aspectType={a.type}
+              nature={a.nature}
+              symbol={a.symbol}
+              orb={a.orb}
+              applying={a.applying}
+              brief={brief}
+            />
           )
         })}
       </div>
@@ -322,7 +338,7 @@ export default function TransitReadingPage() {
           )}
 
           {/* transit aspects to natal */}
-          <TransitAspectsSection transitData={transitData} />
+          <TransitAspectsSection transitData={transitData} chartData={chartData} />
 
           {/* sign changes */}
           <IngressesSection transitData={transitData} />

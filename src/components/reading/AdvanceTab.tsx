@@ -6,8 +6,10 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { Aspect } from '../../engine/aspects'
 import ChartWheel from '../chart/ChartWheel'
+import AspectRow from './AspectRow'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
+import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -74,10 +76,6 @@ function preCalculateSnapshots(
 }
 
 // ─── Advance Tab Component ───────────────────────────────────────────────────
-
-function AspectNatureColor(nature: string): string {
-  return nature === 'harmonious' ? 'text-green-400' : nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
-}
 
 export default function AdvanceTab({
   chartData,
@@ -196,25 +194,36 @@ export default function AdvanceTab({
           <div className="px-5 py-3 bg-mystic-gold/5">
             <span className="font-heading text-lg text-mystic-gold">Transit Aspects ({snapshot.transitAspects.length})</span>
           </div>
-          <div className="px-5 py-4 space-y-2">
+          <div className="px-5 py-4">
             {snapshot.transitAspects.map((a, i) => {
-              const g1 = PLANET_GLYPHS[a.transitPlanet as PlanetName] ?? '☊'
-              const g2 = PLANET_GLYPHS[a.natalPlanet as PlanetName] ?? '☊'
+              // Spec 9: unknownTime guard — house is null when time is unknown
+              // Spec 10: natal planet house lookup with house-0 guard (spec 17)
+              const rawHouse = chartData.unknownTime
+                ? null
+                : (chartData.planets.find(p => p.name === a.natalPlanet)?.house ?? null)
+              const natalHouse = rawHouse && rawHouse > 0 ? rawHouse : null
+
+              const brief = computeTransitAspectBrief(
+                a.transitPlanet,
+                a.type,
+                a.natalPlanet,
+                natalHouse,
+                a.nature,
+                a.applying,
+              )
+
               return (
-                <div key={i} className="flex items-center gap-2 py-2 border-b border-mystic-gold/5 last:border-0">
-                  <span className="text-lg">{g1}</span>
-                  <span className={`text-lg ${AspectNatureColor(a.nature)}`}>{a.symbol}</span>
-                  <span className="text-lg">{g2}</span>
-                  <div className="flex-1">
-                    <span className="text-mystic-text text-sm">
-                      Transit {a.transitPlanet} {a.type} Natal {a.natalPlanet}
-                    </span>
-                  </div>
-                  <span className="text-mystic-muted text-xs">{a.orb}° orb</span>
-                  <span className={`text-xs px-2 py-0.5 rounded ${a.applying ? 'bg-mystic-gold/20 text-mystic-gold' : 'bg-mystic-surface text-mystic-muted'}`}>
-                    {a.applying ? 'applying' : 'separating'}
-                  </span>
-                </div>
+                <AspectRow
+                  key={i}
+                  transitPlanet={a.transitPlanet}
+                  natalPlanet={a.natalPlanet}
+                  aspectType={a.type}
+                  nature={a.nature}
+                  symbol={a.symbol}
+                  orb={a.orb}
+                  applying={a.applying}
+                  brief={brief}
+                />
               )
             })}
           </div>
