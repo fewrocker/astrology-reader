@@ -1,13 +1,20 @@
 import 'dotenv/config';
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
+import cookieParser from 'cookie-parser';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
 import { getDb } from './db.js';
 import authRouter from './routes/auth.js';
+import oauthRouter from './routes/oauth.js';
 import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
+import analyticsRouter from './routes/analytics.js';
+import stripeRouter from './routes/stripe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,15 +22,31 @@ const __dirname = path.dirname(__filename);
 const isDev = process.env.NODE_ENV !== 'production';
 let JWT_SECRET = process.env.JWT_SECRET ?? '';
 
+// --- Env var guards ---
+// In production, refuse to start without required secrets.
+// In dev, warn but continue.
+
 if (!isDev && JWT_SECRET.length < 32) {
   console.error('FATAL: JWT_SECRET must be at least 32 characters in production');
+  process.exit(1);
+}
+
+if (!isDev && !process.env.STRIPE_SECRET_KEY) {
+  console.error('FATAL: STRIPE_SECRET_KEY must be set in production');
+  process.exit(1);
+}
+
+if (!isDev && !process.env.STRIPE_WEBHOOK_SECRET) {
+  console.error('FATAL: STRIPE_WEBHOOK_SECRET must be set in production');
   process.exit(1);
 }
 
 if (!JWT_SECRET) {
   const ephemeral = crypto.randomBytes(32).toString('hex');
   console.warn(
-    'WARNING: JWT_SECRET not set — using ephemeral secret. Tokens will be invalidated on restart.'
+    'WARNING: Using ephemeral JWT_SECRET. All sessions will be invalidated on restart.' +
+    ' Set JWT_SECRET in .env for persistent sessions.' +
+    ' In staging/production environments, this will log out paying users on every deploy.'
   );
   process.env.JWT_SECRET = ephemeral;
   JWT_SECRET = ephemeral;
@@ -32,16 +55,66 @@ if (!JWT_SECRET) {
 // Warm up DB and run migrations at startup
 getDb();
 
+// Purge events older than 90 days — runs daily at server startup
+setInterval(() => {
+  try {
+    const db = getDb();
+    const result = db
+      .prepare("DELETE FROM events WHERE created_at < datetime('now', '-90 days')")
+      .run();
+    if (result.changes > 0) {
+      console.log(`[analytics] purged ${result.changes} events older than 90 days`);
+    }
+  } catch (err) {
+    console.error('[analytics] purge failed:', err);
+  }
+}, 24 * 60 * 60 * 1000); // 24 hours
+
 const app = express();
 
 app.set('trust proxy', 1);
-app.use(express.json());
+
+// Security headers (helmet) — must come before all routes
+app.use(helmet());
+
+// Gzip compression for API responses — must come before routes
+// Note: express.static handles its own compression independently
+app.use(compression());
+
+// Request logging: 'combined' (Apache format) in production, 'dev' (colorized) in development
+app.use(morgan(isDev ? 'dev' : 'combined'));
+
+// CRITICAL: Stripe webhook route MUST be registered BEFORE express.json().
+// The webhook handler uses express.raw() so Stripe can verify the request signature
+// against the raw body bytes. Once express.json() has consumed the body, verification fails.
+app.use('/api/stripe', stripeRouter);
+
+// Body parsing — after stripe webhook registration
+app.use(express.json({ limit: '50kb' }));
+app.use(cookieParser());
+
+// Session cookie middleware — sets a persistent session_id cookie on all /api/* requests
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api')) return next();
+  if (!req.cookies?.session_id) {
+    const sessionId = crypto.randomUUID();
+    res.cookie('session_id', sessionId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
+    });
+  }
+  next();
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRouter);
+app.use('/api/auth', oauthRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/gpt', gptRouter);
+app.use('/api/analytics', analyticsRouter);
 
 // Serve compiled frontend in production (dist/ lives one level above server/)
 const distDir = path.resolve(__dirname, '../dist');
@@ -50,6 +123,15 @@ app.use(express.static(distDir));
 // SPA fallback for non-API GET requests
 app.get(/^(?!\/api).*/, (_req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
+});
+
+// Global async error handler — MUST be registered after all routes.
+// Catches any Error passed via next(err) or thrown synchronously in route handlers.
+// Ensures stack traces are never sent to clients.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[unhandled]', err);
+  res.status(500).json({ error: 'internal_error' });
 });
 
 const PORT = parseInt(process.env.PORT ?? '3002', 10);

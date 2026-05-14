@@ -1,15 +1,10 @@
-SPRINT NAME: UI-UX FLOWS
-Management detected that we have developed many features but they all live as separate buttons in the main menu and that is starting to get too populated. 
-This sprint should be all focused on enhancing the UI-UX flows of the app keeping it beautiful but easy to reach where you want, with things well separated
-Some things management wants on this sprint:
--> The main menu is the soul of everything. After inserting your basic birth information, you should fall in the main screen menu, not in the birth chart reading 
--> In the main modal on the left it should bring your birth information yes, and a button to change the birth information. Then it should present the Daily Snapshot inside that modal instead of down below in a separate section of the screen. Then, it should have ONE big button for the user to navigate called Get Your Readings
--> Get Your Readings button should open a modal of options for the user separated in groups:
-First group: You - information about you that never change (Birth chart and numerology)
-Second group: Transits - things that change over time. So Daily / Weekly / Yearly reading and year ahead
-Third group: Journals - things that the user can input every day: Journal and Dream Interpretation
-Organize the groups in a beautiful way, find the way to better display the information while keeping beautiful
+SPRINT NAME: PRODUCTION PREPARATION
 
-Another important improvement: for screens that the user clicks and takes time to load because of AI calls (couple synastry, daily/weekly/yearly readings, it is important for the calculated info to show up on screen instantly, and then just the AI ran fields to ran by THEMSELVES separately while having a loading animation that then shows the information when it is ready, but the time until information is on the screen should be almost zero, and then the AI requests will be populated). Instead of loading, please use other terms like Analyzing the sky, etc... (make it fancy, not just 'loading')
-
-Feel free to recommend some other UI/UX improvements 
+The main idea of this sprint is getting ready for production launch for actual customers to participate on the app.
+Users will be able to use free content - anything that is just calculation based is free. Anything that is gpt related and that makes requests for analysis allows 3 requests per day for free, but anything above that would be behind a subscription. Theres a basic tier that allows 20 readings/requests per day, and a more advanced tier that allows 100 readings a day and also access to across time patterns of Journal Entries and Dreams. So, explain that on the subscription tiers
+Ai calls should show when the quota is met and invite for the next plans explaining subtly the benefits.
+Then we need to implement a easy payment solution like Stripe for that
+Also, we gotta do anything else that we need in order to make this app production ready
+I would also like to install on the app user tracking metrics for funnel tracking, meaning how many users get in, track them via cookies to see their interactions, how much they are using and how close they are to subscribing
+I also want to allow sign up using Google or Facebook
+Whatever else you think is nice for onboarding, receiving and tracking users, and to make the app production ready and ready for scaling is welcome 

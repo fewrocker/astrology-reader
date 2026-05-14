@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import MigrationBanner from './components/auth/MigrationBanner'
@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
 import AuthModal from './components/auth/AuthModal'
+import UpgradeModal from './components/subscription/UpgradeModal'
 import HomeScreen from './components/home/HomeScreen'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -24,11 +25,13 @@ import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
-import { getGptInterpretation } from './services/gptInterpretation'
+import { getGptInterpretation, RateLimitError } from './services/gptInterpretation'
+import type { RateLimitInfo } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
+import { track } from './services/analytics'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
-  const { isAuthenticated, displayName, logout } = useAuth()
+  const { isAuthenticated, displayName, logout, tier, todayUsed } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -46,17 +49,36 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
       <button
         type="button"
         onClick={onOpenAuth}
-        className="absolute right-0 top-1/2 -translate-y-1/2 text-xl transition-colors"
-        style={{ color: 'rgba(201,168,76,0.3)', lineHeight: 1 }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.65)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.3)')}
+        className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-heading tracking-wide transition-all duration-150"
+        style={{
+          color: 'rgba(201,168,76,0.75)',
+          border: '1px solid rgba(201,168,76,0.25)',
+          background: 'rgba(201,168,76,0.06)',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.color = '#c9a84c'
+          e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
+          e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.color = 'rgba(201,168,76,0.75)'
+          e.currentTarget.style.borderColor = 'rgba(201,168,76,0.25)'
+          e.currentTarget.style.background = 'rgba(201,168,76,0.06)'
+        }}
         aria-label="Sign in"
-        title="Sign in"
       >
-        ✦
+        <span style={{ fontSize: '0.75rem', lineHeight: 1 }}>✦</span>
+        Sign in
       </button>
     )
   }
+
+  // For free-tier: show remaining reads count (spec §37)
+  // For paid tiers: show tier name badge (spec §38-39)
+  const tierLimits: Record<string, number> = { free: 3, basic: 20, advanced: 100 }
+  const remaining = (tierLimits[tier] ?? 3) - todayUsed
+  const tierLabel = tier === 'basic' ? 'Basic ✦' : tier === 'advanced' ? 'Advanced ✦' : null
+  const readingsLabel = tier === 'free' ? `${remaining} reading${remaining !== 1 ? 's' : ''} left today` : null
 
   return (
     <div ref={ref} className="absolute right-0 top-1/2 -translate-y-1/2">
@@ -84,6 +106,27 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
             style={{ color: '#c9a84c', borderColor: 'rgba(201,168,76,0.15)' }}
           >
             {displayName}
+            {/* Tier indicator — readings left (free) or tier badge (paid) (spec §36-39) */}
+            {readingsLabel && (
+              <div
+                className="text-xs font-heading mt-1"
+                style={{ color: 'rgba(201,168,76,0.45)' }}
+                role="status"
+                aria-live="polite"
+              >
+                {readingsLabel}
+              </div>
+            )}
+            {tierLabel && (
+              <div
+                className="text-xs font-heading mt-1"
+                style={{ color: 'rgba(201,168,76,0.75)' }}
+                role="status"
+                aria-live="polite"
+              >
+                {tierLabel}
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -170,13 +213,31 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
+  const { isAuthenticated, tier } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null)
+  const [intendedUpgradeTier, setIntendedUpgradeTier] = useState<'basic' | 'advanced' | undefined>(undefined)
 
   const openAuth = (tab: 'login' | 'register' = 'login') => {
     setAuthModalTab(tab)
     setAuthModalOpen(true)
   }
+
+  // Track page_view on initial mount
+  useEffect(() => {
+    track('page_view', {
+      view: state.view,
+      has_cached_data: hasCachedBirthData(),
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openUpgrade = useCallback((info: RateLimitInfo, intendedTier?: 'basic' | 'advanced') => {
+    setRateLimitInfo(info)
+    setIntendedUpgradeTier(intendedTier)
+    setUpgradeModalOpen(true)
+  }, [])
 
   const journalChartData = useMemo(() => {
     if (state.chartData) return state.chartData
@@ -209,6 +270,7 @@ function AppContent() {
         const aspects = calculateAspects(chart.planets)
         const reading = assembleReading(chart, aspects, birthData.focusAreas[0])
         dispatch({ type: 'SET_RESULTS', chartData: chart, aspects, reading })
+        track('form_completed', { has_birth_time: !birthData.unknownTime })
       } catch (e) {
         console.error('Calculation error:', e)
         dispatch({ type: 'SET_VIEW', view: 'form' })
@@ -259,6 +321,10 @@ function AppContent() {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Transit calculation error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -312,6 +378,10 @@ function AppContent() {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Synastry calculation error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -351,6 +421,10 @@ function AppContent() {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Synastry transit error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -405,6 +479,10 @@ function AppContent() {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Solar return error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -433,7 +511,7 @@ function AppContent() {
         <div className="w-full max-w-2xl mb-2">
           <NetworkWarningBanner />
         </div>
-        <header className={`text-center relative ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'} w-full max-w-2xl`}>
+        <header className={`text-center relative z-20 ${isLandingPage && showCachedLanding ? 'mb-6' : 'mb-10'} w-full max-w-2xl`}>
           <h1 className="font-heading text-4xl md:text-5xl text-mystic-gold mb-2">Astral Chart</h1>
           <p className="text-mystic-muted text-sm tracking-wide">Your birth chart, decoded</p>
           <SessionBadge onOpenAuth={() => openAuth('login')} />
@@ -496,6 +574,15 @@ function AppContent() {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialTab={authModalTab}
+      />
+
+      <UpgradeModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        currentTier={tier}
+        resetAt={rateLimitInfo?.resetAt ?? null}
+        authenticated={isAuthenticated}
+        intendedTier={intendedUpgradeTier}
       />
     </div>
   )

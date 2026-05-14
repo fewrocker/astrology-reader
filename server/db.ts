@@ -42,7 +42,77 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_entries_user_kind_date
       ON entries(user_id, kind, date DESC);
+
+    CREATE TABLE IF NOT EXISTS events (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT    NOT NULL,
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      event      TEXT    NOT NULL,
+      properties TEXT,
+      created_at TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_events_session_event
+      ON events(session_id, event);
+
+    CREATE INDEX IF NOT EXISTS idx_events_user_event
+      ON events(user_id, event, created_at);
+
+    CREATE INDEX IF NOT EXISTS idx_events_created_at
+      ON events(created_at);
+
+    CREATE TABLE IF NOT EXISTS gpt_usage (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date    TEXT NOT NULL,
+      count   INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, date)
+    );
   `);
+
+  // Apply OAuth migration if not already applied.
+  // SQLite does not support ALTER COLUMN, so we recreate the table inside a transaction.
+  const cols = (instance.pragma('table_info(users)') as Array<{ name: string }>).map(c => c.name);
+  if (!cols.includes('oauth_provider')) {
+    instance.exec(`
+      BEGIN;
+      CREATE TABLE users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        oauth_provider TEXT,
+        oauth_subject TEXT,
+        full_name TEXT,
+        birth_date TEXT,
+        birth_time TEXT,
+        birth_place TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        CHECK (password_hash IS NOT NULL OR (oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL))
+      );
+      INSERT INTO users_new (id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at)
+        SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth ON users(oauth_provider, oauth_subject) WHERE oauth_provider IS NOT NULL;
+      COMMIT;
+    `);
+  }
+
+  // Additive migrations for subscription tier and stripe columns — safe to run on existing databases.
+  // Catch "duplicate column name" errors when column already exists (from the OAuth table rebuild above).
+  const addColumnIfMissing = (sql: string) => {
+    try {
+      instance!.exec(sql);
+    } catch (err: unknown) {
+      // Ignore "duplicate column name" errors — column already exists
+      if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
+        throw err;
+      }
+    }
+  };
+
+  addColumnIfMissing("ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'");
+  addColumnIfMissing('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
 
   return instance;
 }

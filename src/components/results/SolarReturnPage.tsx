@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { SolarReturnData } from '../../engine/solarReturn'
 import { buildSolarReturnPrompt } from '../../engine/solarReturn'
@@ -9,6 +9,7 @@ import DiscussModal from '../discuss/DiscussModal'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
+import { track } from '../../services/analytics'
 
 function SRReading({ text }: { text: string }) {
   const paragraphs = text.split('\n').filter(p => p.trim().length > 0)
@@ -94,6 +95,8 @@ export default function SolarReturnPage() {
   const [activeTab, setActiveTab] = useState<'reading' | 'chart'>('reading')
   const [discussOpen, setDiscussOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
+
+  useEffect(() => { track('reading_viewed', { reading_type: 'solar_return' }) }, [])
 
   const currentYear = new Date().getFullYear()
   const targetYear = solarReturnData?.targetYear ?? currentYear

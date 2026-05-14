@@ -1,7 +1,29 @@
 import type { ChartData } from '../engine/types'
 import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
-import { GPT_RATE_LIMIT, GPT_RATE_LIMIT_UNAUTH, GPT_SERVER_ERROR, GPT_OFFLINE, GPT_NUDGE } from './gptErrors'
+import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_NUDGE } from './gptErrors'
+import { track } from './analytics'
+
+// ─── Rate limit signal ────────────────────────────────────────────────────────
+
+export interface RateLimitInfo {
+  resetAt: string
+  authenticated: boolean
+  tier: 'free' | 'basic' | 'advanced'
+}
+
+/**
+ * Thrown when the server returns 429. Callers can catch this to open UpgradeModal
+ * instead of rendering an inline error string in the reading result.
+ */
+export class RateLimitError extends Error {
+  readonly info: RateLimitInfo
+  constructor(info: RateLimitInfo) {
+    super('rate_limit_exceeded')
+    this.name = 'RateLimitError'
+    this.info = info
+  }
+}
 
 // JWT key used by auth service — injected as Authorization header when present
 const JWT_STORAGE_KEY = 'astral-chart-jwt'
@@ -49,12 +71,17 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
   }
 
   if (response.status === 429) {
-    let unauthenticated = !hasToken
+    let authenticated = hasToken
+    let resetAt = new Date(Date.now() + 86400000).toISOString()
+    let tier: 'free' | 'basic' | 'advanced' = 'free'
     try {
-      const body = await response.json() as { authenticated?: boolean }
-      unauthenticated = body.authenticated === false
-    } catch { /* ignore — fall back to header-based detection */ }
-    throw new Error(unauthenticated ? GPT_RATE_LIMIT_UNAUTH : GPT_RATE_LIMIT)
+      const body = await response.json() as { authenticated?: boolean; resetAt?: string; tier?: string }
+      if (body.authenticated === false) authenticated = false
+      if (body.resetAt) resetAt = body.resetAt
+      if (body.tier === 'basic' || body.tier === 'advanced') tier = body.tier
+    } catch { /* fall back to defaults */ }
+    track('gpt_limit_hit', { authenticated, gpt_type: type })
+    throw new RateLimitError({ resetAt, authenticated, tier })
   }
 
   if (!response.ok) {
@@ -63,6 +90,7 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
 
   const data = await response.json() as { result: unknown }
   _sessionCalls++
+  track('gpt_request_made', { gpt_type: type })
   return data.result
 }
 
@@ -71,6 +99,7 @@ export async function getGptInterpretation(systemPrompt: string): Promise<string
     const result = await callProxy('transit-interpretation', { systemPrompt })
     return (result as string) || 'Unable to generate interpretation.'
   } catch (err) {
+    if (err instanceof RateLimitError) throw err
     return err instanceof Error ? err.message : GPT_SERVER_ERROR
   }
 }

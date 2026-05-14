@@ -40,7 +40,7 @@ export async function apiClient<T>(
 
 interface AuthResponse {
   token: string
-  user: { id: number; email: string }
+  user: { id: number; email: string; subscriptionTier?: 'free' | 'basic' | 'advanced' }
 }
 
 export function login(email: string, password: string) {
@@ -65,6 +65,7 @@ export interface AuthUser {
   id: number
   email: string
   displayName: string
+  tier: 'free' | 'basic' | 'advanced'
 }
 
 // Shape the server actually returns from /api/auth/me and /api/profile
@@ -76,14 +77,26 @@ export interface ServerUserProfile {
   birthTime: string | null
   birthPlace: { name: string; lat: number; lng: number; tz: string; country: string } | null
   createdAt: string
+  subscriptionTier?: 'free' | 'basic' | 'advanced'
 }
 
 export interface SessionResponse {
   user: ServerUserProfile
 }
 
+export interface UsageResponse {
+  todayUsed: number
+  limit: number
+  tier: 'free' | 'basic' | 'advanced'
+  resetAt: string
+}
+
 export function getSession() {
   return apiClient<SessionResponse>('/api/auth/me', {}, 5000)
+}
+
+export function getUsage() {
+  return apiClient<UsageResponse>('/api/auth/usage', {}, 5000)
 }
 
 export function saveProfile(birthData: BirthData) {
