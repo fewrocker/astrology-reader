@@ -262,12 +262,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTodayUsed(0)
   }, [])
 
-  // Spec 11 — incrementTodayUsed is a stable useCallback (empty deps) so App.tsx can call
-  // it from useEffect bodies without triggering unnecessary re-renders.
-  const incrementTodayUsed = useCallback(() => {
-    setTodayUsed(prev => prev + 1)
-  }, [])
-
   const dismissNetworkWarning = useCallback(() => setShowNetworkWarning(false), [])
 
   const notifyLoggedIn = useCallback((loggedInUser: AuthUser) => {
@@ -286,8 +280,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const dismissOauthError = useCallback(() => setOauthError(null), [])
-
-  const incrementTodayUsed = useCallback(() => setTodayUsed(prev => prev + 1), [])
 
   const dismissPaymentWelcome = useCallback(() => {
     setPaymentWelcomePending(false)
