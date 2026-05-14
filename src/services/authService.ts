@@ -65,6 +65,7 @@ export interface AuthUser {
   id: number
   email: string
   displayName: string
+  tier: 'free' | 'basic' | 'advanced'
 }
 
 // Shape the server actually returns from /api/auth/me and /api/profile
@@ -83,8 +84,19 @@ export interface SessionResponse {
   user: ServerUserProfile
 }
 
+export interface UsageResponse {
+  todayUsed: number
+  limit: number
+  tier: 'free' | 'basic' | 'advanced'
+  resetAt: string
+}
+
 export function getSession() {
   return apiClient<SessionResponse>('/api/auth/me', {}, 5000)
+}
+
+export function getUsage() {
+  return apiClient<UsageResponse>('/api/auth/usage', {}, 5000)
 }
 
 export function saveProfile(birthData: BirthData) {

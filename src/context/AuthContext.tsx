@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import { AUTH_TOKEN_KEY, getSession, getProfile, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
+import { AUTH_TOKEN_KEY, getSession, getProfile, getUsage, login as apiLogin, register as apiRegister, logout as apiLogout } from '../services/authService'
 import { track } from '../services/analytics'
 import type { AuthUser, ServerUserProfile } from '../services/authService'
 import { saveBirthData } from './appState'
@@ -27,6 +27,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   displayName: string
   tier: 'free' | 'basic' | 'advanced'
+  todayUsed: number
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
@@ -87,11 +88,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [migrationCandidate, setMigrationCandidate] = useState<MigrationCandidate | null>(null)
   const [oauthError, setOauthError] = useState<string | null>(null)
   const [paymentWelcomePending, setPaymentWelcomePending] = useState(false)
+  const [todayUsed, setTodayUsed] = useState(0)
+
+  // After session is restored, fetch today's usage count.
+  // todayUsed reflects state at session load — not a real-time counter.
+  // If this fetch fails, todayUsed stays at 0 — no error is shown.
+  const fetchUsage = useCallback(async () => {
+    const result = await getUsage()
+    if (result.ok) {
+      setTodayUsed(result.data.todayUsed)
+    }
+    // On failure: silently keep todayUsed at 0
+  }, [])
 
   const applySessionResult = useCallback((profile: ServerUserProfile) => {
     const { id, email, subscriptionTier } = profile
-    setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '' }, state.birthData.userName) })
     const t = (subscriptionTier ?? 'free') as 'free' | 'basic' | 'advanced'
+    setUser({ id, email, displayName: deriveDisplayName({ id, email, displayName: '', tier: t }, state.birthData.userName), tier: t })
     setTier(t)
     const birthData = serverProfileToBirthData(profile, state.birthData)
     if (birthData) {
@@ -137,12 +150,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.history.replaceState(null, '', window.location.pathname)
     }
 
-    getSession().then(result => {
+    getSession().then(async result => {
       if (result.ok) {
         applySessionResult(result.data.user)
         if (isPaymentReturn) {
           setPaymentWelcomePending(true)
         }
+        // Fetch usage count after session restore
+        await fetchUsage()
       } else {
         if (result.error === 'offline') {
           setShowNetworkWarning(true)
@@ -170,10 +185,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token: jwt, user: userData } = result.data
       localStorage.setItem(AUTH_TOKEN_KEY, jwt)
       setToken(jwt)
-      const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
+      const userTier = (userData.subscriptionTier ?? 'free') as 'free' | 'basic' | 'advanced'
+      const loggedInUser: AuthUser = {
+        id: userData.id,
+        email: userData.email,
+        displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '', tier: userTier }, state.birthData.userName),
+        tier: userTier,
+      }
       setUser(loggedInUser)
-      const t = (userData.subscriptionTier ?? 'free') as 'free' | 'basic' | 'advanced'
-      setTier(t)
+      setTier(userTier)
       track('login_completed', { method: 'email' })
       // Load birth data from server profile after login
       const profileResult = await getProfile()
@@ -184,12 +204,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           saveBirthData(birthData)
         }
       }
+      // Fetch today's usage
+      await fetchUsage()
       return { ok: true }
     }
     if (result.error === 'unauthorized') return { ok: false, error: 'Invalid email or password.' }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
     return { ok: false, error: 'Something went wrong. Please try again.' }
-  }, [state.birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.birthData.userName, fetchUsage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const register = useCallback(async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const result = await apiRegister(email, password)
@@ -197,9 +219,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { token: jwt, user: userData } = result.data
       localStorage.setItem(AUTH_TOKEN_KEY, jwt)
       setToken(jwt)
-      const loggedInUser = { id: userData.id, email: userData.email, displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '' }, state.birthData.userName) }
+      const userTier = (userData.subscriptionTier ?? 'free') as 'free' | 'basic' | 'advanced'
+      const loggedInUser: AuthUser = {
+        id: userData.id,
+        email: userData.email,
+        displayName: deriveDisplayName({ id: userData.id, email: userData.email, displayName: '', tier: userTier }, state.birthData.userName),
+        tier: userTier,
+      }
       setUser(loggedInUser)
       track('signup_completed', { method: 'email' })
+      // Set sessionStorage flag so HomeScreen shows the first-visit welcome sentence once
+      sessionStorage.setItem('just-registered', 'true')
       return { ok: true }
     }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
@@ -213,6 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null)
     setUser(null)
     setTier('free')
+    setTodayUsed(0)
   }, [])
 
   const dismissNetworkWarning = useCallback(() => setShowNetworkWarning(false), [])
@@ -246,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: user !== null,
       displayName,
       tier,
+      todayUsed,
       login,
       register,
       logout,

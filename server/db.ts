@@ -60,10 +60,17 @@ export function getDb(): Database.Database {
 
     CREATE INDEX IF NOT EXISTS idx_events_created_at
       ON events(created_at);
+
+    CREATE TABLE IF NOT EXISTS gpt_usage (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date    TEXT NOT NULL,
+      count   INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, date)
+    );
   `);
 
-  // Apply OAuth migration if not already applied
-  // SQLite does not support ALTER COLUMN, so we recreate the table inside a transaction
+  // Apply OAuth migration if not already applied.
+  // SQLite does not support ALTER COLUMN, so we recreate the table inside a transaction.
   const cols = (instance.pragma('table_info(users)') as Array<{ name: string }>).map(c => c.name);
   if (!cols.includes('oauth_provider')) {
     instance.exec(`

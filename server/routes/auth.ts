@@ -22,6 +22,8 @@ export interface UserRow {
   stripe_customer_id: string | null;
 }
 
+const TIER_LIMITS: Record<string, number> = { free: 3, basic: 20, advanced: 100 };
+
 const router = Router();
 
 export function signToken(userId: number): string {
@@ -37,14 +39,17 @@ function safeUser(user: UserRow) {
     fullName: user.full_name,
     birthDate: user.birth_date,
     birthTime: user.birth_time,
+    // Existing rows that pre-date the migration have subscription_tier = null in SQLite
+    // (SQLite does not backfill existing rows when adding a column with DEFAULT).
+    // The ?? 'free' guard makes this safe (spec §21).
+    subscriptionTier: (user.subscription_tier ?? 'free') as 'free' | 'basic' | 'advanced',
     birthPlace: user.birth_place ? JSON.parse(user.birth_place) : null,
     createdAt: user.created_at,
-    subscriptionTier: (user.subscription_tier ?? 'free') as 'free' | 'basic' | 'advanced',
     // stripe_customer_id is intentionally NOT exposed to the client
   };
 }
 
-const USER_SELECT = 'SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at, subscription_tier, stripe_customer_id FROM users';
+const SELECT_USER_COLS = 'id, email, password_hash, oauth_provider, oauth_subject, full_name, birth_date, birth_time, birth_place, created_at, subscription_tier, stripe_customer_id';
 
 router.post('/register', authRateLimiter, (req: Request, res: Response): void => {
   const { email, password, fullName } = req.body as {
@@ -80,7 +85,7 @@ router.post('/register', authRateLimiter, (req: Request, res: Response): void =>
     .run(email.trim().toLowerCase(), passwordHash, fullName ?? null);
 
   const userId = result.lastInsertRowid as number;
-  const user = db.prepare(`${USER_SELECT} WHERE id = ?`).get(userId) as UserRow;
+  const user = db.prepare(`SELECT ${SELECT_USER_COLS} FROM users WHERE id = ?`).get(userId) as UserRow;
 
   res.status(201).json({ token: signToken(userId), user: safeUser(user) });
 });
@@ -95,7 +100,7 @@ router.post('/login', authRateLimiter, (req: Request, res: Response): void => {
 
   const db = getDb();
   const user = db
-    .prepare(`${USER_SELECT} WHERE email = ?`)
+    .prepare(`SELECT ${SELECT_USER_COLS} FROM users WHERE email = ?`)
     .get(email.trim().toLowerCase()) as UserRow | undefined;
 
   if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) {
@@ -113,7 +118,7 @@ router.post('/logout', (_req: Request, res: Response): void => {
 router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { userId } = req as AuthenticatedRequest;
   const db = getDb();
-  let user = db.prepare(`${USER_SELECT} WHERE id = ?`).get(userId) as UserRow | undefined;
+  let user = db.prepare(`SELECT ${SELECT_USER_COLS} FROM users WHERE id = ?`).get(userId) as UserRow | undefined;
 
   if (!user) {
     res.status(404).json({ error: 'User not found' });
@@ -146,6 +151,29 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
   }
 
   res.json({ user: safeUser(user) });
+});
+
+/**
+ * GET /api/auth/usage — returns today's GPT usage count and tier limit.
+ * Used by AuthContext to populate todayUsed and drive tier-aware UI nudges.
+ */
+router.get('/usage', requireAuth, (req: Request, res: Response): void => {
+  const { userId } = req as AuthenticatedRequest;
+  const today = new Date().toISOString().slice(0, 10);
+  const db = getDb();
+
+  const userRow = db.prepare('SELECT subscription_tier FROM users WHERE id = ?').get(userId) as { subscription_tier: string } | undefined;
+  const tier = (userRow?.subscription_tier ?? 'free') as 'free' | 'basic' | 'advanced';
+  const limit = TIER_LIMITS[tier] ?? 3;
+
+  const usageRow = db.prepare('SELECT count FROM gpt_usage WHERE user_id = ? AND date = ?').get(userId, today) as { count: number } | undefined;
+  const todayUsed = usageRow?.count ?? 0;
+
+  // resetAt = next midnight UTC
+  const d = new Date();
+  const resetAt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1)).toISOString();
+
+  res.json({ todayUsed, limit, tier, resetAt });
 });
 
 export default router;

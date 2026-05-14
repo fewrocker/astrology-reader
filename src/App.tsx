@@ -31,7 +31,7 @@ import { hasCachedBirthData } from './context/appState'
 import { track } from './services/analytics'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
-  const { isAuthenticated, displayName, logout } = useAuth()
+  const { isAuthenticated, displayName, logout, tier, todayUsed } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -49,17 +49,36 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
       <button
         type="button"
         onClick={onOpenAuth}
-        className="absolute right-0 top-1/2 -translate-y-1/2 text-xl transition-colors"
-        style={{ color: 'rgba(201,168,76,0.3)', lineHeight: 1 }}
-        onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.65)')}
-        onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.3)')}
+        className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-heading tracking-wide transition-all duration-150"
+        style={{
+          color: 'rgba(201,168,76,0.75)',
+          border: '1px solid rgba(201,168,76,0.25)',
+          background: 'rgba(201,168,76,0.06)',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.color = '#c9a84c'
+          e.currentTarget.style.borderColor = 'rgba(201,168,76,0.55)'
+          e.currentTarget.style.background = 'rgba(201,168,76,0.12)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.color = 'rgba(201,168,76,0.75)'
+          e.currentTarget.style.borderColor = 'rgba(201,168,76,0.25)'
+          e.currentTarget.style.background = 'rgba(201,168,76,0.06)'
+        }}
         aria-label="Sign in"
-        title="Sign in"
       >
-        ✦
+        <span style={{ fontSize: '0.75rem', lineHeight: 1 }}>✦</span>
+        Sign in
       </button>
     )
   }
+
+  // For free-tier: show remaining reads count (spec §37)
+  // For paid tiers: show tier name badge (spec §38-39)
+  const tierLimits: Record<string, number> = { free: 3, basic: 20, advanced: 100 }
+  const remaining = (tierLimits[tier] ?? 3) - todayUsed
+  const tierLabel = tier === 'basic' ? 'Basic ✦' : tier === 'advanced' ? 'Advanced ✦' : null
+  const readingsLabel = tier === 'free' ? `${remaining} reading${remaining !== 1 ? 's' : ''} left today` : null
 
   return (
     <div ref={ref} className="absolute right-0 top-1/2 -translate-y-1/2">
@@ -87,6 +106,27 @@ function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
             style={{ color: '#c9a84c', borderColor: 'rgba(201,168,76,0.15)' }}
           >
             {displayName}
+            {/* Tier indicator — readings left (free) or tier badge (paid) (spec §36-39) */}
+            {readingsLabel && (
+              <div
+                className="text-xs font-heading mt-1"
+                style={{ color: 'rgba(201,168,76,0.45)' }}
+                role="status"
+                aria-live="polite"
+              >
+                {readingsLabel}
+              </div>
+            )}
+            {tierLabel && (
+              <div
+                className="text-xs font-heading mt-1"
+                style={{ color: 'rgba(201,168,76,0.75)' }}
+                role="status"
+                aria-live="polite"
+              >
+                {tierLabel}
+              </div>
+            )}
           </div>
           <button
             type="button"
