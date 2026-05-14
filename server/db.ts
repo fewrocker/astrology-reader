@@ -91,5 +91,21 @@ export function getDb(): Database.Database {
     `);
   }
 
+  // Additive migrations for subscription tier and stripe columns — safe to run on existing databases.
+  // Catch "duplicate column name" errors when column already exists (from the OAuth table rebuild above).
+  const addColumnIfMissing = (sql: string) => {
+    try {
+      instance!.exec(sql);
+    } catch (err: unknown) {
+      // Ignore "duplicate column name" errors — column already exists
+      if (!(err instanceof Error && err.message.includes('duplicate column name'))) {
+        throw err;
+      }
+    }
+  };
+
+  addColumnIfMissing("ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'");
+  addColumnIfMissing('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+
   return instance;
 }

@@ -14,6 +14,7 @@ import profileRouter from './routes/profile.js';
 import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
 import analyticsRouter from './routes/analytics.js';
+import stripeRouter from './routes/stripe.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,9 +84,12 @@ app.use(compression());
 // Request logging: 'combined' (Apache format) in production, 'dev' (colorized) in development
 app.use(morgan(isDev ? 'dev' : 'combined'));
 
-// NOTE: The Stripe webhook route (feat-stripe-checkout) MUST be mounted
-// BEFORE express.json() middleware, using express.raw({ type: 'application/json' })
-// so that Stripe signature verification can access the raw request body.
+// CRITICAL: Stripe webhook route MUST be registered BEFORE express.json().
+// The webhook handler uses express.raw() so Stripe can verify the request signature
+// against the raw body bytes. Once express.json() has consumed the body, verification fails.
+app.use('/api/stripe', stripeRouter);
+
+// Body parsing — after stripe webhook registration
 app.use(express.json({ limit: '50kb' }));
 app.use(cookieParser());
 

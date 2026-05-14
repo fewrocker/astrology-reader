@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import { getDb } from '../db.js';
 import { requireAuth, AuthenticatedRequest, TokenPayload } from '../middleware/auth.js';
 import { authRateLimiter } from '../middleware/rateLimiter.js';
+import { invalidateUserRateLimit } from '../middleware/gptRateLimit.js';
+import stripeClient, { getTierFromPriceId } from '../services/stripe.js';
 
 export interface UserRow {
   id: number;
@@ -16,6 +18,8 @@ export interface UserRow {
   birth_time: string | null;
   birth_place: string | null;
   created_at: string;
+  subscription_tier: string | null;
+  stripe_customer_id: string | null;
 }
 
 const router = Router();
@@ -35,8 +39,12 @@ function safeUser(user: UserRow) {
     birthTime: user.birth_time,
     birthPlace: user.birth_place ? JSON.parse(user.birth_place) : null,
     createdAt: user.created_at,
+    subscriptionTier: (user.subscription_tier ?? 'free') as 'free' | 'basic' | 'advanced',
+    // stripe_customer_id is intentionally NOT exposed to the client
   };
 }
+
+const USER_SELECT = 'SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at, subscription_tier, stripe_customer_id FROM users';
 
 router.post('/register', authRateLimiter, (req: Request, res: Response): void => {
   const { email, password, fullName } = req.body as {
@@ -72,7 +80,7 @@ router.post('/register', authRateLimiter, (req: Request, res: Response): void =>
     .run(email.trim().toLowerCase(), passwordHash, fullName ?? null);
 
   const userId = result.lastInsertRowid as number;
-  const user = db.prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE id = ?').get(userId) as UserRow;
+  const user = db.prepare(`${USER_SELECT} WHERE id = ?`).get(userId) as UserRow;
 
   res.status(201).json({ token: signToken(userId), user: safeUser(user) });
 });
@@ -87,7 +95,7 @@ router.post('/login', authRateLimiter, (req: Request, res: Response): void => {
 
   const db = getDb();
   const user = db
-    .prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE email = ?')
+    .prepare(`${USER_SELECT} WHERE email = ?`)
     .get(email.trim().toLowerCase()) as UserRow | undefined;
 
   if (!user || !user.password_hash || !bcrypt.compareSync(password, user.password_hash)) {
@@ -102,14 +110,39 @@ router.post('/logout', (_req: Request, res: Response): void => {
   res.json({ ok: true });
 });
 
-router.get('/me', requireAuth, (req: Request, res: Response): void => {
+router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
   const { userId } = req as AuthenticatedRequest;
   const db = getDb();
-  const user = db.prepare('SELECT id, email, password_hash, full_name, birth_date, birth_time, birth_place, created_at FROM users WHERE id = ?').get(userId) as UserRow | undefined;
+  let user = db.prepare(`${USER_SELECT} WHERE id = ?`).get(userId) as UserRow | undefined;
 
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
+  }
+
+  // Stripe reconciliation: if user has a stripe_customer_id but shows free tier,
+  // check Stripe for any active subscriptions — catches webhook delivery failures.
+  if (user.stripe_customer_id && (user.subscription_tier === 'free' || !user.subscription_tier)) {
+    try {
+      const subs = await stripeClient.subscriptions.list({
+        customer: user.stripe_customer_id,
+        status: 'active',
+        limit: 1,
+      });
+      if (subs.data.length > 0) {
+        const priceId = subs.data[0].items.data[0]?.price?.id ?? '';
+        const tier = getTierFromPriceId(priceId);
+        if (tier) {
+          db.prepare("UPDATE users SET subscription_tier = ? WHERE id = ? AND subscription_tier != ?")
+            .run(tier, user.id, tier);
+          user = { ...user, subscription_tier: tier };
+          invalidateUserRateLimit(user.id);
+        }
+      }
+    } catch (err) {
+      // Non-blocking: Stripe API error must not fail authentication
+      console.error('[auth/me] Stripe reconciliation error (non-fatal):', err);
+    }
   }
 
   res.json({ user: safeUser(user) });

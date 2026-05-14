@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import MigrationBanner from './components/auth/MigrationBanner'
@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
 import NetworkWarningBanner from './components/NetworkWarningBanner'
 import AuthModal from './components/auth/AuthModal'
+import UpgradeModal from './components/subscription/UpgradeModal'
 import HomeScreen from './components/home/HomeScreen'
 import FormWizard from './components/form/FormWizard'
 import PartnerForm from './components/form/PartnerForm'
@@ -24,7 +25,8 @@ import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
-import { getGptInterpretation } from './services/gptInterpretation'
+import { getGptInterpretation, RateLimitError } from './services/gptInterpretation'
+import type { RateLimitInfo } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
 import { track } from './services/analytics'
 
@@ -171,8 +173,12 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
+  const { isAuthenticated, tier } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
+  const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
+  const [rateLimitInfo, setRateLimitInfo] = useState<RateLimitInfo | null>(null)
+  const [intendedUpgradeTier, setIntendedUpgradeTier] = useState<'basic' | 'advanced' | undefined>(undefined)
 
   const openAuth = (tab: 'login' | 'register' = 'login') => {
     setAuthModalTab(tab)
@@ -186,6 +192,12 @@ function AppContent() {
       has_cached_data: hasCachedBirthData(),
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openUpgrade = useCallback((info: RateLimitInfo, intendedTier?: 'basic' | 'advanced') => {
+    setRateLimitInfo(info)
+    setIntendedUpgradeTier(intendedTier)
+    setUpgradeModalOpen(true)
+  }, [])
 
   const journalChartData = useMemo(() => {
     if (state.chartData) return state.chartData
@@ -269,6 +281,10 @@ function AppContent() {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Transit calculation error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -322,6 +338,10 @@ function AppContent() {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Synastry calculation error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -361,6 +381,10 @@ function AppContent() {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Synastry transit error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -415,6 +439,10 @@ function AppContent() {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
         }
       } catch (e) {
+        if (e instanceof RateLimitError) {
+          if (!cancelled) openUpgrade(e.info)
+          return
+        }
         console.error('Solar return error:', e)
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_ERROR', error: e instanceof Error ? e.message : 'An error occurred' })
@@ -506,6 +534,15 @@ function AppContent() {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialTab={authModalTab}
+      />
+
+      <UpgradeModal
+        isOpen={upgradeModalOpen}
+        onClose={() => setUpgradeModalOpen(false)}
+        currentTier={tier}
+        resetAt={rateLimitInfo?.resetAt ?? null}
+        authenticated={isAuthenticated}
+        intendedTier={intendedUpgradeTier}
       />
     </div>
   )
