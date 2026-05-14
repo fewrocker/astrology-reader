@@ -28,6 +28,7 @@ interface AuthContextType {
   displayName: string
   tier: 'free' | 'basic' | 'advanced'
   todayUsed: number
+  incrementTodayUsed: () => void
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   register: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   logout: () => Promise<void>
@@ -89,6 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [oauthError, setOauthError] = useState<string | null>(null)
   const [paymentWelcomePending, setPaymentWelcomePending] = useState(false)
   const [todayUsed, setTodayUsed] = useState(0)
+
+  const incrementTodayUsed = useCallback(() => { setTodayUsed(prev => prev + 1) }, [])
 
   // After session is restored, fetch today's usage count.
   // todayUsed reflects state at session load — not a real-time counter.
@@ -230,12 +233,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       track('signup_completed', { method: 'email' })
       // Set sessionStorage flag so HomeScreen shows the first-visit welcome sentence once
       sessionStorage.setItem('just-registered', 'true')
+      await fetchUsage()
       return { ok: true }
     }
     if (result.error === 'offline') return { ok: false, error: 'Could not reach the server. Check your connection.' }
     if (result.error === 'server-error' && result.status === 409) return { ok: false, error: 'An account with this email already exists.' }
     return { ok: false, error: 'Something went wrong. Please try again.' }
-  }, [state.birthData.userName]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [state.birthData.userName, fetchUsage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const logout = useCallback(async () => {
     await apiLogout()
@@ -278,6 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       displayName,
       tier,
       todayUsed,
+      incrementTodayUsed,
       login,
       register,
       logout,
