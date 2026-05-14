@@ -22,6 +22,8 @@ export interface TimelineEvent {
   dateStr: string // YYYY-MM-DD
   planet?: PlanetName | 'NorthNode'
   secondPlanet?: PlanetName | 'NorthNode'
+  natalHouse?: number | null   // null when unknownTime; absent for non-aspect events
+  natalSign?: string
   aspectType?: AspectType
   aspectSymbol?: string
   aspectNature?: 'harmonious' | 'challenging' | 'neutral'
@@ -163,12 +165,14 @@ function findAspectPerfection(
 
 /**
  * Find all aspect perfection events across a date range.
+ * @param unknownTime when true, natalHouse is set to null (no birth time = no houses)
  */
 function findAspectPerfections(
   natalPlanets: PlanetPosition[],
   startDate: Date,
   endDate: Date,
   period: TransitPeriod,
+  unknownTime: boolean,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = []
 
@@ -196,6 +200,8 @@ function findAspectPerfections(
             dateStr,
             planet: tName,
             secondPlanet: np.name,
+            natalHouse: unknownTime ? null : (np.house > 0 ? np.house : null),
+            natalSign: np.sign,
             aspectType: def.name,
             aspectSymbol: def.symbol,
             aspectNature: def.nature,
@@ -422,7 +428,7 @@ export function buildTransitTimeline(
   const { start, end } = getDateRange(period, targetMonth)
 
   // Gather all event types
-  const aspectEvents = findAspectPerfections(natalChart.planets, start, end, period)
+  const aspectEvents = findAspectPerfections(natalChart.planets, start, end, period, natalChart.unknownTime)
   const ingressEvents = findIngresses(start, end, period !== 'monthly') // include Moon for daily/weekly
   const stationEvents = findStations(start, end)
   const lunarEvents = findLunarPhases(start, end)

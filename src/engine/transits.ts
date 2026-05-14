@@ -16,6 +16,8 @@ export interface TransitPosition extends PlanetPosition {
 export interface TransitAspect {
   transitPlanet: PlanetName | 'NorthNode'
   natalPlanet: PlanetName | 'NorthNode'
+  natalHouse: number | null   // null when chartData.unknownTime is true
+  natalSign: string
   type: AspectType
   orb: number
   exactAngle: number
@@ -116,11 +118,13 @@ export function calculateCurrentPositions(date: Date): TransitPosition[] {
 /**
  * Calculate aspects between transit planets and natal planets.
  * Uses tighter orbs for transits than natal aspects.
+ * @param unknownTime when true, natalHouse is set to null for all aspects (no birth time = no houses)
  */
 export function calculateTransitAspects(
   transitPlanets: TransitPosition[],
   natalPlanets: PlanetPosition[],
-  period: TransitPeriod
+  period: TransitPeriod,
+  unknownTime = false,
 ): TransitAspect[] {
   // Tighter orbs for transits — scale by period relevance
   const orbScale = period === 'daily' ? 0.3 : period === 'weekly' ? 0.5 : 0.7
@@ -145,6 +149,8 @@ export function calculateTransitAspects(
           aspects.push({
             transitPlanet: tp.name,
             natalPlanet: np.name,
+            natalHouse: unknownTime ? null : (np.house > 0 ? np.house : null),
+            natalSign: np.sign,
             type: def.name,
             orb: Math.round(orb * 100) / 100,
             exactAngle: def.angle,
@@ -397,7 +403,7 @@ export function getTopActiveTransits(
   date?: Date,
 ): TransitAspect[] {
   const positions = calculateCurrentPositions(date ?? new Date())
-  const aspects = calculateTransitAspects(positions, chartData.planets, 'daily')
+  const aspects = calculateTransitAspects(positions, chartData.planets, 'daily', chartData.unknownTime)
   return aspects.filter(a => a.orb <= maxOrbDegrees).slice(0, maxCount)
 }
 
@@ -440,7 +446,7 @@ export function calculateTransits(
   const { start, end, startStr, endStr } = getDateRange(period, targetMonth)
 
   const currentPlanets = calculateCurrentPositions(start)
-  const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period)
+  const transitAspects = calculateTransitAspects(currentPlanets, natalChart.planets, period, natalChart.unknownTime)
   const ingresses = detectIngresses(start, end)
   const retrogrades = getRetrogradeStatus(start)
 
