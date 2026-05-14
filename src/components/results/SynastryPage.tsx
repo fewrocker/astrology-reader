@@ -5,6 +5,8 @@ import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
 import { buildSynastryPrompt } from '../../engine/synastry'
+import AspectRow from '../reading/AspectRow'
+import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
@@ -107,35 +109,25 @@ function InterpretationSection({ text }: { text: string }) {
 function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
   if (aspects.length === 0) return null
 
-  const natureColor = (n: string) =>
-    n === 'harmonious' ? 'text-green-400' : n === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
-
   return (
     <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen>
       <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
-      <div className="space-y-2">
-        {aspects.map((a, i) => {
-          const g1 = PLANET_GLYPHS[a.person1Planet as PlanetName] ?? '☊'
-          const g2 = PLANET_GLYPHS[a.person2Planet as PlanetName] ?? '☊'
-          return (
-            <div key={i} className="flex items-center gap-2 py-2 border-b border-mystic-gold/5 last:border-0">
-              <span className="text-mystic-muted text-xs w-6">P1</span>
-              <span className="text-lg">{g1}</span>
-              <span className={`text-lg ${natureColor(a.nature)}`}>{a.symbol}</span>
-              <span className="text-lg">{g2}</span>
-              <span className="text-mystic-muted text-xs w-6">P2</span>
-              <div className="flex-1">
-                <span className="text-mystic-text text-sm">
-                  {a.person1Planet} {a.type} {a.person2Planet}
-                </span>
-              </div>
-              <span className="text-mystic-muted text-xs">{a.orb}° orb</span>
-              <span className={`text-xs px-2 py-0.5 rounded capitalize ${natureColor(a.nature)}`}>
-                {a.nature}
-              </span>
-            </div>
-          )
-        })}
+      <div>
+        {aspects.map((a, i) => (
+          <AspectRow
+            key={i}
+            transitPlanet={a.person1Planet}
+            natalPlanet={a.person2Planet}
+            aspectType={a.type}
+            nature={a.nature}
+            symbol={a.symbol}
+            orb={a.orb}
+            applying={false}
+            showApplyingBadge={false}
+            labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
+            brief={computeSynastryAspectBrief(a.person1Planet, a.type, a.person2Planet, a.nature)}
+          />
+        ))}
       </div>
     </CollapsibleSection>
   )
