@@ -1,194 +1,265 @@
 # Nassim Taleb — Voice Analysis
 
-## Sprint 0011 Focus: Finishing the Sentences — Interpretation Layer Expansion
+## Sprint 0012 Focus: Backend Sovereignty
 
 ---
 
 ## Preamble
 
-Sprint 0010 fixed a structural fragility I documented: it embedded `natalHouse` into `TransitAspect`, created `getNatalPlanetContext`, wrote `computeTransitAspectBrief`. The plumbing is now real. That is good. But plumbing is not the same as water. Sprint 0011 proposes to open six new valves simultaneously. The question is whether the pressure in the pipes is what anyone thinks it is, and whether the connectors will hold when you apply load to all of them at once.
+The sprint vision has identified a real fragility. The server is an execution node, not a knowledge node. The client builds the prompts, assembles the data, does the astronomy — and the server obediently fires the GPT call with whatever string arrived. That is not sovereignty. That is a proxy.
 
-I will tell you what is fragile, what the assumptions are that nobody has tested, and where the silent failures will live when this sprint ships.
-
----
-
-## Fragility Audit
-
-### 1. The synastry relational briefs database — the sprint's largest new deliverable — has no oracle for correctness
-
-Sprint 0011 proposes writing "roughly 30–40 entries for high-frequency [synastry] pairs" in a new table. The vision is explicit that the existing `ASPECT_INTERPRETATIONS` uses natal-voice framing and cannot be repurposed here. It is correct about that.
-
-Here is the fragility that follows from it: natal aspect interpretations are verifiable against a shared canon. "Sun conjunct Moon: your will and emotional nature operate as one" is a claim about which there is 80 years of astrological consensus literature, and any astrologer can evaluate it. A synastry brief — "P1 Venus trine P2 Moon: your warmth lands softly on them and they stop waiting to be convinced" — is a creative claim with no single authority. The implementer writes 30–40 of these. They will sound plausible. They will be produced by a developer working from intuition and prior art, not a trained astrologer.
-
-The fragility is not that the entries will be obviously wrong. They will not be obviously wrong. The fragility is that they will be plausible in a way that is uncheckable by any reviewer, any user, and any quality bar the sprint defines. Plausibility is not accuracy. The sprint's own quality bar — "would only make sense for someone whose planet is in that house" — is a bar for transit briefs. It does not apply to synastry cross-chart briefs, which carry no house context at all. The synastry brief for Venus trine Moon will read the same whether P1's Venus is in the 2nd house and P2's Moon is in the 9th, or the reverse. The brief will not be chart-specific in the way the sprint's quality bar demands. It will be planet-pair-specific, which is closer to a magazine horoscope than to personalized astrology.
-
-The sprint vision says "compact, relational, roughly 30–40 entries." What happens to aspect pairs outside those 30–40? The fallback is "aspect-type + planet-archetype phrasing adapted to relational context." But that fallback does not exist yet either. The `ASPECT_BRIEFS` in `transitEvents.ts` are transit-context briefs — they describe a transiting body activating a natal point. Using them in synastry context is the same category error the vision correctly condemns when it says not to use natal self-aspect text. The fallback needs its own relational adaptation. That is a second data-writing task hidden inside the primary one.
+The correction is conceptually correct. Now let me tell you what everyone is assuming that is not true, what breaks when porting is done half-heartedly, and where this sprint introduces its own fragilities.
 
 ---
 
-### 2. The `HouseOverlaySection` brief — "one-to-two sentences using house theme and planet archetype" — produces combinatorial text that no one will read
+## What Everyone Is Assuming
 
-The vision says: "A one-to-two sentence brief per entry, using the house theme and the planet's archetype, makes this section actually readable."
+### The central assumption nobody has examined: `birth_place` will always be a valid, parseable JSON object with `lat`, `lng`, and `tz` present
 
-Read how many entries `houseOverlay.person1InPerson2Houses` produces. Every planet in Person 1's chart falls into one of Person 2's houses. That is 10–11 planets minimum. Person 2's planets in Person 1's houses: another 10–11. Total: 20–22 brief-per-row entries, all visible simultaneously in an expanded section.
-
-The transit aspect rows expanded briefs work because the user taps one row at a time. The expansion is on-demand. The `HouseOverlaySection` as currently implemented in `SynastryPage.tsx` is a table — no expand/collapse per row. If you add a one-to-two sentence brief below each table row, you add 20–22 paragraphs to a section that currently renders 20–22 table rows. The section becomes a scroll wall.
-
-The vision does not mention this. It describes the feature as making the section "readable." But adding 22 undifferentiated interpretation sentences to a flat table does not produce readability — it produces a reading that takes 5 minutes to absorb and makes the important entries (Person 1 Venus in Person 2's 7th) invisible among the unimportant ones (Person 1 Saturn in Person 2's 11th).
-
-The correct interaction model for house overlay briefs is either: (a) per-row expand/collapse, as used in `AspectRow`, or (b) highlight only the traditionally significant placements (Sun, Moon, Venus, Mars, rising ruler in the 1st, 4th, 5th, 7th, 8th) and skip or minimize the rest. Neither is what the vision describes.
-
-If the implementer renders all 22 briefs as flat text, the section becomes an information dump. If they add per-row expand/collapse, they are building more UI than the vision stated. There is no clean path to the stated outcome within the stated scope.
-
----
-
-### 3. The `elementCompat` function in `synastry.ts` has a sorting bug that silently returns the wrong dominant element for Person 1
-
-Look at this code in `src/engine/synastry.ts` at line 261:
+The entire server-side calculation path for every ported handler begins at the same point in `gpt.ts` line 225:
 
 ```typescript
-const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count2[b] - count1[a])[0]
+const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
+if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.tz) {
 ```
 
-The sort comparator is `count2[b] - count1[a]`. This is comparing element `b` from `count2` against element `a` from `count1`. This is not a sort by `count1` descending. The correct sort for Person 1's dominant element is `count1[b] - count1[a]`. The comparator as written sorts Person 1's elements by a cross-table comparison that has no sensible meaning. The dominant element returned for Person 1 is effectively random — it is whatever element happens to produce the highest value when you subtract Person 1's count of element `a` from Person 2's count of element `b`.
+This is the sole data source for server-side chart computation. The field is `TEXT` in SQLite. It is stored by the client. It is never validated on write beyond what the profile route accepts. There is no schema constraint enforcing that `lat`, `lng`, and `tz` are present.
 
-This bug exists today. It is not a sprint-0011 introduction. But sprint 0011 proposes to add `analyzeElements` output to `buildSynastryPrompt` — which is the correct `analyzeElements` from `src/data/interpretations/index.ts`, not the buggy `elementCompat` in `synastry.ts`. The `buildSynastryPrompt` addition is safe. But the `CompatibilitySection` on `SynastryPage.tsx` displays `elementCompatibility` from `calculateCompatibility`, which calls `elementCompat`, which uses the broken sort. The "Overall Resonance" score bar and the "Elements" text in the compatibility overview are currently wrong for many chart pairs.
+Now consider: What is `birth_place` for a user who registered via OAuth and skipped the birth profile? It is `null`. The guard handles `null` correctly — `row.birth_place` check catches it. Fine.
 
-The sprint vision does not mention this bug. It will not be fixed in sprint 0011. The sprint will add element analysis to the GPT prompt using correct data (`analyzeElements`), while the UI displays element compatibility using incorrect data (`elementCompat`). The GPT paragraph will describe Fire-Water tension; the compatibility bar will say "Harmonious — Earth and Air elements naturally support each other." Nobody will catch this because both texts are plausible and users do not cross-check compatibility prose against element tables.
+What is `birth_place` for a user who registered early in the product's lifecycle, before the current JSON structure was canonical? It depends on what the client sent. What if the client sent `{"lat": "40.71", "lng": "-74.00", "tz": "America/New_York"}` — string lat/lng instead of numbers? The `typeof place.lat === 'number'` guard fails silently. The server falls back to empty context or no context. No error is logged. The GPT call proceeds with empty astrological data. Nobody knows.
 
-The proposal is to fix the sort while touching `synastry.ts` for the prompt additions. Two lines.
+What is `birth_place` for a user whose city lookup returned a result without a timezone — a legitimate edge case for certain cities near timezone boundaries? `place.tz` is falsy. The guard fails. Silent fallback.
 
----
+The dream handler had one server-side computation path. Sprint 0012 proposes adding this same fragile DB read as the foundation for transit, synastry, solar return, and numerology computations. Every new handler that reads `birth_place` inherits this silent failure mode. The failure mode is not an error — it is a degraded response. The user submits a transit request, the server falls back to empty natal context, GPT produces a generic response, nobody logs anything, nobody knows the DB field was unusable.
 
-### 4. The `AspectRow` component's `maxHeight: '6rem'` brief expansion will clip solar return and synastry briefs that are longer than transit briefs
-
-`AspectRow` was designed for transit aspect briefs, which are constrained to 200 characters by the `truncateToLimit` call in `computeTransitAspectBrief`. The expanded brief panel uses `maxHeight: '6rem'`. At the default `text-xs` line height of approximately 16px, 6rem is about 6 lines — enough for 200 characters at normal line width.
-
-Sprint 0011 proposes using `AspectRow` for composite transit aspects in `SynastryTransitPage.tsx`. The brief for a composite transit should name the relationship area being activated — "Saturn pressing into the composite 7th house (partnership and commitment) suggests the relationship itself is being asked to grow up." That sentence is 118 characters — fine. But once you add a second sentence naming the aspect nature, you approach 220–250 characters, which overflows the 200-character truncation.
-
-More importantly: if someone writes the synastry relational briefs without the truncation constraint (the sprint vision does not mention applying the transit truncation function to synastry briefs), a 350-character brief will be clipped by `maxHeight: 6rem` with an invisible overflow. The text is not truncated — it is hidden. The user taps the row, the brief expands, but the last sentence is cut off mid-word because the div stops expanding. There is no scroll, no ellipsis, no indicator that more text exists.
-
-The `maxHeight` of `6rem` is a design assumption that works for 200-character briefs. If sprint 0011 introduces briefs from a new data source written to a different length convention, some briefs will be silently clipped in every expand.
+This is the highest-leverage fragility in the sprint. The fix is one function, written once, that either returns a validated `{ lat: number; lng: number; tz: string }` or throws a typed error. Every handler calls this function. Silences are audible.
 
 ---
 
-### 5. The Solar Return page renders `srChart.planets` without guarding against `unknownTime` — the SR chart always has a computed time, but the natal comparison column assumes the natal chart does too
+### The assumption about synastry: both people's birth data will be in the DB
 
-In `SolarReturnPage.tsx`, the `SRPlanetTable` component looks up natal planets by name to display the "Natal Sign" column:
+For server-side synastry computation, the server needs two natal charts: the authenticated user's and their partner's. The authenticated user's birth data is in the DB. The partner's birth data is entered in the frontend form and has never been stored anywhere.
+
+The sprint vision does not mention this. It describes `buildSynastryPrompt` as a port target and says "the server can produce the same data structure the frontend produces for any authenticated user whose birth data is stored." But synastry requires two users. The partner is not a user. They have no account. They have no DB row. Their birth data exists only in the client's state for the duration of the session.
+
+There are two paths here: (a) accept the partner's birth data as a payload from the client (meaning the client still does or at least validates some data), or (b) restrict server-side synastry to registered couples — which does not exist as a product feature. Path (a) is the only workable option, and it means the synastry handler will take a different shape than every other handler — it cannot be purely DB-sovereign; it must accept partner data from the client.
+
+If the implementer does not notice this, they will write a synastry handler that queries only the primary user's birth data and cannot compute Person 2's chart at all. The handler will either fail or produce a Person 1-only reading labeled as a synastry reading. Neither is acceptable, and neither will be obvious in code review.
+
+---
+
+### The assumption about solar return: the birth location is the return location
+
+In `src/engine/solarReturn.ts`, `calculateSolarReturn` takes `birthLat` and `birthLng` — the birth location — as the observation point for the solar return chart. This matches standard relocation-birthplace practice.
+
+But some astrological traditions and some calculation tools compute the solar return for the location where the person currently lives, not where they were born. This question is live among practitioners.
+
+More concretely: the server has `birth_lat` and `birth_lng` from the stored `birth_place`. It does not have the user's current location. When the frontend calculates the solar return, it uses the birth coordinates because that is what it has. The server will use the same. For now, these match. But the fragility is that a user who is aware of relocation SR charts cannot get one from either the client or the server, and the server port will silently cement the birth-location assumption into the backend with no way to override it — not because someone decided this, but because nobody noticed the assumption was being ported along with the calculation.
+
+---
+
+## The Specific Fragilities
+
+### 1. The duplicate utilities problem will get worse before it gets better
+
+Count how many times `normalizeAngle`, `longitudeToZodiac`, `getPlanetLongitude`, and `getMeanNodeLongitude` already appear in the codebase:
+
+- `src/engine/astronomy.ts` — all four
+- `src/engine/transits.ts` — `getPlanetLongitude`, `getMeanNodeLongitude` (local copies)
+- `server/engine/chartEngine.ts` — all four (local copies)
+
+The sprint vision acknowledges this and says "duplicate logic should be resolved by establishing a clean shared module structure in `server/engine/`, not by accumulating more copies."
+
+Here is what will actually happen: the sprint ports five engine files. Each port starts from the corresponding frontend file. Each frontend file has local copies of `getPlanetLongitude` and `getMeanNodeLongitude`. The porter copies the file, adjusts imports, verifies the output matches the frontend. They do not extract the shared utilities because that requires changing `chartEngine.ts` and all new files simultaneously — a refactor that touches more surface area than the vision scoped.
+
+Result: after sprint 0012, there will be six copies of `normalizeAngle` and five copies of `getMeanNodeLongitude` across `server/engine/`. The shared module recommendation in the vision will remain a recommendation. The next sprint will inherit five files with divergent copies of the same 8-line function, and when a precision bug is found in `normalizeAngle`, the fix will be applied to one copy and missed in four.
+
+This is textbook accumulation of fragility through incremental shortcuts. The sprint vision correctly identifies the problem and incorrectly scopes the solution as something that can be deferred.
+
+The fix is simple: write `server/engine/astroUtils.ts` first, before porting a single engine file. It contains `normalizeAngle`, `longitudeToZodiac`, `getMeanNodeLongitude`, and the `BODY_MAP`. Every ported file imports from it. This is not extra work — it is the same work done once instead of five times.
+
+---
+
+### 2. The orb tables are not consistent between frontend and backend, and nobody has written a test to prove they are
+
+The vision's quality bar: "server-assembled prompts must be identical in information density to frontend-assembled prompts."
+
+Look at `server/engine/chartEngine.ts` lines 78–84:
 
 ```typescript
-const np = srData.natalChart.planets.find(p => p.name === sp.name)
+const ASPECT_DEFS = [
+  { angle: 0,   orb: 2.4, symbol: '☌', name: 'conjunction'  },
+  { angle: 60,  orb: 1.8, symbol: '⚹', name: 'sextile'      },
+  { angle: 90,  orb: 2.4, symbol: '□', name: 'square'       },
+  { angle: 120, orb: 2.4, symbol: '△', name: 'trine'        },
+  { angle: 180, orb: 2.4, symbol: '☍', name: 'opposition'   },
+]
 ```
 
-The SR chart is always calculated with a precise UTC time (`calculateSolarReturn` uses `findSolarReturn`), so `srChart.planets` always have valid house data. But `srData.natalChart` is the user's natal chart — and if `unknownTime` is true, the natal chart's house fields are all `0`.
-
-The `SRPlanetTable` currently shows only "Natal Sign" — so the unknownTime case is handled by accident. But sprint 0011 proposes adding SR Sun/Moon house interpretation using `PLANET_IN_HOUSE`. The proposed call would be `PLANET_IN_HOUSE[`Sun_H${srSun.house}`]` where `srSun.house` comes from the SR chart (which has valid houses). This is safe.
-
-The fragility is in the proposed static interpretation layer: "SR Sun house and SR Moon house are the most important static facts on the page." This is correct. But it assumes the implementer will use `srChart.planets` (which always has houses) and not accidentally reach for `natalChart.planets` (which may have house `0`). The two chart references live side-by-side in `srData`. An implementer who writes `natalChart.planets.find(p => p.name === 'Sun')?.house` to show "natal Sun in its house for context" will get house `0` or `undefined` for users without birth time, and `PLANET_IN_HOUSE['Sun_H0']` or `PLANET_IN_HOUSE['Sun_Hundefined']` will silently return `undefined`. The brief disappears without explanation.
-
-This is the same `unknownTime` ghost that haunted sprint 0010. It does not die; it migrates to the next set of lookups.
-
----
-
-### 6. The `TodayPage` top-transits block uses `getTopActiveTransits(chartData, 3, 8)` — the orb limit is 8, but `AspectRow` receives the full `applying` flag from an aspect that may be barely within orb
-
-`getTopActiveTransits` in `transits.ts` returns the 3 tightest aspects within 8 degrees. Sprint 0011 wants to render these using `AspectRow`, which shows an "applying/separating" badge. This badge is computed from the `applying` field on the `TransitAspect`.
-
-The `applying` detection logic was designed for reading-level aspects (1–3 degrees orb). At 8 degrees, "applying" means the transit planet is moving toward the natal planet but has a week or more before it perfects. An "applying" badge on a Saturn-Moon square at 7.8 degrees is technically correct — Saturn is moving toward the user's Moon — but experientially misleading. The user will interpret "applying" as "happening now." At 7.8 degrees from exact, a slow planet like Saturn may be "applying" for 3–4 months. The badge creates false urgency.
-
-The vision's quality bar says briefs should tell the user "what the current activation means for it." An aspect at 8 degrees orb is not a current activation in any meaningful astrological sense. `getTopActiveTransits` uses orb 8 to ensure the TodayPage has something to show even on quiet days. But the sprint's proposed expand-and-brief treatment was designed for transit reading aspects at 1–4 degree orbs. Applying it without orb context to 8-degree aspects will produce "applying" badges and two-sentence briefs on slow-moving transits that are weeks or months from mattering.
-
-The fix is simple: either reduce `getTopActiveTransits`'s orb to 4–5 degrees when used with `AspectRow`, or display the orb prominently enough that the user can calibrate urgency themselves. The current rendering in `TodayPage` shows the orb on the same line — but the brief expansion, once added, will draw attention away from the orb number. The hierarchy inverts.
-
----
-
-## What Everyone Is Ignoring
-
-### The compatibility score is a meaningless number that gains credibility as the sprint adds more interpretation around it
-
-The "Overall Resonance" score in `CompatibilitySection` is computed as:
+Now look at `src/engine/aspects.ts` lines 22–29:
 
 ```typescript
-const overall = normalize(
-  harmoniousCount * 3 + neutralCount * 2 + challengingCount * 1,
-  totalAspects * 3,
-)
+export const ASPECT_DEFINITIONS: AspectDefinition[] = [
+  { name: 'conjunction', angle: 0, orb: 8, symbol: '☌', nature: 'neutral' },
+  { name: 'sextile', angle: 60, orb: 6, symbol: '⚹', nature: 'harmonious' },
+  { name: 'square', angle: 90, orb: 8, symbol: '□', nature: 'challenging' },
+  { name: 'trine', angle: 120, orb: 8, symbol: '△', nature: 'harmonious' },
+  { name: 'opposition', angle: 180, orb: 8, symbol: '☍', nature: 'challenging' },
+  { name: 'semi-sextile', angle: 30, orb: 2, symbol: '⚺', nature: 'neutral' },
+  { name: 'quincunx', angle: 150, orb: 3, symbol: '⚻', nature: 'challenging' },
+]
 ```
 
-This scores purely by aspect count ratios. Two charts with 20 harmonious trines between outer planets (Uranus trine Neptune, Jupiter trine Pluto) will score higher than two charts with 5 tight inner-planet contacts including a challenging Venus-Mars square and a Sun-Moon conjunction. The score ignores orb weighting for the overall number, ignores whether the aspects involve personal or outer planets, and ignores house context entirely.
+The server's orbs are tight (designed for transit snapshots at `getActiveTransitAspects`). The frontend natal orbs are 8°. The server currently applies its tight orbs correctly — for the purpose of the dream handler's sky context. But when the sprint ports `calculateTransitAspects` and `calculateSynastryAspects`, those functions have their own orb tables derived from the 8° natal table scaled by a period multiplier (`0.3` for daily, `0.5` for weekly, `0.7` for monthly). If the porter copies the transit engine file and imports from `chartEngine.ts`'s `ASPECT_DEFS` instead of recreating the frontend's `ASPECT_DEFINITIONS` as the base, the scaling chain will produce different aspect lists than the frontend.
 
-The score is not astrologically meaningful. Every working astrologer knows that 3 tight inner-planet aspects tell you more about a relationship than 15 loose outer-planet trines. The sprint 0011 work does not touch the scoring function. But it adds relational briefs, house overlay interpretations, and element profiles in GPT — all of which make the surrounding reading richer, more authoritative, and more detailed. A user who reads a rich, specific two-paragraph AI interpretation, plus 22 house overlay entries with briefs, plus 40 synastry aspect briefs — and then sees "Overall Resonance: 82" — will anchor on that number as if it were certified by the same analysis engine that produced the text. The number is not. The number is a simplistic count ratio produced by broken element analysis code.
+The frontend produces: "Mars square natal Mercury" (7.2° orb, monthly scaling at 0.7 → max 5.6°). Wait, that does not pass either. Let me be more precise: the frontend's daily period uses `orb: 8 * 0.3 = 2.4` for conjunction, which happens to match the server's hardcoded 2.4. That is a coincidence for conjunction, not a design match. For sextile: frontend daily is `6 * 0.3 = 1.8`, server is `1.8`. Also coincidental. For the monthly period: frontend monthly conjunction orb is `8 * 0.7 = 5.6`. The server has 2.4. These are not the same.
 
-Sprint 0011 makes the number more dangerous by making the page more credible overall. The number should be removed or clearly labeled as "a rough indicator, not a score." This costs nothing to implement.
+Nobody will notice because the current server only uses tight orbs for the dream handler. The moment a monthly transit handler is ported and the server uses `getActiveTransitAspects` with `maxOrb: 2` instead of `maxOrb: 5.6`, it will miss aspects the frontend shows, and the GPT response will not mention "that Jupiter trine" the user saw on their transit page. The reading will not match.
 
-### The `SynastryTransitPage` composite transit briefs assume the transit is hitting the *composite* chart — but the engine calculates transit aspects to the composite planets using the same natal aspect machinery as individual chart transits
-
-When `buildCoupleTransitPrompt` sends "Transit Saturn square Composite Moon," it means Saturn is transiting to the composite midpoint Moon position. The brief generated by `computeTransitAspectBrief` will name a house based on the composite Moon's house. But the composite chart's houses are calculated from midpoint angles (lines 211–215 in `synastry.ts`). The midpoint Ascendant is the mean of two people's Ascendants. This is numerically coherent but astrologically contested — many practitioners consider composite houses meaningful only when interpreted as representing the relationship dynamic, not as literal life areas.
-
-The `computeTransitAspectBrief` function will produce: "Saturn pressing on your House of Communication" — as if there is a "you" whose communication house is being pressed. But the composite chart has no "you." The composite Moon is not in anyone's 3rd house. It is in the relationship's 3rd house, which is a fundamentally different interpretive register.
-
-This is not a bug. It is an ontological assumption baked into the brief generation function. The function was written for individual chart transits. Reusing it for composite transits produces grammatically correct but ontologically confused output. "Your House of Communication" applied to a composite planet implies an individual who has that house. Nobody does. The composite relationship has that house.
-
-The brief for composite transit aspects needs a different subject: "the relationship's area of communication" or "your shared 3rd house." This distinction matters when the interpretation surfaces alongside a rich GPT paragraph that uses the correct relational framing. The GPT text will say "this Saturn transit is testing the communication patterns of the relationship." The static brief will say "Saturn pressing on your House of Communication." The tonal register conflict is small enough to be ignored and large enough to erode trust in the static layer.
-
-### The synastry relational brief table will create a hidden dependency between `SynastryPage` and `SynastryTransitPage` through shared data — the "composite transit" briefs need different framing than the "synastry aspect" briefs, but they may accidentally share a lookup
-
-The sprint adds briefs to two separate surfaces: synastry cross-chart aspects in `SynastryPage.tsx`, and composite transit aspects in `SynastryTransitPage.tsx`. The vision describes these as using different logic — synastry briefs use the new relational table, composite transit briefs use `computeTransitAspectBrief` adapted for the composite chart.
-
-But the composite transit brief lookup key is `transitPlanet + aspectType + natalPlanet` (where natalPlanet is the composite planet). If the implementer writes the synastry relational brief table with similar keys — "Venus_trine_Moon" for synastry — and then decides to check for synastry-flavored text in the composite transit path as well, the two contexts will share a data source written for neither.
-
-More likely: the implementer writes two separate lookups that both happen to key off "planet pair + aspect type," and at some future date someone merges them "for cleanliness." At that point, a relational brief written for synastry cross-chart context will appear in the composite transit context and vice versa. The merge will look reasonable. It will produce wrong output.
-
-The correct architecture is a clear semantic label on the data: `SYNASTRY_ASPECT_BRIEFS` (cross-chart, relational, second person directed at Person 1 about Person 2) vs. `COMPOSITE_TRANSIT_BRIEFS` (relationship-as-entity, transit activating the relationship dynamic). Separate tables, separate keys, not interchangeable.
+The vision says "identical in information density." This is achievable only if the orb tables are explicitly verified to match for each use case.
 
 ---
 
-## Proposals
+### 3. The "no schema change" constraint is a ticking clock for the numerology case
 
-### Proposal 1: Fix the `elementCompat` sort bug before shipping the synastry element profile to GPT
+The sprint vision explicitly says: "Not a database schema change. No new tables, no new columns. The sprint reads from `birth_date`, `birth_time`, `birth_place` which already exist."
 
-The comparator at `synastry.ts:261` is `count2[b] - count1[a]`. This should be `count1[b] - count1[a]`. One character fix. Without it, `buildSynastryPrompt`'s new element profile section will show correct data (from `analyzeElements`) while `CompatibilitySection`'s element compatibility string shows potentially wrong data (from `elementCompat`). The inconsistency will surface when a user reads a GPT paragraph saying "Person 1 is primarily a Fire chart" while the compatibility UI says "Harmonious — Earth and Air." Fix the comparator while the file is open for prompt additions.
+Now look at what numerology requires on the server side. The server can compute `calculateLifePath` from `birth_date`. It can compute `calculateBirthdayNumber` from `birth_date`. It can compute `calculatePersonalYear` from `birth_date`.
 
-**Fragility addressed:** Silent data inconsistency between the compatibility UI label and the GPT element analysis, caused by a sorting bug that has existed since `synastry.ts` was written.
+It cannot compute `calculateExpressionNumber` or `calculateSoulUrge` without the user's full name as entered — specifically, the birth name used for Pythagorean reduction. The `full_name` column exists in the DB. But `full_name` is the display name or registered name. It may or may not be the birth name. For many users these differ. For OAuth users who registered with their social media name, they almost certainly differ.
 
-### Proposal 2: Constrain the house overlay brief to high-signal planet-house pairs only — do not render all 22 entries
+So: the backend can compute partial numerology (life path, birthday number, personal year) from stored data. It cannot compute expression number or soul urge without a birth name the DB may not have accurately.
 
-Write the `HouseOverlaySection` brief logic to only show interpretation text for traditionally significant synastry placements: Sun, Moon, Venus, Mars in the 1st, 4th, 5th, 7th, 8th, and 12th houses of the partner's chart. These are the roughly 6–8 entries that astrologers actually discuss in synastry readings. Skip or minimize the rest (Saturn in partner's 11th gets no brief — it does not need one to be readable).
+The current frontend `astro-numerology-cross` handler receives `numbers` from the client, including `expressionNumber`. The server has no way to verify or recompute this. If the sprint ports a numerology handler that claims server sovereignty over numerology calculations, it will produce a partial computation (3 of 5 numbers) while silently omitting the two numbers that require birth name data not stored in canonical form.
 
-This reduces the content from 22 undifferentiated entries to 6–8 highlighted ones, making the section navigable without adding expand/collapse UI that the vision explicitly rules out as redesign.
+The partial result is worse than the current client-sends-all approach because it will be presented as server-computed without the user or the GPT prompt knowing that two numbers are client-computed. The reading will mix server-verified and client-unverified data in the same payload with no labeling.
 
-**Fragility addressed:** 22 simultaneous interpretation paragraphs in a flat table produces an information wall that inverts the sprint's stated goal of making the section "readable." High-signal filtering makes the important facts findable.
+The constraint "no schema change" means the numerology backend sovereignty is inherently partial. This should be documented explicitly, not discovered after shipping.
 
-### Proposal 3: Add a visible orb threshold label to `TodayPage` top transits before applying `AspectRow` with briefs
+---
 
-When `getTopActiveTransits` returns an aspect at 6–8 degrees orb, the `AspectRow` "applying" badge creates false urgency. Add orb-band language to the brief: if `orb > 4`, the brief should open with "building toward" rather than describing an active influence. Alternatively, cap `getTopActiveTransits`'s orb to 4 when used in the TodayPage context. The "Sky Highlights" framing implies now-active influences; 7-degree orbs are not now-active influences.
+### 4. The half-hearted port is more dangerous than no port at all
 
-**Fragility addressed:** "Applying" badge on a 7.8-degree Saturn transit tells the user something is happening today when it is happening over the next three months. The brief expansion will make this misleading framing more visible, not less.
+The vision warns: "A handler that builds only a partial prompt, or relies on the client for orb sorting, or skips house context, fails the bar."
 
-### Proposal 4: Add explicit composite-subject framing to the `computeTransitAspectBrief` call for composite transits
+Here is the specific failure mode that will occur at sprint's end if the quality bar is not enforced rigorously: a porter writes a `handleTransitInterpretation` server handler that computes the natal chart from DB, computes transit positions, computes transit aspects — but uses the wrong orb table, or omits the ingress detection that `calculateTransits` includes, or skips the retrograde status section that `buildTransitPrompt` appends.
 
-When adapting `AspectRow` for `SynastryTransitPage.tsx`, pass a `subject` parameter or use a distinct brief generator for composite context. The brief should read "this relationship's House of Communication" rather than "your House of Communication." The change is two words in the template string inside `computeTransitAspectBrief` — or an optional `subject` argument that defaults to "your" for individual transits and accepts "the relationship's" for composite transits.
+The resulting server-side prompt is 80% equivalent to the client prompt. The GPT response reads well. The sprint ships with this handler marked as complete.
 
-**Fragility addressed:** Ontological subject mismatch between GPT framing (relational) and static brief framing (individual) erodes user trust in the static layer without anyone understanding why.
+Now the system has two code paths that diverge in unspecified ways:
+1. The client still assembles the full prompt (correctly, as always) and sends it via `getGptInterpretation`
+2. The server assembles a partial prompt for some future use case (subscriptions, journal annotations, scheduled readings)
 
-### Proposal 5: Remove the "Overall Resonance" number or add an honest caveat — do not let it gain credibility from the richer surrounding content
+In six months, when the server path is used for a paid feature, users on that path receive readings that omit ingresses and retrograde context that the client path always included. Nobody knows why the readings feel different. Nobody can bisect back to the orb table discrepancy from sprint 0012.
 
-Sprint 0011 will make the synastry page significantly more interpretively rich. The `CompatibilitySection`'s percentage scores will look more authoritative in context. These scores are computed from aspect count ratios without planet weighting, from a broken element sort, and without any consideration of house context. Adding a single line under the score — "This index counts aspect types only. Tighter aspects and inner planet contacts carry more weight in the reading above." — tells the truth without removing the visual anchor users expect.
+A partial port that ships as complete creates a category of invisible regressions that are impossible to detect without a reference comparison test.
 
-**Fragility addressed:** A numerically-expressed score displayed alongside rich, specific interpretation text is treated by users as an authoritative summary. When the score is based on a count ratio and partially incorrect element analysis, displaying it without caveat is a credibility liability that grows as the surrounding content improves.
+---
+
+### 5. The `resolveToUTC` function is the most dangerous shared function and nobody is testing it
+
+Both `src/engine/astronomy.ts` and `server/engine/chartEngine.ts` contain implementations of timezone-aware UTC resolution. The function takes a date string, a time string, and an IANA timezone identifier, and returns a UTC Date.
+
+This function is the single most fragile piece of the entire calculation chain. The rest of the astronomy is deterministic given a UTC time. The timezone resolution is not. It is subject to:
+
+- DST transitions (is a time in the gap or fold during spring/fall transitions?)
+- Historical timezone changes (IANA database evolves; a timezone that existed in 1985 may have different rules than today)
+- Ambiguous times in the fold (2:30 AM on fall-back day maps to two UTC moments)
+
+The server and client currently run different JavaScript engines with potentially different IANA timezone database versions. The server uses Node.js. The client uses the browser's `Intl.DateTimeFormat`. For most birth dates and locations, these produce identical results. For birth times during DST transitions in jurisdictions that have changed timezone rules since the birth occurred, they may not.
+
+Nobody is testing this. There is no automated comparison of server-computed vs client-computed chart positions for any birth date. The vision says "the backend should be able to compute the same chart data structure that the frontend produces." The vision does not say "verify this is true for boundary cases."
+
+The fragility here is not theoretical. Someone born at 2:15 AM on October 4, 1987 in São Paulo (Brazil had complex DST rules that changed multiple times in the 1980s and 1990s) will receive a different chart from the server than from the client if their IANA database versions diverge on historical Brazilian DST. The chart difference may be 1 hour = approximately 15° ASC shift = completely different rising sign. This is not an edge case for anyone born in South America, Eastern Europe, or parts of Asia between 1970 and 1995.
+
+The fix is a contract test: for a fixed set of known birth data with known astrological outputs (e.g., "Audrey Hepburn, born May 4, 1929, 03:00, Brussels, Belgium — should have Cancer ASC"), run both the client and server calculations and assert identical planet positions within 0.1°. Without this test, "identical" is a claim, not a fact.
+
+---
+
+## Where the Sprint Will Underestimate Scope
+
+### The `buildTransitPrompt` function alone is 200+ lines
+
+Read the frontend `buildTransitPrompt` in `src/engine/transits.ts` carefully. It includes:
+- Natal position formatting with retrograde markers
+- Transit positions with daily motion and retrograde status
+- Aspect lists with applying/separating distinctions and house context
+- Ingress detection across the period
+- Retrograde status changes for every planet
+- Element and modality analysis of the natal chart
+- Period-appropriate orb scaling
+
+This is not a function. It is a small report assembler. Porting it faithfully while also porting `calculateTransits` (which calls `detectIngresses`, `getRetrogradeStatus`, `assignTransitHouses`, `calculateCurrentPositions`, `calculateTransitAspects`) means porting at minimum 5 interconnected functions before a single transit handler can match the frontend's output.
+
+The vision shows a table of 7 missing engine files. Each row in that table represents not one function but an ecosystem of 3–8 interconnected functions. The scope is 4–5x what the table suggests.
+
+### The `calculateSynastry` function requires a composite chart, house overlay, and compatibility score
+
+`calculateSynastry` in `src/engine/synastry.ts` returns a `SynastryData` object containing:
+- `synastryAspects` (cross-chart aspects)
+- `houseOverlay` (person 1's planets in person 2's houses and vice versa)
+- `compositeChart` (midpoint chart)
+- `compatibility` (scored summary)
+
+Porting `buildSynastryPrompt` faithfully requires all four of these. The house overlay requires both charts' house cusps. The composite chart requires midpoint calculations for angles and planets. None of this is trivially additive.
+
+On top of this: as noted above, Person 2's chart comes from client-provided data, not the DB. The sprint's architecture cannot be purely "query DB, compute, return" for synastry.
+
+---
+
+## Where Backend Sovereignty Introduces Its Own Fragilities
+
+### The fallback pattern makes failures invisible
+
+The dream handler introduced a fallback pattern: if the client sends no chart data, fall back to server-computed data; if the server computation fails, fall through silently. This is operationally gentle but diagnostically opaque.
+
+When sprint 0012 extends this pattern to transit, synastry, and solar return handlers, the operational question becomes: how often is the server computing the data independently? How often is it falling through? Is the fallback actually working for 95% of users or 30% of users?
+
+There is no observability into this. No metric tracks "server computed natal chart from DB" vs "server received client-provided chart data" vs "server fell through without chart". A fallback that silently degrades is indistinguishable from a fallback that never succeeds. You cannot fix what you cannot see.
+
+### Making the server sovereign creates a new dependency on DB data quality that did not exist before
+
+Before this sprint, a user with corrupted `birth_place` data had a working application. The client computed everything locally; the DB was only consulted for auth and journal entries. GPT calls relied entirely on client-provided data, and the client always had access to the user's locally-entered birth data even if it never reached the DB properly.
+
+After this sprint, certain server-side features will depend on DB-stored birth data being correct and complete. A user who updated their birth city through a third-party tool, or who has a DB row from a migration that lost their timezone, or who never completed their profile — that user will receive degraded server-side readings from a source they do not know exists.
+
+The sovereignty model transfers correctness responsibility from the client (which has direct user input) to the DB (which has stored and potentially stale data). This is the right direction for long-term reliability, but it requires a data quality baseline that does not currently exist. There is no validation job that verifies all users' `birth_place` fields are valid, complete, and parseable. There is no UI that tells a user their birth data is incomplete for server-side computation.
+
+---
+
+## What Would Make This Sprint Antifragile
+
+An antifragile port is one that gets more reliable under adversarial conditions — bad data, missing fields, unexpected inputs — rather than one that fails when inputs deviate from assumptions.
+
+**One function, validated early.** Write `resolveUserBirthContext(userId: number): BirthContext | null` as the first function of the sprint. It reads `birth_date`, `birth_time`, `birth_place` from the DB, validates all required fields including `typeof lat === 'number'`, handles string-encoded coordinates gracefully, logs when fields are missing or malformed, and returns a typed object or null. Every server handler that needs birth context calls this function. The DB read pattern is written once, validated once, monitored once.
+
+**A contract test.** Before any ported engine function is merged, it must pass a reference test: given the same inputs, the server function and the frontend function produce identical planetary longitudes within 0.1° for a fixed set of known birth dates. This catches timezone resolution divergence before it ships. Five test cases takes two hours to write and catches the class of error that is otherwise invisible for years.
+
+**Explicit partial computation labels.** For numerology and any other domain where the server cannot compute all fields from stored data, the handler should label what is server-computed and what was client-provided. The GPT prompt should state which numbers were verified server-side. Silence about data provenance is the mechanism by which degraded readings become trusted readings.
+
+**A `server/engine/astroUtils.ts` shared module, written first.** This prevents the six-copies-of-normalizeAngle problem before it forms. It is not extra work. It is discipline applied before the copy-paste reflex fires.
+
+**Structured logging for fallback events.** Every time a handler falls back from server-computed to client-provided data (or from client-provided to empty), it should emit a structured log event with the fallback reason. Not an error — a metric. After one week in production, you know whether the server computation is working. Before structured logging, you are flying blind.
 
 ---
 
 ## What This Sprint Will Actually Look Like When It Ships
 
-The sprint ships. The synastry rows have expand/collapse briefs. The house overlay section has interpretation text for some or all entries. The Solar Return page has a static SR Sun/Moon paragraph before the GPT block. The TodayPage top transits expand on tap.
+The transit handler gets ported first. It is the most canonical case and the vision spends the most time on it. The orb tables will not be carefully verified — the porter will see that daily orbs match by coincidence and assume the monthly period also matches. They do not.
 
-What nobody will notice: the compatibility score is still partially wrong due to the broken sort comparator, and nobody will cross-check the "Harmonious — Earth and Air" label against the GPT analysis that correctly identifies one person as a Fire-dominant chart. The two surfaces describe the same charts differently. Users will assume the UI and the GPT agree. They do not.
+The synastry handler will be discovered to require partner data from the client, and the handler will accept it as a payload parameter. This is the right solution, but it means the handler has a different shape than the pure "DB-sovereign" vision implies. The sprint will ship with a comment saying "partner data from client, server computes chart." The semantic difference between "client provides data" and "client builds prompt" will be blurred.
 
-What users will notice that nobody expected: the house overlay section with 22 brief entries is overwhelming. The user who would have found "Your Venus falls in their 7th house" by reading a short table now has to read through 21 other entries with their own two-sentence interpretations to find the one that matters. The section became longer and denser at the same time it became richer. Length and richness are not the same thing.
+The numerology handler will compute 3 of 5 numbers. The handler comment will say "expression number and soul urge are client-provided when name is unavailable." Nobody will ask whether the DB `full_name` field is actually the correct birth name for numerology calculation.
 
-What will be caught in QA and fixed: the `maxHeight: 6rem` clipping on longer briefs, once someone writes a 300-character synastry brief and tests the expand behavior.
+The shared utility duplication will not be resolved. The vision says it should be; the sprint will have six files open simultaneously and nobody will want to restructure imports while also verifying calculation outputs. The `server/engine/astroUtils.ts` file will remain a recommendation.
 
-What will not be caught in QA: the "applying" badge on 7-degree TodayPage transits creating false urgency. QA does not test semantic correctness of astrological framing.
+`resolveToUTC` will not be contract-tested. The server and client will produce identical results for the birth dates used in manual testing. They will produce different results for specific historical dates in certain jurisdictions. Nobody will know.
 
-The fragility of this sprint is not in the implementation. The fragility is in the interpretation design — specifically, the assumption that more text is the same as more signal, and that reusing existing patterns in new contexts preserves their meaning. The `AspectRow` pattern is well-built. Using it for synastry cross-chart aspects, composite transits, and TodayPage highlights in the same sprint applies three different semantic contexts to an interface designed for one. Two of those three will work well. One will produce output that sounds right and means something slightly different than intended. I am not certain which one.
+The sprint ships. The backend is more sovereign than before. The fragilities above will not surface for six months, and when they do, they will be attributed to "edge cases" and "unexpected user data" rather than to assumptions that were baked in without verification during sprint 0012.
+
+---
+
+## The One Thing to Get Right
+
+If this sprint does only one thing well, it should be the `resolveUserBirthContext` function and a contract test for `resolveToUTC`. Everything else can be incrementally improved. An unverified timezone resolution function is a silent, user-specific error that produces authoritative-looking wrong output, and there is no category of error more destructive to user trust in an astrology application than a wrong rising sign.

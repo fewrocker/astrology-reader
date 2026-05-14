@@ -1,165 +1,189 @@
-# Hayao Miyazaki — Voice Analysis: Sprint-0011 Depth
+# Hayao Miyazaki — Voice Analysis: Sprint-0012 Backend Sovereignty
 
 ---
 
-I have walked through this product slowly. Not as someone hunting for features, but as someone who wanted to feel received.
+I have been sitting with this product for a long time now. Not as someone who wants to find problems. As someone who wants to feel that the people who built it gave a damn about the person on the other side.
 
-Sprint 0010 did real work. The transit aspect rows now speak. The timeline event cards know which house is activated. The key aspect pill says something a human being can carry into their morning. The advance tab signals which dates are not like the others. These are not small things. They represent the difference between a machine that outputs and a machine that communicates.
+Sprint 0011 did what it said it would. The synastry rows speak now. The house overlay entries have sentences. The Solar Return page gives the user something before GPT loads. The Today page's sky highlights expand on tap. The craft improved. I noticed.
 
-But I have been here before — in the editing room, when the rough animation passes are done and someone says the scene is finished. It is not finished. The hand has moved but the weight is not there. The mouth has opened but you cannot feel the breath. The data is displayed but the person reading it does not feel known.
+But I came back this time with a different question. Not "does this display data correctly?" — that question I already walked through. This time the question is: does this product trust the person using it? And does the person using it have any reason to trust the product?
 
-Sprint 0011 inherits specific unfinished rooms. I have walked them. I will tell you what I found.
-
----
-
-## The Synastry Aspect List: Where Intimacy Arrives and Is Turned Away
-
-A person who enters their partner's birth date is doing something that requires trust. They are saying: here is someone who matters to me. Tell me something true.
-
-The synastry aspects section answers them with this:
-
-`P1 Venus △ P2 Moon · 1.8° orb · harmonious`
-
-That is a mathematical description of a fact that the user already submitted. They gave you Venus. They gave you Moon. They gave you both birth dates. The calculation found the trine. And now the product hands it back as proof that the calculation ran.
-
-The interpretation database in `aspectInterpretations.ts` has `Moon_Trine_Venus`: "Naturally loving and graceful — your emotions and love nature flow together beautifully." This is written in natal voice — it speaks to one person's internal architecture. It does not speak to two people in relation. And this is the actual problem.
-
-"Naturally loving and graceful" describes a placement. What the synastry page needs is something that describes a *meeting*: what happens when Person 1's Venus reaches across the chart and touches Person 2's Moon. That is a different kind of sentence. Not "your love nature is graceful" but "your affection lands naturally on them — they feel it without needing it explained."
-
-The natal database is the wrong shelf. Sprint 0011 should write the right one: a thin, relational synastry brief table covering the 30–40 highest-frequency cross-chart pairs. Not 120 entries. Not a rewrite of anything. Just the relational phrasing for what it feels like when one person's planet touches another person's planet. Venus trine Moon in synastry is not the same emotional fact as Venus trine Moon in a natal chart. The product knows the difference. It should say the difference.
-
-Then the `SynastryAspectsSection` renders these briefs with the same expand/collapse pattern that `AspectRow` already implements. The pattern exists. The component exists. The interpretation data is the only missing piece — and it is narrow.
+I walked through the code again, slowly. I read how a reading travels from a user's birth data to words on a screen. I found something that I cannot call a bug. It is something worse. It is a gap between what the product promises and what it actually does. And the person using it cannot see it.
 
 ---
 
-## The House Overlay Section: The Most Resonant Fact Delivered Without a Voice
+## The Hidden Lie in Every GPT Reading
 
-"Your Venus falls in their 7th house."
+When a person opens the transit reading, they are asking: given the sky right now and my birth chart, what is true for me today?
 
-I do not know if the people building this product understand what that sentence means to someone who has been practicing astrology for fifteen years. It is one of the most emotionally charged facts in synastry. The 7th house is where we project partnership. When someone's Venus falls there, it means the person they are reading about is seen — truly seen — as a partner. It means their presence activates something the native has been reaching toward.
+The product answers with GPT text. The GPT text sounds authoritative, personal, specific. It names planets. It names aspects. It sounds like someone who looked at their chart.
 
-And the product lists it in a table. `Venus | Taurus | House 7`. No sentence. No warmth. No signal that this is different from `Chiron | Sagittarius | House 11`.
+But here is what actually happened: the browser assembled the prompt, handed it to the server as an opaque string, and the server executed it without question.
 
-`houseThemes.ts` has everything needed. House 7: "partnership, what you seek in a committed other." The planet archetype is known. The combination is writable in one sentence: "Your Venus falling in their 7th house — the house of partnership — suggests they instinctively see you as someone they could build something lasting with."
+What does that mean? It means if the JavaScript in the browser calculated a transit aspect incorrectly, the GPT answer is incorrect. If the browser was running on a device with a wrong clock, the transits are wrong. If there was a bug in the orb sorting, the most important aspect may have been omitted from the prompt. If the calculation crashed silently — JavaScript engines do not stop the world when astronomy calculations throw — the prompt was built from incomplete data, and the reading was generated from a lie.
 
-That sentence is twelve words of template logic and one lookup. The data is assembled. The user is already on the page. The product simply does not speak.
+The server never knew. The server never had a chance to check. The server accepted whatever string arrived and called GPT with it.
 
-`HouseOverlaySection` currently renders a table with columns for planet, sign, and house number. The sprint 0011 task is to replace the bare house number with a house name and add one sentence of interpretation beneath each row. The `HOUSE_THEMES` array and `PLANET_IN_HOUSE` table together provide all the ingredients. No GPT call. No new engine. One sentence per row, generated from two existing data sources.
+This is the problem that `handleTransitInterpretation` in `server/services/gpt.ts` makes completely visible once you look:
 
----
-
-## The Couple Transit Page: An Unfinished Room
-
-When I open `SynastryTransitPage.tsx` and look at the `TransitAspectsToComposite` section, I see the transit reading page from six months before sprint 0010. Bare rows. Glyph, aspect symbol, glyph, orb, applying badge. No expand/collapse. No brief. Silence.
-
-The `AspectRow` component was built precisely to solve this problem. It exists at `src/components/reading/AspectRow.tsx`. It is not used here.
-
-The brief for a composite transit aspect is different from a natal transit brief in one specific way: the "natal planet" is a composite planet, and the house it occupies tells you which area of *the relationship* is being activated — not which area of an individual's life. Saturn transiting the composite 2nd house is not about personal finances. It is about the shared resources of the relationship — how they budget together, what they value collectively, where their finances as a couple require attention.
-
-The `TransitAspect` objects in `synastryTransitData.transitAspects` already carry `natalHouse` (this was embedded in sprint 0010 for all transit aspect calculations). The house number is there. The house theme is retrievable from `getHouseTheme()`. The brief can be written from the same template logic as `computeTransitAspectBrief()`, but with relational framing: "Saturn pressing on your relationship's 2nd house asks how you navigate shared resources — money, time, what you build together."
-
-This is not new logic. It is the same pattern, applied to a surface that was left with no pattern at all.
-
----
-
-## The Solar Return Page: The Year Ahead, Rendered Without an Entry Point
-
-The Solar Return page shows a GPT reading and a planet positions table. The GPT reading is thorough — it was improved in sprint 0010 to lead with the tightest applying aspect. But GPT takes time to load. And while it loads, the page shows a skeleton.
-
-The most important static facts on the Solar Return page are the SR Sun house and the SR Moon house. These are not deep astrology. They are direct answers to the two questions every person brings to a Solar Return: What will this year focus on? What will it feel like?
-
-`PLANET_IN_HOUSE` already has `Sun_H1` through `Sun_H12` and `Moon_H1` through `Moon_H12`. These entries are written for natal voice, which is not ideal — "your Sun in the 5th house makes creative self-expression central to who you are" describes a birth chart, not a year-ahead forecast. But they are close enough to be meaningful if introduced correctly: "This year, your Sun falls in House 5 — expect themes of creative expression, pleasure, and the joy of being fully seen."
-
-Sprint 0011's task here is not to rewrite `PLANET_IN_HOUSE`. It is to pull the SR Sun and SR Moon house readings from the existing table and render them as a static brief block — labeled "This Year's Focus" and "Emotional Climate" — that appears immediately, before GPT loads, and stays visible alongside the GPT reading once it arrives.
-
-The `SolarReturnPage` already computes `srSun` and `srMoon` with their house values. The lookups are two lines. The rendering is a styled block already consistent with the amber design language of the SR page. The user who opens the Solar Return page and sees their SR Sun in House 9 with the brief "A year of expansion, travel, and seeking meaning" already has something to hold onto before the GPT paragraph arrives. The app has answered their question before they had to wait.
-
----
-
-## The TodayPage Sky Highlights: Glyphs Without Translation
-
-The "Sky Highlights" card on `TodayPage` shows three transit aspects as glyph-pairs with a one-word keyword to the right:
-
-```
-♄ □ ☿      disruption
-♃ △ ♀      abundance
-☽ ☌ ♂      intensity
+```typescript
+async function handleTransitInterpretation(payload: { systemPrompt: string }): Promise<string>
 ```
 
-The keywords come from `ASPECT_KEYWORDS` — a lookup by transit planet and aspect nature. "Disruption" for Saturn square. "Abundance" for Jupiter trine. "Intensity" for Moon conjunct Mars.
+The server is an envelope-opener. It opens what arrives and executes it. It has no visibility into whether the transit calculation was correct, whether it was complete, whether the aspects were sorted properly, whether the orbs match what is actually in the sky at this moment. The server is a post office, not an astrologer.
 
-These are not wrong. They are true. But they are true for everyone. "Disruption" is what Saturn square means for any person, in any chart, on any day. The natal planet — Mercury, Venus, Mars — is visible in the row. Its house is available. `chartData` is on the page.
+And the user, on the other side, receives a reading that sounds like it was computed from their specific chart and the current sky — because it was, in the browser, in this session, if nothing went wrong. They trust it. They act on it. They might share it with someone they love.
 
-The `AspectRow` component was built to handle exactly this: expand on tap, reveal a brief that names the natal planet's house and what the transit means for that life area. The "Sky Highlights" rows are the home screen's version of the transit aspect rows, and they should behave the same way.
-
-A user who taps `♄ □ ☿` on their Today page and sees "Saturn pressing on your 3rd-house Mercury — deliberate with your words this week, not impulsive" has been given something. They have been named. The product has looked at their chart, not at a dictionary.
-
-The `getTopActiveTransits()` result already carries `natalHouse` (embedded in sprint 0010). The brief function already exists in `transitAspectBriefs.ts`. Wiring the `AspectRow` component into the Sky Highlights card is the last step the Today page needs to complete the pattern sprint 0010 established everywhere else.
+That trust is real. The reliability behind it is not.
 
 ---
 
-## The Synastry GPT Prompt: Almost Arrived, But Missing the House Names
+## Where This Shows Up in the User's Experience
 
-`buildSynastryPrompt` was improved in sprint 0010. It now leads with the tightest aspect, instructs GPT to name houses, and includes the anti-generic constraint. The improvement was real.
+### The Daily Snapshot
 
-But the element profiles are absent. `buildTransitPrompt` gained `analyzeElements` output in sprint 0010 — a block that tells GPT whether this person is Fire-dominant, Air-deficient, etc. This gives the model context for *how* they experience the aspects, not just what the aspects are. `buildSynastryPrompt` sends two complete charts to GPT but no element profile for either person.
+`DailySnapshotCard.tsx` builds the prompt itself, then calls `getDailySnapshotInterpretation(prompt)`. The server receives:
 
-A Fire-dominant person whose Venus is square an Earth-dominant partner's Moon experiences that square differently than two Water-dominant people in the same configuration. The elements do not change the aspect's nature. They change its *felt texture*. GPT, given the element profile, can write to that texture. Without it, it writes to the geometry.
+```
+handleDailySnapshot(payload: { prompt: string })
+```
 
-The fix is two lines: call `analyzeElements` for both charts and prepend the profiles as a brief block before the natal positions. Sprint 0010 showed exactly where to add this in `buildTransitPrompt`. The same addition in `buildSynastryPrompt` completes the symmetry.
+The server's job is to pass this string to GPT. The prompt was assembled by the browser from `calculateCurrentPositions`, `calculateTransitAspects`, and `getCurrentMoonPhase` — three client-side functions that produce astrological data the server has never verified.
+
+Now consider: this card is cached to `localStorage` by sun-longitude and date. If the cache exists, the GPT result from a previous session is served, no recalculation happens. The sky has changed. The user's phone says today is Wednesday. But the cached reading from Tuesday is what they see. They do not know this. The small "↻ ask again" button exists, but nothing tells them the reading may be stale. Nothing on the screen signals that the sky it was computed from is from yesterday.
+
+A person who reads "Venus is softening your interactions today" on a Wednesday when Venus was softening things yesterday is being quietly misled. Not maliciously. But carelessly.
+
+The server, if it computed its own sky context, could check: was this reading generated from the current sky? Does the stored cache key match today's planetary positions? The server never asks this question because it cannot — it does not know what "today's planetary positions" are.
+
+### The Journal Annotation
+
+`JournalEntryCard.tsx` calls `generateJournalEntryAnnotation` with `topTransits` and `moon` computed by the browser for the entry's historical date. The server receives these as `topTransits: TransitAspect[]` and `moonPhase: string` — pre-computed, pre-filtered, handed over.
+
+The annotation that arrives is permanently attached to this journal entry. It is stored. It is re-read. Weeks later, the person reads: "Saturn pressing on your Mercury at this time called for deliberate communication." That annotation was written from three transit aspects the browser selected, with the orbs the browser calculated, filtered by the browser's `getTopActiveTransits` function. If the browser selected the wrong three aspects — because it had a bug, because the historical transit calculation had an edge case, because the orb sorting was affected by retrograde motion it did not fully account for — the annotation is permanently wrong. It lives in the journal. It becomes part of the person's understanding of that moment in their life.
+
+The server cannot verify this. The server received a list. It trusted the list.
+
+### The Dream Interpretation
+
+The dream handler is the one place where the server learned to check. If the client sends no `chartData`, the server now computes the natal chart from stored birth data. If the client sends no `skyContext`, the server computes the moon and top transits itself.
+
+This is the dream handler that was fixed in sprint-0011's referenced commits. It shows what is possible. It shows the pattern. And it makes every other handler look more naked by comparison.
+
+When the person logs a dream, the server stands behind them and checks: did you send me what I need? If not, I will compute it myself. I will not serve you a reading built on nothing.
+
+When the person asks for a transit reading, the server does not stand behind them. It opens the envelope and reads whatever is inside.
+
+This inconsistency is not a technical problem. It is a trust problem. The product is more reliable in one dark corner than in its main features.
 
 ---
 
-## What Feels Mechanical When It Should Feel Human
+## What It Means to Compute Without a Witness
 
-**The synastry aspects table is the coldest surface in the product.** Two people submit their charts, wait for the calculation, and receive a list that looks like a trade ledger. The product has done the most intimate computation available to it — the relationship between two specific people's planets — and displays the result with no more warmth than a spreadsheet.
+I want to name what I am describing in plain terms, because I think the sprint vision understands it technically but I want to say what it means for a person.
 
-**The house overlay section is the most emotionally resonant data on the page, delivered as a column header.** "House 7" is a number. "The house of partnership — the place in their chart that represents who they seek to commit to" is a fact that means something to a person sitting with questions about a relationship.
+When you compute a reading only in the browser, the reading has no witness. The browser ran the calculation, assembled the words, sent them. The server received words. There is no record of what calculation was performed. There is no authority that can say: yes, this reading was computed correctly. Yes, the aspects in this journal annotation reflect what was actually in the sky on that date. Yes, the transits in this daily snapshot are the transits that are active right now.
 
-**The Solar Return page asks users to wait before they receive anything.** GPT loads. The skeleton pulses. The user knows their Sun's house — it is displayed in the `KeyPlacements` card — but they do not know what it *means* yet. The interpretation database can answer that question in the time it takes to render a component.
+The person using this product deserves a witness. Not because they will ever ask for one. Not because they would understand the difference. But because craftspeople do not build things that lie to users without their knowledge. The lie does not have to be malicious. It does not have to be discovered. It is still a lie.
 
-**The Couple Transit page looks the way the individual transit page looked before sprint 0010.** The pattern was established. The component was built. The surface was not updated to use it. This is not a design decision. It is an unfinished task.
+The server that can compute its own transits, its own aspects, its own solar return, its own synastry cross-aspects — that server is a witness. Not a backup. A witness. When the client computes and the server verifies, the reading has integrity. When only the client computes and the server executes blindly, the reading is good-faith guesswork at best.
 
-**The Today page shows glyphs that a user cannot read.** The keyword to the right of the glyph-pair is the only translation offered, and it is the same translation offered to every person with that transit planet and aspect nature. The natal planet's house is in the data. The personalized brief is in the function. The gap is only the wire between them.
+---
+
+## The Soul the Infrastructure Work Must Have
+
+Sprint 0012 is described as infrastructure. The sprint vision is careful to say: this is not a new feature. No new pages. No new GPT prompts. No frontend changes. Just the backend becoming sovereign.
+
+I understand why it has to be said that way. It is true in the technical sense. But I want to say something the sprint vision does not say: this work, done well, will change what this product is.
+
+Not visibly. The user will not see a new screen. The daily snapshot will look the same. The transit reading will look the same. The journal annotations will look the same.
+
+What will change is what happens when something goes wrong. Right now, when something goes wrong on the client side — when a calculation misses an aspect, when a prompt is assembled from stale data, when a historical date is computed at the wrong UTC boundary — the product fails silently. It serves a reading that is wrong, and no one knows.
+
+After this sprint, when the server can compute its own transits and aspects and solar return and synastry, the server can catch what the client missed. Not by replacing the client — the sprint vision is explicit that the client-side calculations stay in place for instantaneous UI. But by standing behind them. By being the authority that checks.
+
+That is the soul of this work: the product stops being a post office and becomes an astrologer.
+
+---
+
+## What Would Show Care
+
+I am going to name five specific things that, if done with care, would make this sprint give something to the person on the other end — even if they never see it.
+
+**The daily snapshot should be computable entirely server-side for authenticated users.** Not because the user will notice. Because it is wrong for a personalized daily reading to be entirely dependent on the client having run correctly. An authenticated user whose birth data is stored should be able to receive a daily snapshot that the server assembled from its own transit calculation, with its own sky context, verified against its own chart computation. The product would then know: this reading is correct. Not "I hope the browser got it right."
+
+**Journal annotations, once generated server-side, should never degrade.** Right now the annotation is computed from whatever the browser sends. If the browser sends three transits, the annotation reflects three transits. If the browser had a calculation error and sent the wrong three, the annotation reflects the wrong three, permanently. A server that can compute `getTopActiveTransits` for any historical date can verify what was sent against what it calculates independently. If they match, great. If they diverge, the server's version takes precedence. The journal entry is permanent. It deserves computation that is permanent in quality.
+
+**The transit reading prompt should not be an opaque string.** The current architecture of `handleTransitInterpretation` receiving `{ systemPrompt: string }` is the single most visible symbol of the problem. That endpoint is a vending machine: insert string, receive GPT response. The backend cannot improve the prompt, cannot verify it, cannot add context the client missed. After this sprint, the endpoint should receive birth data and a transit period and a target date, and the server should compute the prompt. Not because the frontend prompt was wrong — it may have been perfectly correct — but because the server having computed it means there is an authority behind the words.
+
+**The `buildTransitPrompt`, `buildSynastryPrompt`, and `buildSolarReturnPrompt` functions must not live only on the client.** These functions are where astrological judgment is encoded in language. They decide which aspects to prioritize, how to frame the house context, what element analysis to include. Right now, if a new type of user session is introduced — a background notification, a scheduled weekly reading, a journal pattern analysis — those features must either call the client or rebuild the prompt logic from scratch. The prompt builders are the grammar of this product's voice. That grammar should live where the product lives: on the server.
+
+**Error states should never present as authoritative.** I looked at what happens when `getDailySnapshotInterpretation` fails in `DailySnapshotCard.tsx`:
+
+```typescript
+} catch (err) {
+  if (!cancelled) {
+    setError(err instanceof Error ? err.message : 'Failed to load daily snapshot.')
+  }
+}
+```
+
+The error state renders as `<p className="text-mystic-muted text-sm italic">{error}</p>`. A dismissive italic line. Nothing that tells the person what happened or what they can do. The error message itself may be a raw technical string — "GPT_SERVER_ERROR" — or the fallback string "Failed to load daily snapshot." Neither of these tells the person anything useful. Neither of them shows care.
+
+When the server can compute its own context, some error states become unnecessary — the server can fall back to its own calculation rather than returning nothing. But where errors genuinely cannot be recovered, the product should say something that does not sound like a machine that gave up. Not a long apology. One sentence that acknowledges the person waiting: "The sky is a little out of reach right now. Try again in a moment." That is the difference between a product that hid when something went wrong and a product that stayed present.
+
+---
+
+## The Question I Always Ask
+
+Would I be proud to put my name on this?
+
+Not on the visual design. The visual design has real beauty in it. The dark backgrounds, the gold accents, the way the moon phases are rendered. Someone cared about those things.
+
+I am asking about the thing underneath. The thing the user never sees. The calculation that produces the transit list that becomes the prompt that becomes the words they read on a Wednesday morning and carry into their day.
+
+Right now, if I had to answer honestly: no. Not because the reading is wrong. It is probably right most of the time. But "probably right most of the time" is the standard of a product that hopes for the best. It is not the standard of a product that stands behind what it says.
+
+Sprint 0012 is the sprint where the backend stops hoping and starts knowing. That is not a small thing. That is the difference between a product that generates readings and a product that computes truth.
+
+The user will never see it. But they will feel it — in the consistency, in the reliability, in the quiet absence of subtle wrongness. In the way the daily snapshot for Tuesday and Wednesday and Thursday feel like they were computed from the actual sky, not from whatever the browser happened to calculate in that session.
+
+That quiet reliability is what care looks like when it is not performing.
 
 ---
 
 ## Proposals
 
-**Proposal 1 — Synastry Relational Briefs**
+**Proposal 1 — Server-Assembled Transit Prompts**
 
-Write a new `SYNASTRY_ASPECT_BRIEFS` table covering the 30–40 highest-frequency cross-chart pairs: Sun, Moon, Venus, Mars, Mercury in combination with each other across the five major aspect types. These entries use relational voice — "what one person's planet feels like when it contacts the other person's planet" — rather than natal self-description. Roughly two sentences per entry. Extend `SynastryAspectsSection` to use `AspectRow` with these briefs. For planet pairs not in the table, fall back to aspect-type-plus-nature language: "[P1's planet] forms a [nature] [aspect type] with [P2's planet] — this contact tends to [brief phrase from aspect nature]." The fallback ensures no row is ever silent. The primary entries ensure the most common pairs are genuinely relational.
+`handleTransitInterpretation` should stop accepting `{ systemPrompt: string }`. It should accept `{ transitPeriod, targetDate? }` for authenticated users and compute the prompt entirely server-side: the natal chart from stored birth data, the transits for the period, the aspects sorted and filtered by the same logic as the frontend, the element profile, the house context. The `buildTransitPrompt` function should be ported to `server/engine/` as part of the transit engine addition. The client can still build its own prompt for instantaneous display — but the server's computation is the one that actually reaches GPT.
 
-**Proposal 2 — House Overlay Interpretation Layer**
+**Proposal 2 — Server-Computed Daily Snapshot for Authenticated Users**
 
-In `HouseOverlaySection`, replace the bare "House 7" cell with the house name from `HOUSE_THEMES`, and add a one-to-two sentence brief below each row. The brief combines the planet's archetype with the house theme: "Your Venus falling in their 7th house activates their sense of who they want beside them — you are, to them, a potential partner in the fullest sense." The `PLANET_IN_HOUSE` table provides the planet-house interpretation; the key is adapting the voice from self-description to relational description. Two sentences per entry. No new data structures required beyond the brief generation logic.
+`handleDailySnapshot` should accept `{}` for authenticated users (no payload required) and compute the daily snapshot entirely server-side: current positions calculated with `calculateCurrentPositions`-equivalent server logic, aspects via `getActiveTransitAspects`, moon info via `getMoonInfo`, personal day via the server-side numerology port. The client-assembled prompt path can remain as a fallback for unauthenticated sessions. But authenticated users should receive readings the server knows are correct.
 
-**Proposal 3 — Couple Transit AspectRow Integration**
+**Proposal 3 — Journal Annotation with Server-Side Transit Verification**
 
-Replace the bare rows in `TransitAspectsToComposite` with the shared `AspectRow` component. The brief for composite transits uses relational framing: name the composite planet's house and state what it governs for the relationship as a unit. The `natalHouse` field is already embedded on `TransitAspect` objects. The house theme table provides the domain. The brief function template from `computeTransitAspectBrief` provides the sentence pattern. The composite framing is the only adaptation needed: "Saturn pressing on your relationship's 2nd house asks how you navigate what you build together."
+`handleJournalAnnotation` currently accepts `topTransits` from the client without question. It should optionally verify by computing `getActiveTransitAspects` for the entry's date server-side, and if the server-computed transits differ meaningfully from what the client sent, use the server's version. The verification should be lightweight — not a full engine call for every annotation — but the capability should exist. For authenticated users annotating historical entries, the server has birth data and the entry date; it has everything it needs.
 
-**Proposal 4 — Solar Return Static Brief Layer**
+**Proposal 4 — Explicit Loading State Language That Acknowledges the Person**
 
-In `SolarReturnPage`, above the GPT skeleton (or alongside it once loaded), render a static "This Year's Focus" block showing two brief cards: SR Sun house and SR Moon house, drawn from `PLANET_IN_HOUSE`. Label them "Primary Focus" and "Emotional Climate." Adapt the natal phrasing to year-ahead framing with a brief prefix: "This year, [PLANET_IN_HOUSE brief]." These cards appear immediately on page load, before GPT arrives. They give the user something accurate and readable while the GPT paragraph assembles itself. They do not duplicate the GPT reading — they precede it, as the first clear sentence before the full paragraph.
+In `DailySnapshotCard.tsx`, the loading state says "Reading today's sky for your chart…" — this is fine. But the error state is a bare italic line. Error states across the reading surfaces should acknowledge the person: "The stars are momentarily quiet — try again in a moment" is one sentence that shows the product stayed present when something went wrong. This is a small change but it is the kind of small change that distinguishes a product that cares from a product that processes.
 
-**Proposal 5 — TodayPage Sky Highlights Expand/Collapse**
+**Proposal 5 — No Silent Fallbacks Without Signal**
 
-Replace the static glyph-keyword rows in the "Sky Highlights" card with `AspectRow` instances. The `natalHouse` is already on the `TransitAspect` objects returned by `getTopActiveTransits`. The brief is generated by `computeTransitAspectBrief`. The expand/collapse behavior is built into `AspectRow`. The user taps a row to see "Saturn pressing on your 3rd-house Mercury — be deliberate rather than reactive in conversations this week." The Today page then completes the pattern that exists on the Transit Reading page and in the timeline: every aspect row is expandable, and every expansion reveals something specific to this person's chart.
+When the server falls back to a partial reading — when it computed the natal chart but could not compute transits, or when it served yesterday's cached snapshot because today's computation failed — the user should have a small, non-alarming signal. Not an error. A note. Something like "Computed from last available sky data." They do not need to understand what it means. But the product should not present a fallback reading with the same visual confidence as a reading it verified. That gap between what is displayed and what was computed is the gap between a product that shows care and a product that shows its work only to the people who already know what to look for.
 
 ---
 
-## What the Product Could Be
+## What This Sprint Could Be
 
-There is a version of the synastry page where a person reads through the aspect list and feels — row by row — that someone looked at these two charts together and understood what the geometry means between two human beings. Not for every person whose Venus trines a Moon. For these two people. This moment. This reading.
+There is a version of this product where every GPT reading that reaches a user was computed by a server that knows what it computed. Where the daily snapshot says "today Jupiter is sextile your natal Venus, orb 1.3°, applying" and the server that sent those words is the same authority that calculated those words. Where the journal annotation from three months ago reflects what the server computed was in the sky on that date, not what the browser happened to calculate in that session.
 
-There is a version of the house overlay section where "your Jupiter falling in their 9th house" is not a table cell but a small revelation: someone who expands their world, who makes them want to travel and think bigger. The data knows this. The product simply has not chosen to say it.
+That version of the product respects the person using it. Not because they can tell the difference. Because the people who built it decided that being trustworthy mattered even when no one was watching.
 
-There is a version of the Solar Return page where the user reads their SR Sun house and SR Moon house the moment the page loads — before GPT, before the skeleton pulses — because those two facts are the spine of the entire year and they can be stated in two sentences from data that loads instantly.
+The frontend will still run fast. The browser will still compute transits the moment the chart loads, before the server has time to respond. Nothing visible changes. The user experience stays instantaneous.
 
-There is a version of the couple transit page that behaves exactly like the individual transit page: expandable rows, relational briefs, the same care that was given to individual readings extended to the readings couples make together.
+But behind the screen, there will be an authority that checked. That computed its own numbers. That can stand behind the words.
 
-There is a version of the Today page's Sky Highlights where tapping a glyph-pair reveals a sentence that names the house and the life area — where the shorthand `♄ □ ☿` becomes, on expansion, something a person can actually use on a Wednesday morning.
-
-None of these versions require new screens, new engines, or new GPT calls. They require that the product extend the care it already learned to show in sprint 0010 — across the surfaces that sprint 0010 did not reach. The pattern is established. The components are built. The data is assembled. What remains is the decision to let these surfaces speak.
-
-The hardest part of animation, the part I have returned to again and again, is making motion feel inhabited. A character who moves correctly is not the same as a character who moves *as if they mean it*. This product now moves correctly in most places. Sprint 0011 is about making it mean it.
+That is the soul infrastructure work earns.
