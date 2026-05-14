@@ -2,30 +2,28 @@ import OpenAI from 'openai'
 import { getDb } from '../db.js'
 import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/chartEngine.js'
 import type { ServerChartData } from '../engine/chartEngine.js'
+import { calculateAspects } from '../engine/aspectEngine.js'
+import type { Aspect } from '../engine/aspectEngine.js'
+import {
+  calculatePersonalDay,
+  calculateLifePath,
+  calculateBirthdayNumber,
+  calculatePersonalYear,
+} from '../engine/numerologyEngine.js'
+import { calculateSolarReturn, buildSolarReturnPrompt } from '../engine/solarReturnEngine.js'
+import {
+  calculateTransits, buildTransitPrompt, getTopActiveTransits,
+  calculateCurrentPositions, calculateTransitAspects,
+  type TransitData, type TransitPeriod,
+} from '../engine/transitEngine.js'
+import {
+  calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt,
+  type SynastryData,
+} from '../engine/synastryEngine.js'
 
 // ---------------------------------------------------------------------------
-// Types — mirrors the relevant subsets of src/engine/types for server use
+// Types
 // ---------------------------------------------------------------------------
-
-interface Planet {
-  name: string
-  sign: string
-  house: number
-  retrograde: boolean
-  degree: number
-  longitude: number
-}
-
-interface Angles {
-  ascendant: { sign: string }
-  midheaven: { sign: string }
-}
-
-interface ChartData {
-  planets: Planet[]
-  angles: Angles
-  unknownTime: boolean
-}
 
 interface TransitAspect {
   transitPlanet: string
@@ -116,6 +114,43 @@ async function callOpenAI(
 }
 
 // ---------------------------------------------------------------------------
+// Shared birth context resolution
+// ---------------------------------------------------------------------------
+
+interface BirthContext {
+  birthDate: string
+  birthTime: string
+  lat: number
+  lng: number
+  tz: string
+  unknownTime: boolean
+}
+
+function resolveUserBirthContext(userId: number): BirthContext | null {
+  try {
+    const db = getDb()
+    const row = db
+      .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
+      .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
+
+    if (!row?.birth_date || !row.birth_place) return null
+    const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
+    if (typeof place.lat !== 'number' || typeof place.lng !== 'number' || !place.tz) return null
+
+    return {
+      birthDate: row.birth_date,
+      birthTime: row.birth_time ?? '12:00',
+      lat: place.lat,
+      lng: place.lng,
+      tz: place.tz,
+      unknownTime: !row.birth_time,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shared utilities (ported from gptInterpretation.ts verbatim)
 // ---------------------------------------------------------------------------
 
@@ -141,7 +176,7 @@ function masterLabel(n: number): string {
   return ` [${labels[n]}]`
 }
 
-function buildDreamscapeContext(chart: ChartData): string {
+function buildDreamscapeContext(chart: ServerChartData): string {
   const neptune = chart.planets.find(p => p.name === 'Neptune')
   const moon = chart.planets.find(p => p.name === 'Moon')
   const showHouses = !chart.unknownTime
@@ -176,20 +211,56 @@ function buildDreamscapeContext(chart: ChartData): string {
 // No prompt content is changed — this is a transport-layer migration only.
 // ---------------------------------------------------------------------------
 
-async function handleTransitInterpretation(payload: { systemPrompt: string }): Promise<string> {
+const VALID_TRANSIT_PERIODS = new Set(['daily', 'weekly', 'monthly'])
+
+async function handleTransitInterpretation(
+  payload: { transitPeriod?: string; targetMonth?: string; systemPrompt?: string },
+  userId?: number,
+): Promise<string> {
+  let userPrompt: string | undefined
+
+  // Authenticated path: compute prompt server-side from birth context
+  // Only attempt if transitPeriod is a valid period keyword (not a legacy full-prompt string)
+  const hasValidPeriod = payload.transitPeriod && VALID_TRANSIT_PERIODS.has(payload.transitPeriod)
+  if (userId && hasValidPeriod) {
+    const ctx = resolveUserBirthContext(userId)
+    if (ctx) {
+      const natalChart = calculateChart(
+        ctx.birthDate,
+        ctx.birthTime,
+        ctx.lat,
+        ctx.lng,
+        ctx.tz,
+        ctx.unknownTime,
+      )
+      const period = payload.transitPeriod as TransitPeriod
+      const transitData = calculateTransits(natalChart, period, payload.targetMonth)
+      userPrompt = buildTransitPrompt(natalChart, transitData, ctx.birthDate, period, payload.targetMonth)
+    }
+  }
+
+  // Unauthenticated fallback: use client-provided systemPrompt (or legacy transitPeriod as prompt)
+  if (!userPrompt) {
+    // Support legacy callers that pass the full prompt string as transitPeriod
+    userPrompt = payload.systemPrompt ?? (payload.transitPeriod && !hasValidPeriod ? payload.transitPeriod : undefined)
+    if (!userPrompt) {
+      throw new Error('Transit interpretation requires either a userId with birth context or a systemPrompt.')
+    }
+  }
+
   const result = await retryWithBackoff(() =>
     callOpenAI([
       {
         role: 'system',
         content: 'You are an expert astrologer who provides factual, precise, and honest transit readings grounded in traditional and modern astrological technique. State what the chart shows plainly — name favorable configurations and their real benefits, and name difficult ones with their real challenges. Do not sugar-coat, minimize tensions, or add generic encouragement. Treat the reader as someone who takes astrology seriously and wants the unvarnished picture. Reference dignities, debilities, sect, and aspect doctrine where relevant. Be direct, specific, and substantive — never cheerful for its own sake.',
       },
-      { role: 'user', content: payload.systemPrompt },
+      { role: 'user', content: userPrompt },
     ], { temperature: 0.8, max_tokens: 2000 })
   )
   return result || 'Unable to generate interpretation.'
 }
 
-function buildNatalContextFromChart(chart: ServerChartData, birthDate: string): string {
+function buildNatalContextFromChart(chart: ServerChartData, birthDate: string, aspects?: Aspect[]): string {
   let ctx = `Born: ${birthDate}\n`
   for (const p of chart.planets) {
     ctx += `${p.name}: ${p.sign} ${p.degree}°${p.minute}'`
@@ -199,6 +270,11 @@ function buildNatalContextFromChart(chart: ServerChartData, birthDate: string): 
   }
   ctx += `Ascendant: ${chart.angles.ascendant.sign} ${chart.angles.ascendant.degree}°\n`
   ctx += `Midheaven: ${chart.angles.midheaven.sign} ${chart.angles.midheaven.degree}°\n`
+  if (aspects && aspects.length > 0) {
+    ctx += '\n## Natal Aspects (tightest orb first)\n'
+    ctx += aspects.slice(0, 7).map(a => `${a.planet1} ${a.symbol} ${a.planet2} (${a.orb}°, ${a.nature})`).join('\n')
+    ctx += '\n'
+  }
   return ctx
 }
 
@@ -208,33 +284,27 @@ async function handleDreamInterpretation(payload: {
   transitSummary: string
   transitAspectsText: string
   skyContext: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> } | null
-  chartData: ChartData | null
+  chartData: ServerChartData | null
 }, userId?: number): Promise<string> {
   // --- Chart fallback: compute server-side if client didn't send it ---
-  let chart: ChartData | ServerChartData | null = payload.chartData
+  let chart: ServerChartData | null = payload.chartData
   let natalCtx = payload.natalContext
 
   if (!chart && userId) {
     try {
-      const db = getDb()
-      const row = db
-        .prepare('SELECT birth_date, birth_time, birth_place FROM users WHERE id = ?')
-        .get(userId) as { birth_date: string | null; birth_time: string | null; birth_place: string | null } | undefined
-
-      if (row?.birth_date && row.birth_place) {
-        const place = JSON.parse(row.birth_place) as { lat?: number; lng?: number; tz?: string }
-        if (typeof place.lat === 'number' && typeof place.lng === 'number' && place.tz) {
-          const computed = calculateChart(
-            row.birth_date,
-            row.birth_time ?? '12:00',
-            place.lat,
-            place.lng,
-            place.tz,
-            !row.birth_time,
-          )
-          chart = computed
-          natalCtx = buildNatalContextFromChart(computed, row.birth_date)
-        }
+      const birthCtx = resolveUserBirthContext(userId)
+      if (birthCtx) {
+        const computed = calculateChart(
+          birthCtx.birthDate,
+          birthCtx.birthTime,
+          birthCtx.lat,
+          birthCtx.lng,
+          birthCtx.tz,
+          birthCtx.unknownTime,
+        )
+        chart = computed
+        const natalAspects = calculateAspects(computed.planets)
+        natalCtx = buildNatalContextFromChart(computed, birthCtx.birthDate, natalAspects)
       }
     } catch {
       // Non-fatal — proceed without chart if DB lookup fails
@@ -264,7 +334,7 @@ async function handleDreamInterpretation(payload: {
     }
   }
 
-  const dreamscapeSection = chart ? buildDreamscapeContext(chart as ChartData) + '\n' : ''
+  const dreamscapeSection = chart ? buildDreamscapeContext(chart) + '\n' : ''
 
   const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${payload.transitSummary}\n\n## Active Transit Aspects Today\n${payload.transitAspectsText}${skySection}\n\n## The Dream\n${payload.dreamDescription}\n\nThe symbolic and emotional core of the dream is primary — explore the imagery, narrative, and feeling tone with depth and precision. If a natal placement or active transit directly and unmistakably illuminates a specific dream element, bring it in briefly and precisely. Do not scatter planet names throughout for their own sake. Astrology is a lens, not a mandate — use it surgically when the connection is undeniable. Be evocative, specific, and personal — 4 to 6 paragraphs in second person.`
 
@@ -298,9 +368,9 @@ async function handleDreamDiscuss(payload: {
 
 async function handleAstroNumerologyCross(payload: {
   numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number }
-  chartData: ChartData
+  chartData: ServerChartData
   userName: string | null
-}): Promise<string> {
+}, userId?: number): Promise<string> {
   const nameStr = payload.userName ? `Name: ${payload.userName}` : 'Name: not provided'
   const planetLines = payload.chartData.planets
     .filter(p => p.name !== 'NorthNode')
@@ -315,6 +385,24 @@ async function handleAstroNumerologyCross(payload: {
     ? `Ascendant: ${payload.chartData.angles.ascendant.sign}\nMidheaven: ${payload.chartData.angles.midheaven.sign}`
     : '(birth time unknown — houses not available)'
 
+  // Attempt server-side verification of date-only numbers from stored birth_date.
+  let serverNumerology: { lifePath: number; birthdayNumber: number; personalYear: number } | null = null
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      serverNumerology = {
+        lifePath: calculateLifePath(birthCtx.birthDate),
+        birthdayNumber: calculateBirthdayNumber(birthCtx.birthDate),
+        personalYear: calculatePersonalYear(birthCtx.birthDate),
+      }
+    }
+  }
+
+  const provenanceSuffix = serverNumerology ? ' (server-computed)' : ''
+  const lifePathValue = serverNumerology ? serverNumerology.lifePath : payload.numbers.lifePath
+  const birthdayValue = serverNumerology ? serverNumerology.birthdayNumber : payload.numbers.birthdayNumber
+  const personalYearValue = serverNumerology ? serverNumerology.personalYear : payload.numbers.personalYear
+
   const expressionLine = payload.numbers.expressionNumber !== undefined
     ? `Expression Number: ${payload.numbers.expressionNumber}`
     : 'Expression Number: not provided (no birth name given)'
@@ -325,9 +413,9 @@ async function handleAstroNumerologyCross(payload: {
 ${nameStr}
 
 ## Numerology Profile
-Life Path: ${payload.numbers.lifePath}
-Birthday Number: ${payload.numbers.birthdayNumber}
-Personal Year: ${payload.numbers.personalYear}
+Life Path: ${lifePathValue}${provenanceSuffix}
+Birthday Number: ${birthdayValue}${provenanceSuffix}
+Personal Year: ${personalYearValue}${provenanceSuffix}
 ${expressionLine}
 
 ## Natal Chart
@@ -370,7 +458,25 @@ async function handleNumerologyNarrative(payload: {
     soulUrge?: number
   }
   userName: string | null
-}): Promise<string> {
+}, userId?: number): Promise<string> {
+  // Attempt server-side verification of date-only numbers from stored birth_date.
+  let serverNumerology: { lifePath: number; birthdayNumber: number; personalYear: number } | null = null
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      serverNumerology = {
+        lifePath: calculateLifePath(birthCtx.birthDate),
+        birthdayNumber: calculateBirthdayNumber(birthCtx.birthDate),
+        personalYear: calculatePersonalYear(birthCtx.birthDate),
+      }
+    }
+  }
+
+  const provenanceSuffix = serverNumerology ? ' (server-computed)' : ''
+  const lifePathValue = serverNumerology ? serverNumerology.lifePath : payload.numbers.lifePath
+  const birthdayValue = serverNumerology ? serverNumerology.birthdayNumber : payload.numbers.birthdayNumber
+  const personalYearValue = serverNumerology ? serverNumerology.personalYear : payload.numbers.personalYear
+
   const nameIntro = payload.userName ? `Reading for: ${payload.userName}` : 'Reading for: unnamed person'
   const expressionLine = payload.numbers.expressionNumber !== undefined
     ? `Expression Number: ${payload.numbers.expressionNumber}${masterLabel(payload.numbers.expressionNumber)} — how gifts and personality express outward in the world`
@@ -380,9 +486,9 @@ async function handleNumerologyNarrative(payload: {
     : 'Soul Urge Number: not provided'
 
   const hasMaster = [
-    payload.numbers.lifePath,
-    payload.numbers.birthdayNumber,
-    payload.numbers.personalYear,
+    lifePathValue,
+    birthdayValue,
+    personalYearValue,
     payload.numbers.expressionNumber,
     payload.numbers.soulUrge,
   ].some(n => n !== undefined && isMaster(n as number))
@@ -391,9 +497,9 @@ async function handleNumerologyNarrative(payload: {
 
 ## Complete Numerological Profile
 
-Life Path: ${payload.numbers.lifePath}${masterLabel(payload.numbers.lifePath)} — the fundamental nature, the overarching life theme and lesson
-Birthday Number: ${payload.numbers.birthdayNumber}${masterLabel(payload.numbers.birthdayNumber)} — a specific natural talent, a gift brought into this life
-Personal Year: ${payload.numbers.personalYear}${masterLabel(payload.numbers.personalYear)} — the current annual cycle, the dominant theme and energy of this year
+Life Path: ${lifePathValue}${masterLabel(lifePathValue)}${provenanceSuffix} — the fundamental nature, the overarching life theme and lesson
+Birthday Number: ${birthdayValue}${masterLabel(birthdayValue)}${provenanceSuffix} — a specific natural talent, a gift brought into this life
+Personal Year: ${personalYearValue}${masterLabel(personalYearValue)}${provenanceSuffix} — the current annual cycle, the dominant theme and energy of this year
 ${expressionLine}
 ${soulUrgeLine}
 
@@ -462,7 +568,20 @@ async function handleTodaySynthesis(payload: {
   aspects: TransitAspect[]
   personalDay: number
   personalDayArchetype: string
-}): Promise<string> {
+}, userId?: number): Promise<string> {
+  // Cross-check client-provided personalDay against server-computed value when birth_date is available.
+  let authorizedPersonalDay = payload.personalDay
+  if (userId) {
+    const birthCtx = resolveUserBirthContext(userId)
+    if (birthCtx) {
+      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate)
+      if (serverPersonalDay !== payload.personalDay) {
+        console.warn(`[handleTodaySynthesis] personalDay mismatch: client=${payload.personalDay}, server=${serverPersonalDay}, userId=${userId}`)
+      }
+      authorizedPersonalDay = serverPersonalDay
+    }
+  }
+
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
@@ -475,14 +594,14 @@ async function handleTodaySynthesis(payload: {
 
   const prompt = `Today is ${today}.
 
-Personal Day number: ${payload.personalDay} — ${payload.personalDayArchetype}
+Personal Day number: ${authorizedPersonalDay} — ${payload.personalDayArchetype}
 
 Moon: ${payload.moon.phaseName} in ${payload.moon.moonSign}${voidNote}
 
 Top transit aspects:
 ${aspectLines}
 
-Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${payload.personalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
+Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${authorizedPersonalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
@@ -537,8 +656,8 @@ async function handleJournalAnnotation(payload: {
   topTransits: TransitAspect[]
   moonPhase: string
   moonSign: string
-  chartData: { planets: Planet[]; angles: { ascendant?: { sign: string } } }
-}): Promise<{ annotation: string; tags: string[] }> {
+  chartData: ServerChartData
+}, userId?: number): Promise<{ annotation: string; tags: string[] }> {
   const sun = payload.chartData.planets.find(p => p.name === 'Sun')
   const moon = payload.chartData.planets.find(p => p.name === 'Moon')
   const asc = payload.chartData.angles?.ascendant
@@ -549,7 +668,36 @@ async function handleJournalAnnotation(payload: {
     asc ? `Ascendant in ${asc.sign}` : '',
   ].filter(Boolean).join(', ')
 
-  const transitLines = payload.topTransits.slice(0, 3).map(t =>
+  // Prefer server-computed transits when userId and birth context are available
+  let resolvedTransits = payload.topTransits
+  if (userId) {
+    const ctx = resolveUserBirthContext(userId)
+    if (ctx) {
+      try {
+        const natalChart = calculateChart(
+          ctx.birthDate,
+          ctx.birthTime,
+          ctx.lat,
+          ctx.lng,
+          ctx.tz,
+          ctx.unknownTime,
+        )
+        const entryDate = payload.entry.date ? new Date(payload.entry.date) : undefined
+        const serverTransits = getTopActiveTransits(natalChart, 5, 3, entryDate)
+        resolvedTransits = serverTransits.map(t => ({
+          transitPlanet: t.transitPlanet,
+          symbol: t.symbol,
+          natalPlanet: t.natalPlanet,
+          orb: t.orb,
+          nature: t.nature,
+        }))
+      } catch {
+        // Non-fatal — fall back to client-provided transits
+      }
+    }
+  }
+
+  const transitLines = resolvedTransits.slice(0, 3).map(t =>
     `${t.transitPlanet} ${t.symbol} natal ${t.natalPlanet} (${t.orb.toFixed(1)}° orb, ${t.nature})`
   ).join('\n') || 'No tight transit aspects active.'
 
@@ -602,7 +750,7 @@ Return JSON with:
 
 async function handleCosmicPatternReading(payload: {
   patterns: PatternSummary[]
-  chartData: ChartData
+  chartData: ServerChartData
   totalEntryCount: number
 }): Promise<PatternReading[]> {
   const sun = payload.chartData.planets.find(p => p.name === 'Sun')
@@ -657,6 +805,92 @@ Do not speak statistically. Speak in present tense. Name the pattern as a qualit
 }
 
 // ---------------------------------------------------------------------------
+// Solar return handler
+// ---------------------------------------------------------------------------
+
+async function handleSolarReturnInterpretation(
+  payload: { targetYear: number },
+  userId?: number,
+): Promise<string> {
+  if (!userId) {
+    throw new GptServiceError('Authentication required for solar return interpretation', 401)
+  }
+
+  const ctx = resolveUserBirthContext(userId)
+  if (!ctx) {
+    throw new GptServiceError('Birth data required for solar return interpretation', 422)
+  }
+
+  const natalChart = calculateChart(
+    ctx.birthDate,
+    ctx.birthTime,
+    ctx.lat,
+    ctx.lng,
+    ctx.tz,
+    ctx.unknownTime,
+  )
+
+  const { srMoment, srChart } = calculateSolarReturn(natalChart, ctx.lat, ctx.lng, payload.targetYear)
+  const prompt = buildSolarReturnPrompt(natalChart, srChart, srMoment, ctx.birthDate)
+
+  const result = await retryWithBackoff(() =>
+    callOpenAI([
+      {
+        role: 'system',
+        content: 'You are an expert astrologer providing precise, honest solar return readings. State what the chart shows directly — name the themes, challenges, and opportunities plainly without generic encouragement.',
+      },
+      { role: 'user', content: prompt },
+    ], { temperature: 0.8, max_tokens: 2000 })
+  )
+  return result || 'Unable to generate solar return interpretation.'
+}
+
+// ---------------------------------------------------------------------------
+// Synastry handlers
+// ---------------------------------------------------------------------------
+
+async function handleSynastryInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+  const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+}
+
+async function handleCoupleTransitInterpretation(payload: {
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  period: string
+  targetMonth?: string
+}): Promise<string> {
+  const { person1, person2 } = payload
+  const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
+  const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
+  const synastryData = calculateSynastry(chart1, chart2)
+
+  const transitPositions = calculateCurrentPositions(new Date())
+  const transitAspects = calculateTransitAspects(transitPositions, synastryData.compositeChart.planets, payload.period as TransitPeriod, true)
+  const transitData: TransitData = {
+    period: payload.period as TransitPeriod,
+    dateRange: {
+      start: new Date().toISOString().split('T')[0],
+      end: new Date().toISOString().split('T')[0],
+    },
+    currentPlanets: transitPositions,
+    transitAspects,
+    ingresses: [],
+    retrogrades: [],
+  }
+
+  const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth)
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -671,29 +905,35 @@ export async function handleGptRequest(
 
   switch (type) {
     case 'transit-interpretation':
-      return handleTransitInterpretation(payload as Parameters<typeof handleTransitInterpretation>[0])
+      return handleTransitInterpretation(payload as Parameters<typeof handleTransitInterpretation>[0], userId)
     case 'dream-interpretation':
       return handleDreamInterpretation(payload as Parameters<typeof handleDreamInterpretation>[0], userId)
     case 'dream-discuss':
       return handleDreamDiscuss(payload as Parameters<typeof handleDreamDiscuss>[0])
     case 'astro-numerology-cross':
-      return handleAstroNumerologyCross(payload as Parameters<typeof handleAstroNumerologyCross>[0])
+      return handleAstroNumerologyCross(payload as Parameters<typeof handleAstroNumerologyCross>[0], userId)
     case 'daily-snapshot':
       return handleDailySnapshot(payload as Parameters<typeof handleDailySnapshot>[0])
     case 'numerology-narrative':
-      return handleNumerologyNarrative(payload as Parameters<typeof handleNumerologyNarrative>[0])
+      return handleNumerologyNarrative(payload as Parameters<typeof handleNumerologyNarrative>[0], userId)
     case 'numerology-sky-chart':
       return handleNumerologySkyChart(payload as Parameters<typeof handleNumerologySkyChart>[0])
     case 'today-synthesis':
-      return handleTodaySynthesis(payload as Parameters<typeof handleTodaySynthesis>[0])
+      return handleTodaySynthesis(payload as Parameters<typeof handleTodaySynthesis>[0], userId)
     case 'numerology-discuss':
       return handleNumerologyDiscuss(payload as Parameters<typeof handleNumerologyDiscuss>[0])
     case 'astro-discuss':
       return handleAstroDiscuss(payload as Parameters<typeof handleAstroDiscuss>[0])
     case 'journal-annotation':
-      return handleJournalAnnotation(payload as Parameters<typeof handleJournalAnnotation>[0])
+      return handleJournalAnnotation(payload as Parameters<typeof handleJournalAnnotation>[0], userId)
     case 'cosmic-pattern-reading':
       return handleCosmicPatternReading(payload as Parameters<typeof handleCosmicPatternReading>[0])
+    case 'solar-return':
+      return handleSolarReturnInterpretation(payload as Parameters<typeof handleSolarReturnInterpretation>[0], userId)
+    case 'synastry-interpretation':
+      return handleSynastryInterpretation(payload as Parameters<typeof handleSynastryInterpretation>[0])
+    case 'couple-transit-interpretation':
+      return handleCoupleTransitInterpretation(payload as Parameters<typeof handleCoupleTransitInterpretation>[0])
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }

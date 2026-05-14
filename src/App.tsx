@@ -25,7 +25,7 @@ import { assembleReading } from './data/interpretations'
 import { calculateTransits, buildTransitPrompt } from './engine/transits'
 import { calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt } from './engine/synastry'
 import { calculateSolarReturn, buildSolarReturnPrompt } from './engine/solarReturn'
-import { getGptInterpretation, RateLimitError } from './services/gptInterpretation'
+import { getGptInterpretation, getSolarReturnInterpretation, getSynastryInterpretation, getCoupleTransitInterpretation, RateLimitError } from './services/gptInterpretation'
 import type { RateLimitInfo } from './services/gptInterpretation'
 import { hasCachedBirthData } from './context/appState'
 import { track } from './services/analytics'
@@ -313,9 +313,10 @@ function AppContent() {
           dispatch({ type: 'SET_TRANSIT_DATA', transitData, transitPeriod: state.transitPeriod!, transitTargetMonth: state.transitTargetMonth })
         }
 
-        // Get GPT interpretation asynchronously
+        // Get GPT interpretation asynchronously (server computes prompt from period + birth data)
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
-        const interpretation = await getGptInterpretation(prompt)
+        void prompt // built for local display only; server recomputes from period
+        const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
@@ -370,9 +371,11 @@ function AppContent() {
           dispatch({ type: 'SET_SYNASTRY_DATA', partnerChartData: chart2, partnerAspects: aspects2, synastryData: synData })
         }
 
-        // Get GPT interpretation asynchronously
-        const prompt = buildSynastryPrompt(chart1, chart2, synData, birthData.date, partnerBirthData.date)
-        const interpretation = await getGptInterpretation(prompt)
+        // Get GPT interpretation asynchronously (server-sovereign — raw birth fields sent, prompt built server-side)
+        const interpretation = await getSynastryInterpretation(
+          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
+          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
+        )
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
@@ -413,9 +416,13 @@ function AppContent() {
         }
         const transitData = calculateTransits(compositeChartData, state.synastryTransitPeriod!, state.synastryTransitTargetMonth ?? undefined)
 
-        // Get GPT interpretation
-        const prompt = buildCoupleTransitPrompt(chartData, partnerChartData, synastryData, transitData, state.synastryTransitPeriod!, birthData.date, partnerBirthData.date, state.synastryTransitTargetMonth ?? undefined)
-        const interpretation = await getGptInterpretation(prompt)
+        // Get GPT interpretation (server-sovereign — raw birth fields sent, prompt built server-side)
+        const interpretation = await getCoupleTransitInterpretation(
+          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
+          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
+          state.synastryTransitPeriod!,
+          state.synastryTransitTargetMonth ?? undefined,
+        )
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
@@ -471,9 +478,8 @@ function AppContent() {
           dispatch({ type: 'SET_SOLAR_RETURN_DATA', data: srData, targetYear: srData.targetYear })
         }
 
-        // Get GPT interpretation asynchronously
-        const prompt = buildSolarReturnPrompt(chart, srData.srChart, srData.srMoment, birthData.date)
-        const interpretation = await getGptInterpretation(prompt)
+        // Get GPT interpretation asynchronously — server computes from stored birth data
+        const interpretation = await getSolarReturnInterpretation(srData.targetYear)
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })

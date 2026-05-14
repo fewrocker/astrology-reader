@@ -94,9 +94,12 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
   return data.result
 }
 
-export async function getGptInterpretation(systemPrompt: string): Promise<string> {
+export async function getGptInterpretation(
+  period: string,
+  targetMonth?: string,
+): Promise<string> {
   try {
-    const result = await callProxy('transit-interpretation', { systemPrompt })
+    const result = await callProxy('transit-interpretation', { transitPeriod: period, targetMonth })
     return (result as string) || 'Unable to generate interpretation.'
   } catch (err) {
     if (err instanceof RateLimitError) throw err
@@ -310,4 +313,30 @@ export async function generateCosmicPatternReading(
     totalEntryCount,
   })
   return Array.isArray(result) ? (result as PatternReading[]) : []
+}
+
+export async function getSolarReturnInterpretation(targetYear: number): Promise<string> {
+  try {
+    const result = await callProxy('solar-return', { targetYear })
+    return (result as string) || 'Unable to generate solar return interpretation.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
+
+export async function getSynastryInterpretation(
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+): Promise<string> {
+  return callProxy('synastry-interpretation', { person1, person2 }) as Promise<string>
+}
+
+export async function getCoupleTransitInterpretation(
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  period: string,
+  targetMonth?: string,
+): Promise<string> {
+  return callProxy('couple-transit-interpretation', { person1, person2, period, targetMonth }) as Promise<string>
 }

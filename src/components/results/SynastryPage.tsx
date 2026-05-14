@@ -4,7 +4,6 @@ import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
-import { buildSynastryPrompt } from '../../engine/synastry'
 import AspectRow from '../reading/AspectRow'
 import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
@@ -14,7 +13,7 @@ import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
-import { getGptInterpretation } from '../../services/gptInterpretation'
+import { getSynastryInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import CollapsibleSection from '../ui/CollapsibleSection'
 
@@ -330,9 +329,12 @@ export default function SynastryPage() {
 
   async function handleRetryGpt() {
     if (!chartData || !partnerChartData || !synastryData || retrying) return
+    if (!birthData.city || !partnerBirthData.city) return
     setRetrying(true)
-    const prompt = buildSynastryPrompt(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date)
-    const interpretation = await getGptInterpretation(prompt)
+    const interpretation = await getSynastryInterpretation(
+      { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city.lat, lng: birthData.city.lng, tz: birthData.city.tz },
+      { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city.lat, lng: partnerBirthData.city.lng, tz: partnerBirthData.city.tz },
+    )
     dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
     setRetrying(false)
   }

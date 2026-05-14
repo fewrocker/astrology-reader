@@ -1,199 +1,181 @@
-# John Carmack — Voice Analysis: Sprint 0011
+# John Carmack — Voice Analysis: Sprint 0012
 
-Sprint 0010 shipped what sprint 0009 needed to exist: the plumbing. `natalHouse` is now embedded in `TransitAspect`. `getNatalPlanetContext` enforces the `unknownTime` guard at the type level. `AspectRow` is a shared component. `computeTransitAspectBrief` has a three-level fallback chain. The transit reading page and AdvanceTab now actually tell you something. Good. That's done.
+Sprint 0011 wired up the surfaces. Sprint 0012 moves the computation. These are different problems. Wiring surfaces is about matching data that already exists to components that can display it. Moving computation to the server is about establishing a module boundary that did not exist before, choosing what to copy, what to share, and what to retire. Get the boundary wrong and you are doing this sprint again in six months.
 
-Sprint 0011 is the same problem one layer out. The surfaces that were ignored in 0010 have the exact same pattern: data computed, path absent. I've read the code. Here is what I see.
+I've read all of it: `chartEngine.ts`, `transits.ts`, `synastry.ts`, `solarReturn.ts`, `numerology.ts`, `aspects.ts`, the twelve handlers in `gpt.ts`, and the four `useEffect` loading blocks in `App.tsx`. Here is what I see.
 
 ---
 
-## Technical Diagnosis
+## The Real Problem First
 
-### Problem 1: `SynastryAspectsSection` Has All the Plumbing Available But Wires Nothing
+The dream handler proved the pattern. Before `fe51ab02`, the dream handler accepted `natalContext` as a pre-built string from the client. After, it fetches `birth_date`, `birth_time`, `birth_place` from the DB and calls `calculateChart` server-side when the client sends nothing. That is a 60-line change and it completely inverts the trust model for one handler.
 
-Look at `SynastryPage.tsx` lines 122–157. The `SynastryAspectsSection` component renders every aspect as a static `<div>` with glyph, symbol, orb, and a nature badge. No expand/collapse. No brief. The `AspectRow` component — the correct abstraction, the one that was extracted precisely for this purpose — is sitting in `src/components/reading/AspectRow.tsx` and is never imported into `SynastryPage.tsx`.
+The problem is that the dream handler was the easy case. It only needed `calculateChart` and the two sky helpers. The transit handler needs `calculateTransits`. The synastry handler needs `calculateSynastry` plus a second chart computation for the partner. The solar return handler needs `findSolarReturn` plus a chart for the SR moment. These are not just bigger — they have a structural dependency the dream handler did not: the prompt builders (`buildTransitPrompt`, `buildSynastryPrompt`, `buildSolarReturnPrompt`) call `analyzeElements` from `src/data/interpretations/index.ts`.
 
-The props `AspectRow` needs are: `transitPlanet`, `natalPlanet`, `aspectType`, `nature`, `symbol`, `orb`, `applying`, `brief`. A `SynastryAspect` has `person1Planet`, `person2Planet`, `type`, `nature`, `symbol`, `orb`, `applying`. That is a 1:1 field mapping with a rename. The mechanical plumbing cost here is maybe 15 lines.
+That import is the central tension of this sprint. `src/data/interpretations/index.ts` imports from `src/engine/types.ts`, `src/engine/aspects.ts`, and several interpretation tables. If you want the server to call `analyzeElements`, you either import it from `src`— which means the server is importing frontend source — or you duplicate the logic, which is maintenance debt. There is a third path, which I'll come to.
 
-The harder part is the brief. `AspectRow` takes a `brief: string | null`. For transit aspects, `computeTransitAspectBrief` generates the brief using the natal planet's house from the natal chart. Synastry is different — you have two people, two charts, and the brief needs relational framing, not personal-chart framing. The existing `computeTransitAspectBrief` function has the wrong semantic register. Calling it here would produce "Saturn pressing on your House of Career" — but whose Saturn? Whose career house?
+---
 
-This is the genuine work for this surface. You need a brief function with a different shape. The vision document is correct: a thin new table of synastry-specific relational briefs for the high-frequency pairs. Let me characterize the actual engineering requirements:
+## What Actually Exists vs. What Needs to Be Built
 
-The table should be keyed by `planet1_aspectType_planet2` (same as `ASPECT_INTERPRETATIONS` in `aspectInterpretations.ts`) but with values that are relational sentences, not personal-chart sentences. "Sun trine Moon: your core drives and their emotional needs flow without friction — you understand each other's rhythms without explanation." That is the register. The `ASPECT_INTERPRETATIONS` database has entries like "Your Sun and Moon operating in harmony..." — first-person singular, personal, not relational. That is why the vision says do not reuse it; do not just change "your" to "their."
+`server/engine/chartEngine.ts` is 366 lines. It is a standalone port: it copies `normalizeAngle`, `longitudeToZodiac`, `getMeanNodeLongitude`, `ZODIAC_SIGNS`, `PLANET_NAMES`, `BODY_MAP`, the Placidus house calculation, `getHouseForLongitude`, and `resolveToUTC`. It imports only `astronomy-engine`. It exports `calculateChart`, `getMoonInfo`, `getActiveTransitAspects`, and a few types.
 
-For pairs not in the synastry table, the fallback is `ASPECT_BRIEFS` from `transitEvents.ts` with contextual adaptation. That fallback already returns clean short sentences. Passing it through as-is for uncovered pairs is acceptable.
+What does `src/engine/transits.ts` actually need that `chartEngine.ts` does not already have?
 
-The `applying` field on `SynastryAspect` deserves inspection. Look at the computation in `synastry.ts` lines 86–88:
+- `getPlanetLongitude` — already in chartEngine.ts (private)
+- `getMeanNodeLongitude` — already in chartEngine.ts (private)
+- `longitudeToZodiac` — already in chartEngine.ts (private)
+- `normalizeAngle` — already in chartEngine.ts (private)
+- `BODY_MAP` — already in chartEngine.ts (private)
+- `PLANET_NAMES` — already in chartEngine.ts (private)
+- `getDailyMotion` — new, two lines
+- `calculateCurrentPositions` — new, uses the above
+- `calculateTransitAspects` — new, uses `ASPECT_DEFINITIONS`
+- `detectIngresses` — new, date-range scan
+- `getRetrogradeStatus` — new, trivial
+- `calculateTransits` — orchestrator, new
+- `buildTransitPrompt` — new, calls `analyzeElements`
+- `getTopActiveTransits` — wraps calculateCurrentPositions + calculateTransitAspects
 
-```ts
-const applying = orb < maxOrb * 0.5
+The pattern is clear. The astronomical primitives exist in chartEngine.ts but are private. Everything in transits.ts that does not touch `analyzeElements` is pure arithmetic over those primitives.
+
+---
+
+## The Duplication Problem Is Already Here and Will Get Worse
+
+Right now, `normalizeAngle` and `longitudeToZodiac` exist in three places:
+1. `src/engine/zodiac.ts` (the canonical frontend module)
+2. Inlined in `server/engine/chartEngine.ts`
+3. (Soon) inlined in every new server engine file if nothing changes
+
+`getMeanNodeLongitude` exists in both `src/engine/transits.ts` and `src/engine/astronomy.ts` (different files, identical formula). `getHouseForLongitude` exists in `src/engine/synastry.ts` (local copy) and `server/engine/chartEngine.ts`. `BODY_MAP` is duplicated three times across `astronomy.ts`, `transits.ts`, and `chartEngine.ts`.
+
+The correct move for this sprint is to extract the shared server primitives into a `server/engine/astroCore.ts` file before adding more engine files. The alternative — writing `server/engine/transits.ts` that re-copies all the same functions again — digs the hole deeper. Six months from now when the mean node formula changes, you will update it in one place and silently break the others.
+
+The extract is not a refactor for its own sake. It is a necessary precondition for keeping the four new engine files maintainable. This takes maybe two hours and makes every subsequent engine file 30% shorter.
+
+---
+
+## The `analyzeElements` Dependency: The Right Decision
+
+`buildTransitPrompt`, `buildSynastryPrompt`, and `buildSolarReturnPrompt` all call `analyzeElements(chart.planets)`. This function is in `src/data/interpretations/index.ts`, which is a frontend source file that imports from `src/engine/types.ts`.
+
+Options:
+1. **Import from `src/` on the server.** This works in a monorepo if TypeScript paths are configured. But it couples the server bundle to frontend source. Any future tree-shaking or bundling separation gets harder.
+2. **Duplicate `analyzeElements` in `server/engine/`.**  It is 15 lines of pure logic. The `SIGN_ELEMENTS` record is 12 entries. The `ELEMENT_INTERPRETATIONS` is 4 entries of short strings. Total: maybe 60 lines including the interpretation strings. Zero external dependencies. Perfectly isolatable.
+3. **Extract `analyzeElements` and its data into a shared package.** This is the right long-term architecture but requires monorepo tooling changes, which is out of scope.
+
+Option 2 is the right call for this sprint. `analyzeElements` does not use the Astronomy engine. It does not use React. It takes `PlanetPosition[]` (which is a plain data structure) and returns an object with a `dominant` string. The duplication is exactly 60 lines and creates zero behavioral risk. The function is deterministic and has no side effects — it is literally the safest thing in the codebase to duplicate.
+
+Document it explicitly: `server/engine/astroCore.ts` contains a comment that reads "analyzeElements ported from src/data/interpretations/index.ts — keep in sync with frontend." That is the maintenance contract. It is honest about what it is.
+
+---
+
+## Port Order: What Goes First and Why
+
+**Port in this order: 1) astroCore, 2) transits, 3) aspects, 4) synastry, 5) solarReturn, 6) numerology.**
+
+**1. `server/engine/astroCore.ts` (extract, not port)**
+
+Extract from `chartEngine.ts`: `normalizeAngle`, `longitudeToZodiac`, `ZODIAC_SIGNS`, `PLANET_NAMES`, `BODY_MAP`, `getMeanNodeLongitude`, `getPlanetLongitude`, `getDailyMotion` (new), `getHouseForLongitude`. Add `SIGN_ELEMENTS`, `ASPECT_DEFINITIONS`, and `analyzeElements`. Make `chartEngine.ts` import from `astroCore.ts`. This is the foundation for every subsequent step. Without it, every new engine file copies the same 80 lines.
+
+**2. `server/engine/transitEngine.ts`**
+
+This is the most important port because `handleTransitInterpretation` is the most broken handler — it accepts an opaque `systemPrompt` string and blindly forwards it. Port: `calculateCurrentPositions`, `calculateTransitAspects`, `detectIngresses`, `getRetrogradeStatus`, `calculateTransits`, `buildTransitPrompt`, `getTopActiveTransits`. Upgrade `handleTransitInterpretation` to compute its own prompt when passed user birth data instead of a raw prompt string. This is the pattern-setter for the sprint.
+
+Why first: it has the most direct GPT-handler impact (the transit handler is used by far the most frequently), and it establishes the server-side `ChartData`-equivalent type contract that synastry and solar return will depend on.
+
+**3. `server/engine/aspectEngine.ts`**
+
+`calculateAspects` and `detectPatterns` from `aspects.ts`. These are pure math over planet positions. No astronomy-engine imports — just longitude arithmetic and array operations. Port is literally copy-paste with a minor import adjustment. Do this before synastry because synastry will want aspects for the SR prompt assembly.
+
+Why third: it is the easiest port in the sprint. It produces a clean win with zero surprises. And it unblocks the natal prompt assembly on the server (the transit prompt does not call `calculateAspects`, but the natal reading assembly does — and server-side natal reading GPT calls will want it).
+
+**4. `server/engine/synastryEngine.ts`**
+
+Port: `calculateSynastryAspects`, `calculateHouseOverlays`, `calculateCompositeChart`, `calculateCompatibility`, `calculateSynastry`, `buildSynastryPrompt`, `buildCoupleTransitPrompt`. Create `handleSynastryInterpretation` and `handleCoupleTransitInterpretation` as proper handlers.
+
+The non-trivial part here: synastry requires two birth charts. The current session model stores one user's birth data. The partner's data is browser-session-only — it is never persisted. To make `handleSynastryInterpretation` truly server-sovereign, you need the partner's birth data to reach the server. Currently it is sent as pre-computed `chartData` in the request payload. The sprint can solve this two ways: (a) require the client to send partner birth data (date, time, lat/lng, tz) rather than the pre-computed chart — the server then computes both charts — or (b) accept pre-computed partner chart but compute person-1 chart server-side. Option (a) is better long-term. Option (b) is still an improvement over accepting the full pre-built prompt. The vision says "sovereign" so go with option (a): accept raw birth data for both people, compute both charts, run synastry, build the prompt.
+
+**5. `server/engine/solarReturnEngine.ts`**
+
+Port: `findSolarReturn` (from `astronomy.ts`) plus `calculateSolarReturn`, `buildSolarReturnPrompt`. Create `handleSolarReturnInterpretation`.
+
+`findSolarReturn` is a bisection search over the Sun's longitude — 365 iterations max, each being a single `SunPosition` call. Computationally cheap. The bisection code is 50 lines and has no dependencies beyond astronomy-engine. This is a clean port.
+
+One thing to verify: the frontend's `solarReturn.ts` calls `findSolarReturn` from `astronomy.ts`, then calls `calculateChart` (from `astronomy.ts`) for the SR moment. The server's `calculateChart` in `chartEngine.ts` is equivalent. The round-trip through UTC parsing (`resolveToUTC`) is already in `chartEngine.ts`. So server-side SR computation is: call `findSolarReturn` (new), feed result to existing `calculateChart` from `chartEngine.ts`. The natal chart is already computed by the calling handler. This is close to a two-function port.
+
+**6. `server/engine/numerologyEngine.ts`**
+
+`numerology.ts` has zero imports. It is pure arithmetic. The port is verbatim copy. But here is the thing: the server does not actually need to compute numerology numbers for any of the existing GPT handlers — `handleAstroNumerologyCross` still requires the client to send the numbers because the server does not have the user's name (name is not in the DB schema). The sprint vision acknowledges this: "the server can't compute them from stored birth data."
+
+So what does porting numerology get you? It gets you `calculateNumerology(birthDate)` which works for birth-date-only numbers (life path, birthday number, personal year, personal month, personal day). Expression number and soul urge still require the name. The `handleTodaySynthesis` handler already receives `personalDay` from the client — with a server-side numerology port, you could recompute it and cross-check rather than blindly trusting the client value. That is modest but correct. Port it last because it delivers the least immediate value.
+
+---
+
+## The Non-Trivial Technical Parts
+
+**The `buildTransitPrompt` dependency chain.** `buildTransitPrompt` calls `analyzeElements`, which needs `SIGN_ELEMENTS` from the types file and the `ELEMENT_INTERPRETATIONS` strings from `src/data/interpretations/types.ts`. The interpretations are four short strings — one sentence each. These need to live in `server/engine/astroCore.ts` alongside `analyzeElements`. They are not in the frontend's `interpretations/` deep structure. Look at `ELEMENT_INTERPRETATIONS` in `src/data/interpretations/types.ts` before writing `astroCore.ts`.
+
+**The `ChartData` type mismatch.** `server/engine/chartEngine.ts` exports `ServerChartData`. The frontend uses `ChartData` from `src/engine/types.ts`. They are structurally equivalent — same `planets`, `houses`, `angles`, `unknownTime`, `houseSystem` fields — but they are different TypeScript types. Right now `gpt.ts` defines its own local `ChartData` interface (lines 22–29) with a stripped-down `Planet` type missing `longitude` and `minute`. This stripped type is already causing silent information loss: `buildNatalContextFromChart` in `gpt.ts` formats positions without the `minute` field. The transit and synastry prompt builders need `p.minute` for arc-minute precision.
+
+The right move: `astroCore.ts` defines `ServerChartData` as the canonical server type (exporting it), `chartEngine.ts` re-exports it, and the per-handler port functions all use it. The stripped `ChartData` interface in `gpt.ts` should be retired as each handler gets upgraded.
+
+**The `ingresses` detection loop.** `detectIngresses` in `transits.ts` scans every day in the period for every planet, checking every 6 hours for the Moon. For a monthly period, that is 30 days × 10 planets = 300 iterations for slow planets, plus 120 Moon checks. This is fine — it is fast. The reason I'm noting it: do not change the algorithm, do not optimize it, just port it exactly. The ingress detection is CPU-cheap but has a subtle correctness requirement around the sign-change boundary. The current code is correct. Copy it.
+
+**The `buildCoupleTransitPrompt` function.** It lives in `synastry.ts` but takes a `TransitData` argument from `transits.ts`. On the server, this means `synastryEngine.ts` will need to import from `transitEngine.ts` — a same-layer cross-module dependency. That is fine and expected. The build order matters: `transitEngine.ts` must exist before `synastryEngine.ts` can import from it.
+
+---
+
+## What Sounds Simple But Is Actually a Rabbit Hole
+
+**Synastry's partner data persistence.** The sprint vision correctly scopes this as "no database schema change." But making synastry truly server-sovereign requires the server to know the partner's birth data. Right now that data lives only in browser session state. The clean solution — persist partner data when the user initiates a synastry reading — is out of scope because it requires a schema change. The pragmatic solution for this sprint: change the API contract for synastry requests so the client sends raw birth data (date, time, lat, lng, tz) for both people, rather than pre-computed chart objects. The server computes both charts. This is not a schema change — it is a payload change. The client already has the birth data; it just needs to send it as raw fields instead of computed chart objects. This is the right scoping call.
+
+**The transit period and "current" date.** `calculateTransits` calls `getDateRange(period, targetMonth)` which uses `new Date()` internally. On the server, "now" is always correct. On the client, the user may have a stale browser tab where "now" has drifted. This is actually a reason server-side transit computation is *more* correct, not less. The server's `new Date()` is always fresh. Note this in the handler implementation — the server does not need to accept a `date` parameter for the transit start; it uses the server's current time. The exception is journal annotation, where historical dates matter. The journal handler already accepts an entry date — the transit computation for journal entries must use the entry's date, not `now()`.
+
+**`buildSynastryPrompt` depends on `synastryData.houseOverlay`** which in turn requires `calculateHouseOverlays`, which calls `getHouseForLongitude` with house cusp data. If both charts have unknown birth time, `houses` arrays are empty, and the overlay is empty. The server must handle the `unknownTime` path correctly — same as the frontend does. Check the `calculateHouseOverlays` guard at `synastry.ts` lines 141–165: `if (!chart1.unknownTime && chart2.houses.length > 0)`. Port that guard exactly. Do not simplify it.
+
+---
+
+## What Is Over-Engineered vs. Pragmatic
+
+**Do not try to share code between `src/` and `server/` this sprint.** The natural instinct when you see `analyzeElements` duplicated is to create a `shared/` package. That requires monorepo tooling decisions, tsconfig path changes, and potentially build pipeline changes. The cost is real. The benefit for four sentences of element interpretations is not worth it this sprint. Duplicate, document the duplication, move on. The technical debt is visible and contained. Fix it properly when there is a sprint that is actually about monorepo structure.
+
+**Do not port `transitTimeline.ts`.** The vision already says this, but I want to add the technical justification. `transitTimeline.ts` is 477 lines. It does binary searches for aspect perfection dates, retrograde stations, and lunar phase events across a date range. It is used exclusively for the transit timeline tab UI — a calendar of future events the user can scroll through. There is no server-side GPT handler that needs this data. The computation is the most expensive thing in the engine (hundreds of ephemeris lookups). Porting it to the server without a server-side consumer is pure waste.
+
+**Do not create separate `server/engine/zodiacEngine.ts` and `server/engine/planetEngine.ts` files.** I have seen codebases where the refactor produces a module per concept. `astroCore.ts` is the right granularity — one file for all the shared astronomical primitives that every other engine file depends on. The reason is import simplicity: `import { normalizeAngle, longitudeToZodiac, ASPECT_DEFINITIONS, analyzeElements } from './astroCore'` is cleaner than four separate imports from four files.
+
+**`computeEnergyRating` in `transits.ts`** — this is a UI concern dressed as an engine function. It returns `{ label, score, dotColor, textColor }` with Tailwind class strings. `dotColor: 'bg-emerald-400'`, `textColor: 'text-emerald-400'`. The server has no use for Tailwind class strings. Do not port `computeEnergyRating` to the server. If the server ever needs to communicate energy level, have it return the raw `score` integer and let the client map it to display classes. This is one of the few genuinely frontend-specific functions in the engine.
+
+---
+
+## The Right Module Structure for `server/engine/`
+
+```
+server/engine/
+  astroCore.ts          — normalizeAngle, longitudeToZodiac, ZODIAC_SIGNS, PLANET_NAMES,
+                          BODY_MAP, getMeanNodeLongitude, getPlanetLongitude, getDailyMotion,
+                          getHouseForLongitude, SIGN_ELEMENTS, ASPECT_DEFINITIONS,
+                          analyzeElements, ServerChartData type (re-export)
+  chartEngine.ts        — calculateChart, getMoonInfo, getActiveTransitAspects
+                          (imports from astroCore, re-exports ServerChartData)
+  transitEngine.ts      — calculateCurrentPositions, calculateTransitAspects, detectIngresses,
+                          getRetrogradeStatus, calculateTransits, buildTransitPrompt,
+                          getTopActiveTransits, assignTransitHouses
+  aspectEngine.ts       — calculateAspects, detectPatterns
+  synastryEngine.ts     — calculateSynastryAspects, calculateHouseOverlays,
+                          calculateCompositeChart, calculateCompatibility, calculateSynastry,
+                          buildSynastryPrompt, buildCoupleTransitPrompt
+  solarReturnEngine.ts  — findSolarReturn, calculateSolarReturn, buildSolarReturnPrompt
+  numerologyEngine.ts   — all exports from src/engine/numerology.ts (verbatim copy)
 ```
 
-This is not correct "applying" behavior. Applying means the aspect is getting tighter — i.e., one planet is approaching the other. The actual applying/separating determination requires comparing the current orb to the orb an infinitesimal time later, which requires planetary velocity. This approximation using `orb < maxOrb * 0.5` will produce nonsense results: a tight aspect at 0.3° orb gets `applying = true` even if both planets are moving apart. For synastry charts (which are between two natal charts, not transiting planets), there is no meaningful "applying" concept at all — natal planets are stationary. The field should be dropped from `SynastryAspect` or set to a constant, and `AspectRow` should render synastry rows without the applying/separating badge. Passing a meaningless applying/separating badge to `AspectRow` would display incorrect information with full visual confidence.
-
-**Files:** `SynastryPage.tsx` (replace static rows with `AspectRow`), new `src/data/interpretations/synastryAspectBriefs.ts` (30–40 entries + compute function), `src/engine/synastry.ts` (either fix or remove the `applying` calculation from `SynastryAspect`).
-
----
-
-### Problem 2: `HouseOverlaySection` Is the Most Underused Surface in the App
-
-`SynastryPage.tsx` lines 159–188. A table. Columns: Planet, In Sign, Falls in House. Nothing else.
-
-"Your Venus falls in their 7th house" is synastry's most emotionally resonant sentence. The 7th house is partnership. Venus is love and attraction. The sentence writes itself: "Person 1's Venus in their 7th house — love and beauty land directly in the partnership space; Person 1 is seen as someone who makes relationships feel beautiful to Person 2."
-
-The data to generate this is already in the codebase:
-- `HouseOverlayEntry` has `planet`, `sign`, `house`.
-- `HOUSE_THEMES` in `houseThemes.ts` has the house name and theme for every house (12 entries, fully populated).
-- The planet archetypes can be inferred from the planet name — Venus = love/values, Mars = drive/desire, Saturn = structure/responsibility, etc.
-
-You do not need a new database. You need a function that takes `(planet: PlanetName, partnerHouse: number)` and returns a two-sentence brief by template. The template is: "[Planet archetype] in [partner]'s [house name] ([house theme]). [One-sentence relational consequence]."
-
-The planet archetype → short noun phrase mapping is about 10 entries. The house theme is already in `HOUSE_THEMES[house - 1].theme`. The relational consequence is where the judgment lives. There are 10 × 12 = 120 combinations but you only need to write for the ones that matter: the inner planets (Sun, Moon, Venus, Mars, Mercury) in all 12 houses = 60 entries, which is tractable. Outer planets can use a generic template that still names the house.
-
-The current `HouseOverlaySection` renders a collapsed `<Section>` by default (no `defaultOpen` prop passed, so it defaults to `false`). That means the most emotionally resonant data in the synastry reading is hidden by default, behind a click, with no preview text to signal its value. If you add the interpretation text, you also need to open it or at least show a preview line beneath the section header.
-
-**Files:** `SynastryPage.tsx` (new inline interpretation rendering in `HouseOverlaySection`), new `src/data/interpretations/synastryHouseOverlayBriefs.ts` (60 focused entries for inner planets, generic template for outer).
-
----
-
-### Problem 3: `TransitAspectsToComposite` Is the Sprint-0010 State of Transit Aspects, Exactly
-
-`SynastryTransitPage.tsx` lines 33–66. Static rows, no expand/collapse, no briefs. This is what `TransitReadingPage`'s aspect section looked like before `AspectRow` was extracted.
-
-The mechanical fix is straightforward: replace the static `<div>` render loop with `AspectRow` calls. The brief generation should use `computeTransitAspectBrief` from `transitAspectBriefs.ts`, but with the composite chart's planet house as the `natalHouse` argument.
-
-Here is the problem: look at `calculateCompositeChart` in `synastry.ts` lines 188–225. Composite planet house assignments are set to `house: 0` at line 206:
-
-```ts
-compositePlanets.push({
-  ...zodiac,
-  name,
-  retrograde: false,
-  house: 0, // Will be calculated from composite angles if available
-})
-```
-
-The comment says "if available" — but the follow-through never happened. Composite house assignments require Placidus house cusps calculated from the composite Ascendant and Midheaven, which means another full `calculateChart` call or a Placidus house cusp calculation from composite angles. This was deferred. The result is that every composite planet has `house: 0`, which means `computeTransitAspectBrief` will always fall through to its generic fallback (the guard at line 112 of `transitAspectBriefs.ts`: `if (!natalHouse || natalHouse < 1 || natalHouse > 12 ...)`).
-
-So the brief for composite transit aspects will always be the generic `ASPECT_BRIEFS` fallback. That is not the worst outcome — a generic but accurate brief is better than nothing — but it is not the house-aware specificity the sprint vision demands. The vision says: "the composite chart's 'natal planet' house tells you which area of the relationship is being activated." That cannot happen while `house: 0` is baked into every composite planet.
-
-There are two paths here: (a) actually compute composite house assignments, which requires deriving 12 house cusps from the composite Ascendant longitude, or (b) accept generic briefs for composite aspects and document the limitation. Option (a) is more correct but touches the engine. Option (b) ships faster and still beats the current nothing.
-
-My recommendation: option (b) for this sprint, with a note that composite house assignments are deferred technical debt. The sprint vision says "no engine changes." Calculating composite houses would require adding a Placidus house-cusp derivation step in `calculateCompositeChart`, which is an engine change. Do not do it in this sprint. Ship the generic brief — it is still better than bare symbols — and flag `house: 0` in the composite planet calculation as a known gap.
-
-**Files:** `SynastryTransitPage.tsx` (replace static rows with `AspectRow` + `computeTransitAspectBrief` calls, import `synastryTransitData` composite chart if needed for planet names).
-
----
-
-### Problem 4: `TodayPage` Sky Highlights Has Data and No Voice
-
-`TodayPage.tsx` lines 162–192. The "Sky Highlights" card renders three transit aspects as bare rows: glyph + symbol + glyph, with a keyword label from `getAspectKeyword`. No house. No sentence. No expand/collapse.
-
-The fix is direct: use `AspectRow` here. The `chartData` prop is already available on `TodayPage` (it is a component prop, line 36). The `transits` state is already `TransitAspect[]` from `getTopActiveTransits`. The `natalHouse` field is now embedded in `TransitAspect` (sprint 0010, `code-transit-aspect-natal-house-embedding`). `computeTransitAspectBrief` takes those fields and returns a brief.
-
-What changes: instead of the current `<div className="flex items-center justify-between">` render loop, you render `<AspectRow>` components. The `applying` field is available on `TransitAspect`. The brief is computed inline. The `nature` field is there. This is genuinely mechanical — maybe 20 lines changed, nothing new.
-
-One issue: `AspectRow` renders a `cursor-pointer` button and expects to expand. On `TodayPage`, the Sky Highlights section is compact — the whole card is `max-w-2xl` with moderate padding. The expand behavior will push the card height. That is fine — the section header makes room. The only visual concern is that three expandable rows inside a medium-density card can feel crowded if all are expanded simultaneously. That is a design consideration outside the sprint scope. The interaction pattern is correct.
-
-**Files:** `TodayPage.tsx` (replace static aspect rows with `AspectRow` calls, import `AspectRow` and `computeTransitAspectBrief`).
-
----
-
-### Problem 5: `SolarReturnPage` Reading Tab Has No Static Layer
-
-`SolarReturnPage.tsx` lines 218–240. The Reading tab shows either a `GptSkeleton` or the GPT interpretation. Nothing else.
-
-The `KeyPlacements` component (lines 64–90) renders four mini-cards: ASC, Sun, Moon, MC — glyph + "H{n}" + one-word descriptor. This is the right idea at thumbnail resolution. But a user sitting on the Reading tab, waiting for GPT to load, sees four unlabeled tiles and a skeleton. None of the tiles say anything about what the house means.
-
-The SR Sun house and SR Moon house are the two most information-dense facts in a Solar Return. Sun house = where your identity and vitality will be focused for the year. Moon house = the emotional climate and what you will need to feel secure. The `PLANET_IN_HOUSE` database has exactly these entries for every planet in every house. `getPlanetInHouseInterpretation('Sun', srSun.house)?.detail` returns the full paragraph. That is too much text for the inline brief context. But `getPlanetInHouseInterpretation('Sun', srSun.house)?.brief` returns one line — "Identity expressed through creativity and joy" — which is exactly the right resolution for a pre-GPT static layer.
-
-The implementation is: below `<KeyPlacements>` and above the `GptSkeleton`, render a two-item static card (SR Sun house, SR Moon house) using `brief` from `PLANET_IN_HOUSE`. Two lookups. Two sentences. Done. The card should be visually distinct from the GPT block — lighter styling, "Your Year at a Glance" or no header — so the user understands this is static data, not the GPT reading.
-
-A second issue: `buildSolarReturnPrompt` in `solarReturn.ts` does not include element profile data. Compare to `buildTransitPrompt` after sprint 0010, which now prepends `analyzeElements` output. The SR prompt at line 67 of `solarReturn.ts` starts: `"You are an expert astrologer providing a solar return year-ahead reading..."` and goes directly to natal chart positions. `analyzeElements(natalChart.planets).dominant` is two lines and already exported from `src/data/interpretations/index.ts`. The call is already imported in `transits.ts`; it needs to be imported in `solarReturn.ts` and called once before the prompt body. This is the smallest change in the sprint.
-
-**Files:** `SolarReturnPage.tsx` (add static SR Sun/Moon house brief cards above GPT skeleton), `solarReturn.ts` (add `analyzeElements` call and inject into prompt).
-
----
-
-### Problem 6: `buildSynastryPrompt` Still Missing Element Profiles for Both Charts
-
-`synastry.ts` lines 444–539. The prompt builds the full chart data for both people, lists all cross-chart aspects sorted by orb, includes house overlays, composite, and compatibility summary. Sprint 0010 added priority instructions and the anti-cliché constraint. That was good.
-
-What is still missing: element profiles for both charts. Look at lines 454–462 for Person 1 and lines 465–472 for Person 2. Each person's planets are listed with house and sign. But the prompt never says "Person 1 is dominant Fire, Person 2 is dominant Earth." A Fire dominant meeting an Earth dominant is a specific dynamic that every competent astrologer leads with. The prompt emits the raw data (all planet signs are there) but leaves the element inference to GPT. GPT will do it, but inconsistently and without the framing that `analyzeElements` provides.
-
-The fix is identical to what was done for the transit prompt: call `analyzeElements(chart1.planets)` and `analyzeElements(chart2.planets)`, insert a summary line per person. Four lines of code. The `analyzeElements` function is already in `src/data/interpretations/index.ts`.
-
-Also: the `buildCoupleTransitPrompt` function (lines 543–615) has no element profiles and no priority instruction. It is structurally similar to `buildSynastryPrompt`. The same two upgrades apply.
-
-**Files:** `synastry.ts` (import `analyzeElements`, add profile lines for both persons in both `buildSynastryPrompt` and `buildCoupleTransitPrompt`).
-
----
-
-## The Applying/Separating Bug in Synastry
-
-I flagged this above but want to quantify it. In `calculateSynastryAspects` (synastry.ts lines 71–108), the applying calculation:
-
-```ts
-const applying = orb < maxOrb * 0.5
-```
-
-For a conjuction with `maxOrb = 6 * 0.75 = 4.5°`, this evaluates `applying = true` whenever the orb is less than 2.25°. So any tight conjunction will show "applying" regardless of planetary motion. For a natal-natal synastry comparison, "applying" is semantically meaningless — these are frozen birth charts; nothing is moving toward anything. The badge is cosmetically plausible but technically wrong.
-
-The right fix: remove `applying` from `SynastryAspect`, or set it to a constant `false` (or drop the badge in the render layer). The sprint vision says no engine logic changes. The least-invasive fix is: in `SynastryAspectsSection`, when rendering `AspectRow`, always pass `applying={false}` for synastry rows, and add a prop to `AspectRow` to optionally suppress the applying/separating badge entirely. No badge is more honest than a wrong badge.
-
----
-
-## What Is Over-Engineered for the Work at Hand
-
-`SynastryPage.tsx` has a `Section` component (lines 16–30) that is a local copy of the same accordion pattern in `SynastryTransitPage.tsx` (lines 17–31). These are byte-for-byte duplicates. Every prop, every className, every inline style. Two files, two components, identical code. This is maintenance debt: the next person to change the accordion behavior will change one and miss the other.
-
-The correct fix is to extract a shared `Section` (or `CollapsibleSection`) component to `src/components/ui/` and import it in both pages. This is a mechanical refactor with zero behavioral change. It does not need to be a sprint task — it can be done incidentally during the aspect row wiring, since both files will be open anyway. The test is: if the animation behavior changes in `SynastryPage.tsx`'s `Section`, does `SynastryTransitPage.tsx` get the update? Right now, no. That is the bug waiting to happen.
-
----
-
-## What Is Under-Engineered for the Work at Hand
-
-The `HouseOverlaySection` in `SynastryPage.tsx` uses an HTML `<table>`. Three columns: Planet, In Sign, Falls in House. When you add interpretation text to each row, it won't fit in a table row — interpretation text is 1–2 sentences that needs to wrap and breathe. The current table layout will fight the interpretation text.
-
-The right structure for planet-in-house overlay entries is an expand/collapse card pattern, like `AspectRow` but for house entries: the header row shows planet + sign + house number, the expanded area shows the brief. The current table needs to become a card list before interpretation text can be added. This is not a big structural change — it is replacing `<table><tbody><tr>` with `<div>` stacks — but it should be done intentionally rather than bolted onto the existing table structure.
-
----
-
-## Concrete Proposals for Sprint 0011
-
-**Proposal 1: Synastry Aspect Row Briefs**
-
-New file: `src/data/interpretations/synastryAspectBriefs.ts`. Key format: `${planet1}_${aspectType}_${planet2}` (same as `ASPECT_INTERPRETATIONS` but relational register). Approximately 35 entries covering: Sun/Moon/Venus/Mars cross-pairs in conjunction, trine, square, sextile, opposition. Fallback to `ASPECT_BRIEFS[aspectType][person1Planet]` for uncovered pairs. In `SynastryPage.tsx`, replace the static aspect row render loop with `AspectRow` calls. Pass the computed brief as the `brief` prop. Pass `applying={false}` and suppress the applying/separating badge (synastry aspects are natal-natal; the badge is meaningless). New compute function `computeSynastryAspectBrief(person1Planet, aspectType, person2Planet, nature): string`.
-
-**Proposal 2: House Overlay Interpretation Layer**
-
-New file: `src/data/interpretations/synastryHouseOverlayBriefs.ts`. Keys: `${planet}_H${house}` — 60 entries for inner planets (Sun, Moon, Venus, Mars, Mercury) × 12 houses. Outer planets use a generic template. In `SynastryPage.tsx`, rework `HouseOverlaySection` from a table to an expand/collapse card list. Each card: header row (planet + sign + house number), expanded area (two-sentence relational brief). Default open for the top two or three entries; collapsed for the rest.
-
-**Proposal 3: `TodayPage` Top Transits with AspectRow**
-
-In `TodayPage.tsx`, replace the Sky Highlights loop with `AspectRow` imports. `transits` is already `TransitAspect[]` with `natalHouse` embedded. Call `computeTransitAspectBrief` for each. No new data. No new files. Pure wiring.
-
-**Proposal 4: Solar Return Static Brief + Prompt Element Profile**
-
-In `SolarReturnPage.tsx`, add a "Year at a Glance" static card between `KeyPlacements` and the GPT skeleton. Pull SR Sun house and SR Moon house from `srData.srChart.planets`. Look up `getPlanetInHouseInterpretation('Sun', srSun.house)?.brief` and same for Moon. Render two labeled sentences. In `solarReturn.ts`, add `analyzeElements` import and inject the dominant element line into the prompt body before the instructions section. Four lines of new code in the engine file; no type changes.
-
-**Proposal 5: `SynastryTransitPage` Aspect Rows + `buildSynastryPrompt` Element Profiles**
-
-In `SynastryTransitPage.tsx`, replace the `TransitAspectsToComposite` static loop with `AspectRow` calls. Brief will be generic (composite house = 0, so `computeTransitAspectBrief` falls to the `ASPECT_BRIEFS` fallback — document this). In `synastry.ts`, add `analyzeElements` calls for both charts in `buildSynastryPrompt` and `buildCoupleTransitPrompt`. Four lines each. Extract the duplicate `Section` component from `SynastryTransitPage.tsx` and `SynastryPage.tsx` into `src/components/ui/CollapsibleSection.tsx` while both files are open.
-
----
-
-## What Not to Touch
-
-`computeTransitAspectBrief` is correct. Do not extend it for synastry use — its assumptions about "natal planet in house" are wrong for the synastry context. Write a separate function with the relational register.
-
-`ASPECT_INTERPRETATIONS` in `aspectInterpretations.ts` should not be modified. The entries there are first-person-singular natal readings. That is the right register for the natal chart page. The synastry brief table is a new, separate file.
-
-`planetInHouse.ts` entries are correct for SR static interpretation lookups. Do not rewrite them; the `brief` field at 5–10 words is exactly the right length for the static SR card.
-
-The `applying` calculation bug in `calculateSynastryAspects` should not be fixed by changing the engine calculation. The correct fix is to suppress the badge at the render layer. Keep the engine change minimal.
+Seven files. No circular dependencies. `astroCore.ts` has no imports from other engine files. Every other engine file imports from `astroCore.ts`. `synastryEngine.ts` imports from `transitEngine.ts` for `TransitData` type. `solarReturnEngine.ts` imports `calculateChart` from `chartEngine.ts`.
 
 ---
 
 ## The Single Most Important Observation
 
-The `AspectRow` component was extracted in sprint 0010 to be the shared abstraction for every aspect row in the app. As of sprint 0010, it is used in exactly two places: `TransitReadingPage.tsx` and `AdvanceTab.tsx`. It is not used in `SynastryPage.tsx`, `SynastryTransitPage.tsx`, or `TodayPage.tsx`. The whole value of extracting a shared component is that it creates a single place to add behavior — if you add expand/collapse animation, or keyboard navigation, or accessibility attributes to `AspectRow`, every surface gets it. Right now the synastry and today surfaces have their own ad-hoc row implementations that will diverge over time. Sprint 0011's most structural contribution is completing the `AspectRow` rollout to the three remaining surfaces. Everything else is content.
+The `handleTransitInterpretation` handler is the keystone task. Every other handler in this sprint is a variation on the same pattern: accept birth data, compute chart, run calculation, build prompt, call GPT. The transit handler is the most complex version of that pattern — it has a period parameter, ingress detection, retrograde tracking, the tightest applying aspect logic, and `buildTransitPrompt`'s element profile injection. If you implement the transit handler correctly, you have the template for synastry and solar return. If you implement it by accepting pre-computed data and just porting the prompt builder, you have not solved the problem — you have just moved the string assembly one step closer to the server without closing the trust gap.
+
+The test the vision sets is correct: take `birth_date`, `birth_time`, `birth_place` from the DB, compute the chart, run the calculation, build the prompt, call GPT. The transit handler should pass that test. Until it does, the sprint is not done.
