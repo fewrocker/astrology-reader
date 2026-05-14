@@ -9,6 +9,7 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import { ASPECT_KEYWORDS } from '../../data/interpretations/aspectKeywords'
 import GptSkeleton from '../ui/GptSkeleton'
 import { track } from '../../services/analytics'
 
@@ -23,19 +24,6 @@ const PHASE_EMOJIS: Record<string, string> = {
   'Waning Crescent': '🌘',
 }
 
-const ASPECT_KEYWORDS: Record<string, Record<string, string>> = {
-  Sun: { harmonious: 'Vitality', challenging: 'Ego tension', neutral: 'Identity' },
-  Moon: { harmonious: 'Flow', challenging: 'Emotional', neutral: 'Intuition' },
-  Mercury: { harmonious: 'Clarity', challenging: 'Discord', neutral: 'Communication' },
-  Venus: { harmonious: 'Harmony', challenging: 'Friction', neutral: 'Connection' },
-  Mars: { harmonious: 'Drive', challenging: 'Tension', neutral: 'Action' },
-  Jupiter: { harmonious: 'Expansion', challenging: 'Excess', neutral: 'Growth' },
-  Saturn: { harmonious: 'Structure', challenging: 'Pressure', neutral: 'Discipline' },
-  Uranus: { harmonious: 'Innovation', challenging: 'Disruption', neutral: 'Change' },
-  Neptune: { harmonious: 'Inspiration', challenging: 'Confusion', neutral: 'Mysticism' },
-  Pluto: { harmonious: 'Transformation', challenging: 'Intensity', neutral: 'Power' },
-  NorthNode: { harmonious: 'Purpose', challenging: 'Karma', neutral: 'Destiny' },
-}
 
 function getAspectKeyword(transitPlanet: string, nature: string): string {
   return ASPECT_KEYWORDS[transitPlanet]?.[nature] ?? nature

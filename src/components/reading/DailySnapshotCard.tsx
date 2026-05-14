@@ -8,6 +8,7 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptInterpretation'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
+import { buildKeyAspectSentence } from '../../data/interpretations/aspectKeywords'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -74,6 +75,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
   const [energy, setEnergy] = useState<EnergyRating | null>(null)
   const [moon, setMoon] = useState<CurrentMoonPhase | null>(null)
   const [topAspect, setTopAspect] = useState<TransitAspect | null>(null)
+  const [aspectReady, setAspectReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
@@ -96,6 +98,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
             setEnergy(parsed.energy)
             setMoon(parsed.moon)
             setTopAspect(parsed.topAspect)
+            setAspectReady(true)
             setLoading(false)
           }
           return
@@ -116,6 +119,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
           setMoon(currentMoon)
           setEnergy(rating)
           setTopAspect(best)
+          setAspectReady(true)
         }
 
         const prompt = buildSnapshotPrompt(chart, currentMoon, aspects)
@@ -156,6 +160,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
     setEnergy(null)
     setMoon(null)
     setTopAspect(null)
+    setAspectReady(false)
     setRefreshTick(t => t + 1)
   }
 
@@ -191,7 +196,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
                 {moon.phaseName} in {ZODIAC_GLYPHS[moon.moonSign as keyof typeof ZODIAC_GLYPHS] ?? ''} {moon.moonSign}
               </span>
               {moon.isVoid && (
-                <span className="text-orange-400 text-xs ml-1">· void</span>
+                <span className="text-orange-400 text-xs ml-1">· void · decisions may need revisiting</span>
               )}
             </div>
           )}
@@ -210,10 +215,10 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
             </div>
           )}
 
-          {topAspect && !loading && (
+          {topAspect && aspectReady && (
             <div className="flex items-center gap-1.5 bg-mystic-gold/8 border border-mystic-gold/20 rounded-full px-3 py-1">
-              <span className="text-mystic-muted text-xs">
-                Key: {topAspect.transitPlanet} {topAspect.symbol} natal {topAspect.natalPlanet}
+              <span className="text-mystic-muted text-xs italic">
+                {buildKeyAspectSentence(topAspect)}
               </span>
             </div>
           )}
