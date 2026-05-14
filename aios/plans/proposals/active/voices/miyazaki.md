@@ -1,205 +1,165 @@
-# Hayao Miyazaki — Voice Analysis: Sprint-0009 Production Preparation
+# Hayao Miyazaki — Voice Analysis: Sprint-0011 Depth
 
 ---
 
-I have used this product carefully. I have sat with it as a new user who knows nothing, and as a returning user who has already given it my birth date, my time, my city. I have pressed all the readings. I have reached the limit. I have watched what happens when the sky says "no more today."
+I have walked through this product slowly. Not as someone hunting for features, but as someone who wanted to feel received.
 
-Here is what I found.
+Sprint 0010 did real work. The transit aspect rows now speak. The timeline event cards know which house is activated. The key aspect pill says something a human being can carry into their morning. The advance tab signals which dates are not like the others. These are not small things. They represent the difference between a machine that outputs and a machine that communicates.
 
----
+But I have been here before — in the editing room, when the rough animation passes are done and someone says the scene is finished. It is not finished. The hand has moved but the weight is not there. The mouth has opened but you cannot feel the breath. The data is displayed but the person reading it does not feel known.
 
-## The Moment of Hitting a Quota
-
-Right now the rate-limit error message says: *"Daily reading limit reached — try again tomorrow."*
-
-This is accurate. It is also a door slammed in the face.
-
-The user who has just asked for their third reading today is someone who is engaged. They came back. They asked again. This is not a nuisance user. This is someone the product has already moved. Telling them "try again tomorrow" — with no warmth, no acknowledgment of what they were reaching for, no sense that the product notices them at all — is a mechanical rejection where a human moment was possible.
-
-The app knows who this person is. It knows their Sun sign, their Moon, their Rising. It has just finished giving them a reading. At the very moment they are most engaged — asking for more — the product goes cold. *Daily reading limit reached.* That is what a vending machine says when it runs out of change.
-
-What it could say instead: *"The sky has given you three readings today. That is enough to carry. Come back tomorrow — or open more sky."* And then — quietly, without pressure — offer the path forward.
-
-The transition from "limit hit" to "upgrade offer" is the most important emotional moment in this entire sprint. Get it wrong and the user feels extorted. Get it right and the user feels understood.
+Sprint 0011 inherits specific unfinished rooms. I have walked them. I will tell you what I found.
 
 ---
 
-## The Upgrade Modal: Pressure vs. Invitation
+## The Synastry Aspect List: Where Intimacy Arrives and Is Turned Away
 
-The technical spec calls for an UpgradeModal that appears when the server returns 429. I want to talk about what that modal must not be.
+A person who enters their partner's birth date is doing something that requires trust. They are saying: here is someone who matters to me. Tell me something true.
 
-It must not be a pricing table.
+The synastry aspects section answers them with this:
 
-A pricing table is what you show someone when they have agreed to look at prices. The user who just hit their quota did not agree to look at prices. They were in the middle of something that mattered to them. Showing them a grid of features and dollar amounts at that moment is a rupture. It moves them from the world of the sky — which is personal and mysterious and felt — into the world of software subscriptions, which is none of those things.
+`P1 Venus △ P2 Moon · 1.8° orb · harmonious`
 
-What the modal should feel like is: the app leaning toward you and saying, *here is what more looks like. It is yours if you want it.*
+That is a mathematical description of a fact that the user already submitted. They gave you Venus. They gave you Moon. They gave you both birth dates. The calculation found the trine. And now the product hands it back as proof that the calculation ran.
 
-Concretely, this means:
+The interpretation database in `aspectInterpretations.ts` has `Moon_Trine_Venus`: "Naturally loving and graceful — your emotions and love nature flow together beautifully." This is written in natal voice — it speaks to one person's internal architecture. It does not speak to two people in relation. And this is the actual problem.
 
-**No table. No feature bullets listed in columns.** Instead, three named spaces, each described in one line of copy that speaks to what the person actually receives — not what the tier "includes."
+"Naturally loving and graceful" describes a placement. What the synastry page needs is something that describes a *meeting*: what happens when Person 1's Venus reaches across the chart and touches Person 2's Moon. That is a different kind of sentence. Not "your love nature is graceful" but "your affection lands naturally on them — they feel it without needing it explained."
 
-Free: "Three readings a day — a morning consultation with the sky."
-Basic: "Twenty readings a day — the sky whenever you need it."
-Advanced: "One hundred readings a day, and a new power that only time can reveal: patterns across your journal and your dreams."
+The natal database is the wrong shelf. Sprint 0011 should write the right one: a thin, relational synastry brief table covering the 30–40 highest-frequency cross-chart pairs. Not 120 entries. Not a rewrite of anything. Just the relational phrasing for what it feels like when one person's planet touches another person's planet. Venus trine Moon in synastry is not the same emotional fact as Venus trine Moon in a natal chart. The product knows the difference. It should say the difference.
 
-The "patterns across your journal and your dreams" line is doing real work. This is not a feature. This is the reason someone who has been keeping a cosmic journal for six months would pay money. It is specific, it is earned, it rewards the user who has been present. It should be named — not as a bullet point, but as a sentence that acknowledges the history the user has been building.
-
-**The current tier must be acknowledged.** The modal should know that I am on the free plan, and it should say so without judgment: "You are reading on the free sky." Not "You are currently on: Free." The language should stay in the world of the product.
-
-**The CTA should be a single invitation, not a grid of "Choose Plan" buttons.** If the user is on free, the modal should guide them toward Basic with one clear button, and offer Advanced as a secondary choice with a sentence about what it adds. Do not make the user compare plans side by side. They are not buying software. They are deciding how much sky they want.
+Then the `SynastryAspectsSection` renders these briefs with the same expand/collapse pattern that `AspectRow` already implements. The pattern exists. The component exists. The interpretation data is the only missing piece — and it is narrow.
 
 ---
 
-## Tier Presentation: Feeling Understood vs. Being Upsold
+## The House Overlay Section: The Most Resonant Fact Delivered Without a Voice
 
-There is a specific kind of insult that happens in subscription upsells when the product has not been paying attention to you. You have been using it for months. You have built something there — a journal, a history, a practice. And then the paywall appears and speaks to you as if you just arrived, explaining what the app does, listing features you already use every day.
+"Your Venus falls in their 7th house."
 
-This product has an unusual advantage: it knows a great deal about its users. It knows their birth data. It knows how many journal entries they have. It knows how many readings they have taken. It knows their tier.
+I do not know if the people building this product understand what that sentence means to someone who has been practicing astrology for fifteen years. It is one of the most emotionally charged facts in synastry. The 7th house is where we project partnership. When someone's Venus falls there, it means the person they are reading about is seen — truly seen — as a partner. It means their presence activates something the native has been reaching toward.
 
-The upgrade experience should use this knowledge.
+And the product lists it in a table. `Venus | Taurus | House 7`. No sentence. No warmth. No signal that this is different from `Chiron | Sagittarius | House 11`.
 
-If a user has seventeen journal entries and has been on the app for forty days, the upgrade modal for Advanced should not pretend they are a stranger. It should say something like: *"You have been keeping the sky here for a while. The advanced tier can read what it has been building."* That is not manipulation. That is acknowledgment. Those are different things.
+`houseThemes.ts` has everything needed. House 7: "partnership, what you seek in a committed other." The planet archetype is known. The combination is writable in one sentence: "Your Venus falling in their 7th house — the house of partnership — suggests they instinctively see you as someone they could build something lasting with."
 
-If a user has zero journal entries and three readings, the modal should be simpler and warmer: *"The sky is generous. Basic gives you twenty readings a day — no more waiting for tomorrow."*
+That sentence is twelve words of template logic and one lookup. The data is assembled. The user is already on the page. The product simply does not speak.
 
-The tier presentation must be responsive to who the user actually is, not a static marketing page that loads the same for everyone.
-
----
-
-## Google and Facebook Login: The Problem of Placement
-
-The OAuth buttons — "Continue with Google," "Continue with Facebook" — are going to be placed in the AuthModal, below the email/password form.
-
-I want to be careful here.
-
-The email/password form in this modal is already well-crafted. The heading says "Open Your Account ✦" for registration and "Return ✦" for login. The password field is labeled "a word only you know." The submit buttons say "Begin ✦" and "Enter ✦." This is a product with a distinct voice, and it has been applied to the auth flow.
-
-The Google and Facebook buttons carry none of that voice. They are, by necessity, branded buttons that belong to other companies. They will show a Google color, a Facebook color, a corporate typeface. Placed immediately below this carefully crafted form, they will feel like advertisements — or worse, like an apology for the email form above them.
-
-What matters is the framing before those buttons and the visual separation from the form above.
-
-There should be a divider with a word — not "OR" in all caps (that is a technical separator, not a human one) — but something like a thin line with a small ✦ centered in it, and beneath it in very small muted text: *"or arrive another way."*
-
-The Google and Facebook buttons should be understated in this context. Not white-bordered rectangles competing with the primary form. They should be smaller in height, with the brand logos at their natural scale, in a softer container that signals "these are alternative doors, not equally prominent ones." The primary form — email and password — is the app's own relationship with the user. The OAuth options are shortcuts that belong to other companies. The visual hierarchy should reflect this honestly.
-
-One more thing: on the registration modal specifically, above the divider, there could be a single quiet line that says what creating an account means: *"Your readings, your journal, and your dreams — kept for you."* This is not a features list. It is a reason.
+`HouseOverlaySection` currently renders a table with columns for planet, sign, and house number. The sprint 0011 task is to replace the bare house number with a house name and add one sentence of interpretation beneath each row. The `HOUSE_THEMES` array and `PLANET_IN_HOUSE` table together provide all the ingredients. No GPT call. No new engine. One sentence per row, generated from two existing data sources.
 
 ---
 
-## Copy, Animation, and Transition: Making Payment Feel Meaningful
+## The Couple Transit Page: An Unfinished Room
 
-The Stripe checkout redirect is a handoff — the user leaves the app and enters Stripe's environment. There is a moment just before the redirect that most products handle poorly. They show a loading spinner while the checkout session is being created server-side. The user sees a blank or spinning state, then is transported to a generic Stripe payment page.
+When I open `SynastryTransitPage.tsx` and look at the `TransitAspectsToComposite` section, I see the transit reading page from six months before sprint 0010. Bare rows. Glyph, aspect symbol, glyph, orb, applying badge. No expand/collapse. No brief. Silence.
 
-This handoff is an opportunity.
+The `AspectRow` component was built precisely to solve this problem. It exists at `src/components/reading/AspectRow.tsx`. It is not used here.
 
-Before the redirect, there should be a brief transition — not a loading spinner, but a held breath. A single sentence, centered, gentle:
+The brief for a composite transit aspect is different from a natal transit brief in one specific way: the "natal planet" is a composite planet, and the house it occupies tells you which area of *the relationship* is being activated — not which area of an individual's life. Saturn transiting the composite 2nd house is not about personal finances. It is about the shared resources of the relationship — how they budget together, what they value collectively, where their finances as a couple require attention.
 
-*"Opening your account with the sky."*
+The `TransitAspect` objects in `synastryTransitData.transitAspects` already carry `natalHouse` (this was embedded in sprint 0010 for all transit aspect calculations). The house number is there. The house theme is retrievable from `getHouseTheme()`. The brief can be written from the same template logic as `computeTransitAspectBrief()`, but with relational framing: "Saturn pressing on your relationship's 2nd house asks how you navigate shared resources — money, time, what you build together."
 
-Or, more literally but still in the product's voice:
-
-*"Preparing your space in the stars."*
-
-The ✦ glyph, slow pulse, this line of text — for two to three seconds, maximum. Then the redirect. This is not delay for decoration. It is a small ceremony that acknowledges the user is crossing a threshold. They are about to pay. That is a commitment. The product should meet it with some presence.
-
-After the Stripe flow completes and the user returns, the landing state matters enormously. The user expects confirmation — they want to know it worked. But more than confirmation, they want to feel that the app recognizes what just changed.
-
-Do not show: "Your subscription has been updated to Basic."
-
-Show: the home screen, with one addition — a brief ambient message, soft, below the identity line, that appears only once: *"The sky is wider now. ✦"* One line. Not a modal. Not a success banner. A sentence in the space where they stand.
+This is not new logic. It is the same pattern, applied to a surface that was left with no pattern at all.
 
 ---
 
-## How the Tier You Are On Should Change How the App Feels
+## The Solar Return Page: The Year Ahead, Rendered Without an Entry Point
 
-The question of visual differentiation across tiers is delicate. Done wrong, it becomes a system that makes free users feel marked — second-class, incomplete, shaded.
+The Solar Return page shows a GPT reading and a planet positions table. The GPT reading is thorough — it was improved in sprint 0010 to lead with the tightest applying aspect. But GPT takes time to load. And while it loads, the page shows a skeleton.
 
-I do not recommend making free users feel diminished. I recommend making advanced users feel recognized.
+The most important static facts on the Solar Return page are the SR Sun house and the SR Moon house. These are not deep astrology. They are direct answers to the two questions every person brings to a Solar Return: What will this year focus on? What will it feel like?
 
-The difference is this: if you reduce the visual richness of the free experience to signal its limits, you are punishing people for not paying. If you add ambient warmth to the advanced experience, you are rewarding people for being present.
+`PLANET_IN_HOUSE` already has `Sun_H1` through `Sun_H12` and `Moon_H1` through `Moon_H12`. These entries are written for natal voice, which is not ideal — "your Sun in the 5th house makes creative self-expression central to who you are" describes a birth chart, not a year-ahead forecast. But they are close enough to be meaningful if introduced correctly: "This year, your Sun falls in House 5 — expect themes of creative expression, pleasure, and the joy of being fully seen."
 
-Concretely:
+Sprint 0011's task here is not to rewrite `PLANET_IN_HOUSE`. It is to pull the SR Sun and SR Moon house readings from the existing table and render them as a static brief block — labeled "This Year's Focus" and "Emotional Climate" — that appears immediately, before GPT loads, and stays visible alongside the GPT reading once it arrives.
 
-**Free tier**: no visual change from the current experience. The home screen looks the same. The readings look the same. The limit is only felt when it is reached — and even then, it should be felt gently, as described above.
-
-**Basic tier**: the account badge in the header (the ✦ glyph) could have a slightly increased glow — barely perceptible, a 15% brighter drop-shadow. Nothing labeled. Nothing announced. Just a small recognition that this person has made a commitment.
-
-**Advanced tier**: in the account menu dropdown, below the email, a single line in the product's muted gold: *"Advanced ✦"* — and when the user visits the journal for the first time on the advanced tier, the journal should have a new section visible that was not there before: the cross-time patterns feature. No banner announcing it. It should simply be present — a new group in the journal interface with a heading like "Patterns Across Time" and a brief descriptor: "What your entries are saying together." The feature's arrival is its own announcement.
-
-This approach — where the higher tier adds presence rather than removes punishment — is more honest to the product's soul. It treats subscription as a deepening relationship with the sky, not a feature gate.
+The `SolarReturnPage` already computes `srSun` and `srMoon` with their house values. The lookups are two lines. The rendering is a styled block already consistent with the amber design language of the SR page. The user who opens the Solar Return page and sees their SR Sun in House 9 with the brief "A year of expansion, travel, and seeking meaning" already has something to hold onto before the GPT paragraph arrives. The app has answered their question before they had to wait.
 
 ---
 
-## The Missing Onboarding Moment
+## The TodayPage Sky Highlights: Glyphs Without Translation
 
-A user arrives for the first time. They have never used this app. They enter their birth date, their time, their city. They choose their focus areas. They land on the home screen.
+The "Sky Highlights" card on `TodayPage` shows three transit aspects as glyph-pairs with a one-word keyword to the right:
 
-Right now, nothing welcomes them.
+```
+♄ □ ☿      disruption
+♃ △ ♀      abundance
+☽ ☌ ♂      intensity
+```
 
-The "Welcome back" text in the birth details block says "Welcome back" regardless of whether this is the user's first time or their hundredth. This is a small thing that costs nothing to fix and communicates something important when it is wrong: the app is not paying attention.
+The keywords come from `ASPECT_KEYWORDS` — a lookup by transit planet and aspect nature. "Disruption" for Saturn square. "Abundance" for Jupiter trine. "Intensity" for Moon conjunct Mars.
 
-But beyond fixing that text, there is a missing moment. A new user who has just entered their birth data has done something meaningful: they have trusted this product with the most personal astronomical coordinates of their life. They deserve a moment that acknowledges this.
+These are not wrong. They are true. But they are true for everyone. "Disruption" is what Saturn square means for any person, in any chart, on any day. The natal planet — Mercury, Venus, Mars — is visible in the row. Its house is available. `chartData` is on the page.
 
-Not a tutorial. Not an onboarding checklist. Not a modal full of features.
+The `AspectRow` component was built to handle exactly this: expand on tap, reveal a brief that names the natal planet's house and what the transit means for that life area. The "Sky Highlights" rows are the home screen's version of the transit aspect rows, and they should behave the same way.
 
-A single sentence, appearing once, in the space below the identity line, visible only on the first session: *"Your chart is ready. Everything you explore from here is yours."*
+A user who taps `♄ □ ☿` on their Today page and sees "Saturn pressing on your 3rd-house Mercury — deliberate with your words this week, not impulsive" has been given something. They have been named. The product has looked at their chart, not at a dictionary.
 
-Seven words of permission. They cost nothing. They change everything about how the user feels when they press "Get Your Readings" for the first time.
-
-The other missing onboarding moment is: there is no clear answer, for a new user, to the question "what should I do first?" The ReadingsModal opens with nine options in three groups. This is fine for a returning user who knows what they want. For a first-time user, it is a menu at a restaurant they have never been to, with no recommendations from the waiter.
-
-For users on their first session, the ReadingsModal could add a single visual accent — a subtle "start here" label or a faint ring — on the Birth Chart option in the first group. Not a forced flow. Not a tutorial step. Just the waiter quietly pointing: the birth chart is your foundation. Everything else builds from it.
-
----
-
-## Where the App Is Generic When It Should Feel Personal
-
-**The auth nudge copy.** "Save your readings ✦" is already better than most products manage. But it is still generic — it does not know who is asking. A user who has three journal entries and has taken six readings should see something that speaks to what they specifically have built: *"Six readings and three journal entries are saved here. ✦ Keep them."* This requires passing usage data to the nudge component, which is technically straightforward given the app already tracks this, and the result is the difference between a marketing line and a mirror.
-
-**The UpgradeModal copy for every user, regardless of tier.**  
-A user who has been on the app for forty days and has been using it daily is not the same as a user who hit the free limit on day one. The pitch for upgrading should be different for these two people. The long-term user is upgrading to protect an investment; the new user is upgrading for volume. Both are valid motivations. Neither is served by the same paragraph of copy.
-
-**The account menu dropdown.** Currently: the user's email, and "Sign Out." For a paying user, this is particularly cold — they have an account that means something to them. At minimum, showing their tier name here (even just "Basic" or "Advanced" in the same muted style as the email) tells them the app knows what they are. Not a features summary. Just recognition.
-
-**The error state for the "journal patterns" feature when the user is not on Advanced.** If a free or basic user somehow encounters the cosmic pattern reading (for example, if it is visible in the UI as a locked option), the message blocking access must be specific about what it is and why it matters — not a generic "upgrade required" gate. *"Pattern readings look across all your journal entries at once — they need the advanced sky."* One sentence that names what the feature does and why it requires more. Not a hard wall. A door with a window.
+The `getTopActiveTransits()` result already carries `natalHouse` (embedded in sprint 0010). The brief function already exists in `transitAspectBriefs.ts`. Wiring the `AspectRow` component into the Sky Highlights card is the last step the Today page needs to complete the pattern sprint 0010 established everywhere else.
 
 ---
 
-## What Disrespects the User in This Sprint
+## The Synastry GPT Prompt: Almost Arrived, But Missing the House Names
 
-**A "rate limit exceeded" banner that does not carry any warmth or acknowledgment.** The user was in the middle of something. The message should know this.
+`buildSynastryPrompt` was improved in sprint 0010. It now leads with the tightest aspect, instructs GPT to name houses, and includes the anti-generic constraint. The improvement was real.
 
-**An upgrade modal that looks like any other SaaS pricing page.** This product has invested real effort in its voice and its world. The UpgradeModal is not a landing page separate from that world. It must speak the same language.
+But the element profiles are absent. `buildTransitPrompt` gained `analyzeElements` output in sprint 0010 — a block that tells GPT whether this person is Fire-dominant, Air-deficient, etc. This gives the model context for *how* they experience the aspects, not just what the aspects are. `buildSynastryPrompt` sends two complete charts to GPT but no element profile for either person.
 
-**OAuth buttons placed without visual intention.** Dropped below the email form without care, they will undercut the craftsmanship of everything above them. They need a separator, a frame, a way of saying: these are valid doors, just not the front one.
+A Fire-dominant person whose Venus is square an Earth-dominant partner's Moon experiences that square differently than two Water-dominant people in the same configuration. The elements do not change the aspect's nature. They change its *felt texture*. GPT, given the element profile, can write to that texture. Without it, it writes to the geometry.
 
-**Confirming payment with "Subscription updated."** The user just paid money for something that matters to them. "Subscription updated" is a receipt, not a welcome. The product's language, at its best, says things like "The sky is wider now." That standard must hold at the most emotionally significant moment in the entire user journey.
-
-**Showing the upgrade modal to authenticated users with a plan as if they are not recognized.** A basic user who hits their twenty-reading limit should see a very different modal than a free user hitting their three-reading limit. The modal should know who is standing in front of it.
-
-**No differentiation in welcome copy between first-time and returning users.** "Welcome back" to someone on their first visit is a small error that communicates the app is not watching. Fix it before launch.
+The fix is two lines: call `analyzeElements` for both charts and prepend the profiles as a brief block before the natal positions. Sprint 0010 showed exactly where to add this in `buildTransitPrompt`. The same addition in `buildSynastryPrompt` completes the symmetry.
 
 ---
 
-## Summary of Proposals
+## What Feels Mechanical When It Should Feel Human
 
-**Proposal 1 — The Quota Moment: Soften the Gate**
-When the server returns 429, the message shown must acknowledge the user's engagement rather than mechanically blocking them. Replace "Daily reading limit reached — try again tomorrow" with a tone that closes the door gently: *"You have reached the sky for today."* Then invite, do not demand: *"More sky is available."* The UpgradeModal appears below this as a gentle presence, not an interruption.
+**The synastry aspects table is the coldest surface in the product.** Two people submit their charts, wait for the calculation, and receive a list that looks like a trade ledger. The product has done the most intimate computation available to it — the relationship between two specific people's planets — and displays the result with no more warmth than a spreadsheet.
 
-**Proposal 2 — The UpgradeModal: An Invitation, Not a Pricing Table**
-Three named tiers, each described in one sentence of the product's voice. No feature bullets in columns. No "Most Popular" badge. One primary CTA aimed at the next tier up from where the user is. A secondary, quieter option for the tier above that. If the user has journal history, acknowledge it specifically in the Advanced tier description.
+**The house overlay section is the most emotionally resonant data on the page, delivered as a column header.** "House 7" is a number. "The house of partnership — the place in their chart that represents who they seek to commit to" is a fact that means something to a person sitting with questions about a relationship.
 
-**Proposal 3 — OAuth Placement: A Considered Handoff**
-Below the email/password form, a thin divider with a centered ✦ and a line reading "or arrive another way" in small muted text. The Google and Facebook buttons below it, slightly smaller than the primary submit button, recognizably branded but visually subordinate. Not competing with the form's voice. Present and accessible, not celebrated.
+**The Solar Return page asks users to wait before they receive anything.** GPT loads. The skeleton pulses. The user knows their Sun's house — it is displayed in the `KeyPlacements` card — but they do not know what it *means* yet. The interpretation database can answer that question in the time it takes to render a component.
 
-**Proposal 4 — The Payment Transition: A Small Ceremony**
-Before the Stripe redirect: a two-second held-breath state showing *"Opening your account with the sky."* After Stripe completes and the user returns: no modal, no banner — just one soft line in the home screen's identity block, present only for the first visit post-payment: *"The sky is wider now. ✦"*
+**The Couple Transit page looks the way the individual transit page looked before sprint 0010.** The pattern was established. The component was built. The surface was not updated to use it. This is not a design decision. It is an unfinished task.
 
-**Proposal 5 — Tier Presence: Add, Don't Subtract**
-Free users experience no visual change. Basic users see a slightly warmer account badge. Advanced users see the cross-time journal patterns section appear in the journal without announcement — the feature's presence is its own welcome. No tier-based visual punishment.
+**The Today page shows glyphs that a user cannot read.** The keyword to the right of the glyph-pair is the only translation offered, and it is the same translation offered to every person with that transit planet and aspect nature. The natal planet's house is in the data. The personalized brief is in the function. The gap is only the wire between them.
 
-**Proposal 6 — First Visit: Permission Before Exploration**
-On a user's first session after entering birth data, show one sentence below the identity line: *"Your chart is ready. Everything you explore from here is yours."* Visible only once. In the ReadingsModal on the first session only, apply a subtle visual accent to the Birth Chart option. No tutorial. No checklist. Just orientation.
+---
 
-**Proposal 7 — The Nudge That Knows You**
-For unauthenticated users who have built history (journal entries, readings), the auth nudge should reflect what they specifically have: *"Six readings and three entries are saved here. ✦ Keep them."* This requires the nudge component to receive usage counts, which the app already has access to. The cost is small. The effect is recognition rather than marketing.
+## Proposals
+
+**Proposal 1 — Synastry Relational Briefs**
+
+Write a new `SYNASTRY_ASPECT_BRIEFS` table covering the 30–40 highest-frequency cross-chart pairs: Sun, Moon, Venus, Mars, Mercury in combination with each other across the five major aspect types. These entries use relational voice — "what one person's planet feels like when it contacts the other person's planet" — rather than natal self-description. Roughly two sentences per entry. Extend `SynastryAspectsSection` to use `AspectRow` with these briefs. For planet pairs not in the table, fall back to aspect-type-plus-nature language: "[P1's planet] forms a [nature] [aspect type] with [P2's planet] — this contact tends to [brief phrase from aspect nature]." The fallback ensures no row is ever silent. The primary entries ensure the most common pairs are genuinely relational.
+
+**Proposal 2 — House Overlay Interpretation Layer**
+
+In `HouseOverlaySection`, replace the bare "House 7" cell with the house name from `HOUSE_THEMES`, and add a one-to-two sentence brief below each row. The brief combines the planet's archetype with the house theme: "Your Venus falling in their 7th house activates their sense of who they want beside them — you are, to them, a potential partner in the fullest sense." The `PLANET_IN_HOUSE` table provides the planet-house interpretation; the key is adapting the voice from self-description to relational description. Two sentences per entry. No new data structures required beyond the brief generation logic.
+
+**Proposal 3 — Couple Transit AspectRow Integration**
+
+Replace the bare rows in `TransitAspectsToComposite` with the shared `AspectRow` component. The brief for composite transits uses relational framing: name the composite planet's house and state what it governs for the relationship as a unit. The `natalHouse` field is already embedded on `TransitAspect` objects. The house theme table provides the domain. The brief function template from `computeTransitAspectBrief` provides the sentence pattern. The composite framing is the only adaptation needed: "Saturn pressing on your relationship's 2nd house asks how you navigate what you build together."
+
+**Proposal 4 — Solar Return Static Brief Layer**
+
+In `SolarReturnPage`, above the GPT skeleton (or alongside it once loaded), render a static "This Year's Focus" block showing two brief cards: SR Sun house and SR Moon house, drawn from `PLANET_IN_HOUSE`. Label them "Primary Focus" and "Emotional Climate." Adapt the natal phrasing to year-ahead framing with a brief prefix: "This year, [PLANET_IN_HOUSE brief]." These cards appear immediately on page load, before GPT arrives. They give the user something accurate and readable while the GPT paragraph assembles itself. They do not duplicate the GPT reading — they precede it, as the first clear sentence before the full paragraph.
+
+**Proposal 5 — TodayPage Sky Highlights Expand/Collapse**
+
+Replace the static glyph-keyword rows in the "Sky Highlights" card with `AspectRow` instances. The `natalHouse` is already on the `TransitAspect` objects returned by `getTopActiveTransits`. The brief is generated by `computeTransitAspectBrief`. The expand/collapse behavior is built into `AspectRow`. The user taps a row to see "Saturn pressing on your 3rd-house Mercury — be deliberate rather than reactive in conversations this week." The Today page then completes the pattern that exists on the Transit Reading page and in the timeline: every aspect row is expandable, and every expansion reveals something specific to this person's chart.
+
+---
+
+## What the Product Could Be
+
+There is a version of the synastry page where a person reads through the aspect list and feels — row by row — that someone looked at these two charts together and understood what the geometry means between two human beings. Not for every person whose Venus trines a Moon. For these two people. This moment. This reading.
+
+There is a version of the house overlay section where "your Jupiter falling in their 9th house" is not a table cell but a small revelation: someone who expands their world, who makes them want to travel and think bigger. The data knows this. The product simply has not chosen to say it.
+
+There is a version of the Solar Return page where the user reads their SR Sun house and SR Moon house the moment the page loads — before GPT, before the skeleton pulses — because those two facts are the spine of the entire year and they can be stated in two sentences from data that loads instantly.
+
+There is a version of the couple transit page that behaves exactly like the individual transit page: expandable rows, relational briefs, the same care that was given to individual readings extended to the readings couples make together.
+
+There is a version of the Today page's Sky Highlights where tapping a glyph-pair reveals a sentence that names the house and the life area — where the shorthand `♄ □ ☿` becomes, on expansion, something a person can actually use on a Wednesday morning.
+
+None of these versions require new screens, new engines, or new GPT calls. They require that the product extend the care it already learned to show in sprint 0010 — across the surfaces that sprint 0010 did not reach. The pattern is established. The components are built. The data is assembled. What remains is the decision to let these surfaces speak.
+
+The hardest part of animation, the part I have returned to again and again, is making motion feel inhabited. A character who moves correctly is not the same as a character who moves *as if they mean it*. This product now moves correctly in most places. Sprint 0011 is about making it mean it.

@@ -1,221 +1,194 @@
 # Nassim Taleb — Voice Analysis
 
-## Sprint 9 Focus: Production Preparation (Stripe, OAuth, Tiers, Analytics)
+## Sprint 0011 Focus: Finishing the Sentences — Interpretation Layer Expansion
+
+---
+
+## Preamble
+
+Sprint 0010 fixed a structural fragility I documented: it embedded `natalHouse` into `TransitAspect`, created `getNatalPlanetContext`, wrote `computeTransitAspectBrief`. The plumbing is now real. That is good. But plumbing is not the same as water. Sprint 0011 proposes to open six new valves simultaneously. The question is whether the pressure in the pipes is what anyone thinks it is, and whether the connectors will hold when you apply load to all of them at once.
+
+I will tell you what is fragile, what the assumptions are that nobody has tested, and where the silent failures will live when this sprint ships.
 
 ---
 
 ## Fragility Audit
 
-I have read the code. Let me be direct: this system is being converted from a toy into a financial instrument without acknowledging that a financial instrument has a fundamentally different failure mode than a demo app. A demo app fails silently and the user tries again. A financial instrument fails and someone was charged money without receiving what they paid for. That asymmetry changes everything, and the sprint vision does not treat it seriously enough.
+### 1. The synastry relational briefs database — the sprint's largest new deliverable — has no oracle for correctness
 
-Here is the fragility report. I am presenting these in order of damage potential, not implementation order.
+Sprint 0011 proposes writing "roughly 30–40 entries for high-frequency [synastry] pairs" in a new table. The vision is explicit that the existing `ASPECT_INTERPRETATIONS` uses natal-voice framing and cannot be repurposed here. It is correct about that.
 
----
+Here is the fragility that follows from it: natal aspect interpretations are verifiable against a shared canon. "Sun conjunct Moon: your will and emotional nature operate as one" is a claim about which there is 80 years of astrological consensus literature, and any astrologer can evaluate it. A synastry brief — "P1 Venus trine P2 Moon: your warmth lands softly on them and they stop waiting to be convinced" — is a creative claim with no single authority. The implementer writes 30–40 of these. They will sound plausible. They will be produced by a developer working from intuition and prior art, not a trained astrologer.
 
-### 1. The most dangerous scenario: customer charged, tier never elevated
+The fragility is not that the entries will be obviously wrong. They will not be obviously wrong. The fragility is that they will be plausible in a way that is uncheckable by any reviewer, any user, and any quality bar the sprint defines. Plausibility is not accuracy. The sprint's own quality bar — "would only make sense for someone whose planet is in that house" — is a bar for transit briefs. It does not apply to synastry cross-chart briefs, which carry no house context at all. The synastry brief for Venus trine Moon will read the same whether P1's Venus is in the 2nd house and P2's Moon is in the 9th, or the reverse. The brief will not be chart-specific in the way the sprint's quality bar demands. It will be planet-pair-specific, which is closer to a magazine horoscope than to personalized astrology.
 
-The sprint vision plans a Stripe webhook handler (`POST /api/stripe/webhook`) that listens for `checkout.session.completed` and writes `subscription_tier` to the users table. This is the only path by which a successful payment becomes an elevated tier. There is no fallback.
-
-What happens when the webhook fails?
-
-Stripe retries webhooks with exponential backoff over 72 hours. During those 72 hours, the customer has a payment receipt from Stripe and a `free` tier in your database. They attempt a GPT call, receive a 429, see the upgrade modal — and they already paid. They email you or, more likely, they initiate a chargeback. The chargeback costs you $15–25 in processing fees regardless of outcome.
-
-The spike is narrow but the damage is real. Webhook delivery is not guaranteed. Network partitions, server restarts, and handler exceptions all cause webhook failures. The current `server/index.ts` has no crash recovery, no process manager. A single unhandled exception during the webhook handler will drop that delivery silently.
-
-The mitigation is not to make the webhook more reliable — it is to build idempotent recovery. Every successful Stripe Checkout session creates a `checkout.session` object with a `customer` ID and a `subscription` ID. At login and at `/api/auth/me`, the server should cross-check the user's `stripe_customer_id` against Stripe's API if the tier is `free` — because Stripe is the source of truth for payment, not your SQLite database. If Stripe says the customer has an active subscription and your DB says `free`, your DB is wrong. This reconciliation call is cheap (one HTTP request at login) and eliminates the entire class of webhook-loss failures.
-
-Nobody in the vision document mentions this reconciliation path. The vision treats the webhook as the sole source of truth. It is not.
+The sprint vision says "compact, relational, roughly 30–40 entries." What happens to aspect pairs outside those 30–40? The fallback is "aspect-type + planet-archetype phrasing adapted to relational context." But that fallback does not exist yet either. The `ASPECT_BRIEFS` in `transitEvents.ts` are transit-context briefs — they describe a transiting body activating a natal point. Using them in synastry context is the same category error the vision correctly condemns when it says not to use natal self-aspect text. The fallback needs its own relational adaptation. That is a second data-writing task hidden inside the primary one.
 
 ---
 
-### 2. The rate limiter lives in process memory. The server process restarts.
+### 2. The `HouseOverlaySection` brief — "one-to-two sentences using house theme and planet archetype" — produces combinatorial text that no one will read
 
-Read `server/middleware/gptRateLimit.ts` carefully. The two `Map` objects — `authenticated` and `unauthenticated` — are module-level variables. They are initialized when the process starts and reset to empty when the process restarts.
+The vision says: "A one-to-two sentence brief per entry, using the house theme and the planet's archetype, makes this section actually readable."
 
-A user consumes 3 free calls. The server restarts (deploy, crash, out-of-memory kill). The in-memory counter is gone. The user now has 3 free calls again. On a server that deploys twice per day, a free user effectively has 6–9 calls per day. On a server that crashes once per hour under load, the limit is meaningless.
+Read how many entries `houseOverlay.person1InPerson2Houses` produces. Every planet in Person 1's chart falls into one of Person 2's houses. That is 10–11 planets minimum. Person 2's planets in Person 1's houses: another 10–11. Total: 20–22 brief-per-row entries, all visible simultaneously in an expanded section.
 
-The sprint vision mentions adding `helmet` and `compression` to `server/index.ts` and nothing about rate limit persistence. The vision assumes the server runs continuously. Servers do not run continuously. They are killed by deployments, OOM conditions, and provider maintenance windows.
+The transit aspect rows expanded briefs work because the user taps one row at a time. The expansion is on-demand. The `HouseOverlaySection` as currently implemented in `SynastryPage.tsx` is a table — no expand/collapse per row. If you add a one-to-two sentence brief below each table row, you add 20–22 paragraphs to a section that currently renders 20–22 table rows. The section becomes a scroll wall.
 
-For the tier system to have any integrity, the rate limit counter must survive process restarts. The DB is already there. The `events` table that the analytics proposal adds is already going into SQLite. A `gpt_usage` table — `user_id, date, count` — with an upsert on each GPT call is the correct data model. The in-memory map becomes a write-through cache over this table. This is a 20-line change that eliminates an entire class of limit bypass.
+The vision does not mention this. It describes the feature as making the section "readable." But adding 22 undifferentiated interpretation sentences to a flat table does not produce readability — it produces a reading that takes 5 minutes to absorb and makes the important entries (Person 1 Venus in Person 2's 7th) invisible among the unimportant ones (Person 1 Saturn in Person 2's 11th).
 
-The unauthenticated (IP-based) counter has the same problem, compounded by the fact that after the sprint, the free unauthenticated tier drops from 5 to 3 calls. Three calls that reset on every deploy is not a limit. It is theater.
+The correct interaction model for house overlay briefs is either: (a) per-row expand/collapse, as used in `AspectRow`, or (b) highlight only the traditionally significant placements (Sun, Moon, Venus, Mars, rising ruler in the 1st, 4th, 5th, 7th, 8th) and skip or minimize the rest. Neither is what the vision describes.
 
----
-
-### 3. The JWT contains no tier. The tier lives only in the DB. But the JWT is trusted for 30 days.
-
-Look at `server/routes/auth.ts` line 22–26. `signToken` encodes only `userId` in the JWT. The tier is not in the token. This means every GPT request requires a DB read to determine the user's tier.
-
-This is actually the correct design — the tier is not baked into a long-lived token. But the sprint vision also says to expose the tier from `/api/auth/me` so the client can render plan state. The client stores this in `AuthContext`. The `AuthContext` is populated once at mount from a `getSession()` call (see `AuthContext.tsx` line 80–98). After that, the client-side tier value is never refreshed unless the user logs out and back in.
-
-Here is the race condition: a user pays via Stripe Checkout. The webhook fires and updates the DB to `basic`. The user is redirected back to the app. The `AuthContext` still shows `free` because it was populated at mount and never re-fetched. The client renders the free-tier upgrade nudge to a user who just paid. The GPT calls succeed (because the server reads the tier from DB per-request), but the client UI still shows "upgrade to basic." This produces a cognitively dissonant experience: GPT calls work, but the UI says you're on the free plan.
-
-The fix is simple: after the Stripe Checkout redirect completes, the client must re-fetch `/api/auth/me` and update `AuthContext`. The Stripe Checkout success URL should include a `?payment=success` query parameter. The client should detect this and trigger a session refresh. The vision does not specify this flow.
-
-The deeper fragility is longer-lived: if the tier changes server-side (webhook, admin action, subscription lapse) while the user has an active session, the client UI is stale until the next full page reload. For a billing-critical feature, the client tier state must be treated as a cache with an explicit invalidation trigger, not a one-time load.
+If the implementer renders all 22 briefs as flat text, the section becomes an information dump. If they add per-row expand/collapse, they are building more UI than the vision stated. There is no clean path to the stated outcome within the stated scope.
 
 ---
 
-### 4. The race condition at the payment/limit boundary
+### 3. The `elementCompat` function in `synastry.ts` has a sorting bug that silently returns the wrong dominant element for Person 1
 
-Scenario: free user hits their 3rd call. The middleware checks the in-memory counter. Count is 2, increments to 3, allows the call. The response arrives. The user clicks the upgrade button in the modal. While the Stripe Checkout tab is open, they click "new tab," open the app, and fire a 4th GPT call. The counter is now at 3. The middleware blocks this call with 429. Correct.
-
-Now the faster version of this scenario: the user hits call 3 and the upgrade modal opens simultaneously (because the response was slow and the user double-clicked). They submit two GPT calls within the same middleware check window. The `checkLimit` function reads `entry.count` for both calls before either write completes — because Node.js is single-threaded but these are synchronous operations running in the same tick. Actually, better-sqlite3 is synchronous, so the DB read is blocking. But the in-memory counter is not DB-backed at all. Two near-simultaneous requests hitting the same in-memory map: the first reads count=2, the second reads count=2 (before the first write completes), both increment to 3, both pass. The user gets 2 calls when they should have gotten 1.
-
-This is a classic check-then-act race on shared mutable state. The current implementation is not atomic. For the paid tier where a user has 100 calls per day, the blast radius of this race is small. For the free tier of 3, every extra call is a free API call to OpenAI that was not paid for.
-
-The fix is a DB-backed upsert with a `WHERE count < limit` constraint, or an in-memory lock. The in-memory map with a simple increment is not safe under concurrent requests.
-
----
-
-### 5. OAuth introduces a new trust surface you do not control
-
-The vision plans Google and Facebook OAuth via Passport.js or direct OAuth2 exchange. This is the right direction for reducing sign-up friction. The fragility is in what happens when the external provider changes something.
-
-Google has changed their OAuth token format twice in the past four years. Facebook has deprecated API versions with 3–6 months notice. Both providers have had outages that lasted hours. When Google is down, no one can log in via Google OAuth. If Google OAuth is the only sign-in path a user has (they signed up with Google, never set a password), they cannot access their account until Google recovers.
-
-The vision does not address what happens to a user who signed up via Google OAuth when Google is down. The `passport-google-oauth20` package pins to a specific OAuth2 flow version. If Google deprecates that version, sign-in breaks silently on the next request — no error in the dashboard, just a failing OAuth redirect that users see as "can't log in."
-
-Specific fragility in the planned implementation:
-
-The vision says "on first-time sign-in, create user row with `subscription_tier = 'free'`." The `users` table currently has `password_hash TEXT NOT NULL`. An OAuth user has no password. The migration needs to make `password_hash` nullable. If this migration is not written correctly as an additive change (not a destructive schema change), existing email/password users lose their `password_hash` column. The vision says "additive migration" for the tier column but says nothing about the `password_hash` nullability change that OAuth requires. This is a schema change that touches every existing user row.
-
----
-
-### 6. The analytics `events` table is an unbounded write target
-
-The vision says: "write to an `events` table in SQLite; no external service for v1 — the owner reads raw SQLite to understand the funnel." This is reasonable for an early product. The fragility is that `events` is an append-only table with no archival policy.
-
-The listed events include `page_view`, `gpt_request_made`, `reading_viewed`. On a moderately successful launch, a few hundred users each generating 10–20 events per session produces tens of thousands of rows per day. SQLite handles this fine. After six months, you have several million rows. SQLite handles this fine too — until you try to query across them without the right indexes.
-
-The specific fragility: the session continuity requirement says `sessionId` is a UUID stored in a first-party cookie. If the cookie is set per-visit and persists across reloads, a single user with 30 days of activity will have thousands of events sharing the same `session_id`. A funnel query like "how many users who hit `gpt_limit_hit` converted within 24 hours" requires a JOIN between `events` rows with different `event` values, filtered by `session_id` and time window. Without an index on `(session_id, event, created_at)`, this query will full-scan the table. At 1M rows, that is a second or two. At 10M rows, it hangs the SQLite connection and blocks all other DB operations — because SQLite uses file-level locking for writes.
-
-The vision says nothing about indexes on the `events` table. Adding them later requires a table rebuild in SQLite (no concurrent ALTER TABLE). This is a schema migration on a live table with potentially millions of rows.
-
-The mitigation is not complex: define the indexes at table creation time. But you must decide on the query shapes before you create the table, or you will regret it.
-
-There is also no TTL or purge mechanism. The `events` table will grow forever. Build in a purge job from day one — even something as simple as "delete events older than 90 days" on a daily cron. Not because 90-day-old events are worthless, but because the discipline of having a purge job prevents the accidental indefinite growth that causes production incidents.
-
----
-
-### 7. The `LOCALHOST` bypass in `gptRateLimit.ts` is an attack surface in misconfigured deployments
-
-Line 53–59 of `server/middleware/gptRateLimit.ts`:
+Look at this code in `src/engine/synastry.ts` at line 261:
 
 ```typescript
-const LOCALHOST = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
-
-export function gptRateLimit(req: Request, res: Response, next: NextFunction): void {
-  if (LOCALHOST.has(req.ip ?? '')) {
-    next()
-    return
-  }
+const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count2[b] - count1[a])[0]
 ```
 
-This bypass exists for local development. In production, `server/index.ts` sets `app.set('trust proxy', 1)`. When trust proxy is enabled, `req.ip` is taken from the `X-Forwarded-For` header. If the reverse proxy (nginx, Cloudflare, Fly.io load balancer) is misconfigured and passes client-provided `X-Forwarded-For` values without stripping them, a client can spoof `X-Forwarded-For: 127.0.0.1` and bypass the rate limiter entirely.
+The sort comparator is `count2[b] - count1[a]`. This is comparing element `b` from `count2` against element `a` from `count1`. This is not a sort by `count1` descending. The correct sort for Person 1's dominant element is `count1[b] - count1[a]`. The comparator as written sorts Person 1's elements by a cross-table comparison that has no sensible meaning. The dominant element returned for Person 1 is effectively random — it is whatever element happens to produce the highest value when you subtract Person 1's count of element `a` from Person 2's count of element `b`.
 
-This is not a theoretical attack. It is the standard first thing a rate-limit bypass script tries. The `trust proxy: 1` setting tells Express to trust exactly one proxy hop. If deployed behind two proxy layers (e.g., Cloudflare in front of Fly.io), this setting is wrong — it should be `trust proxy: 2`. With the wrong trust proxy setting, `req.ip` may still resolve to a spoofed value.
+This bug exists today. It is not a sprint-0011 introduction. But sprint 0011 proposes to add `analyzeElements` output to `buildSynastryPrompt` — which is the correct `analyzeElements` from `src/data/interpretations/index.ts`, not the buggy `elementCompat` in `synastry.ts`. The `buildSynastryPrompt` addition is safe. But the `CompatibilitySection` on `SynastryPage.tsx` displays `elementCompatibility` from `calculateCompatibility`, which calls `elementCompat`, which uses the broken sort. The "Overall Resonance" score bar and the "Elements" text in the compatibility overview are currently wrong for many chart pairs.
 
-The correct fix is to remove the localhost bypass entirely for production, or to gate it behind `process.env.NODE_ENV !== 'production'`. Development bypass logic has no business being active in production.
+The sprint vision does not mention this bug. It will not be fixed in sprint 0011. The sprint will add element analysis to the GPT prompt using correct data (`analyzeElements`), while the UI displays element compatibility using incorrect data (`elementCompat`). The GPT paragraph will describe Fire-Water tension; the compatibility bar will say "Harmonious — Earth and Air elements naturally support each other." Nobody will catch this because both texts are plausible and users do not cross-check compatibility prose against element tables.
 
----
-
-### 8. OpenAI downtime with paid subscribers is an SLA liability
-
-The vision does not address what happens when OpenAI is down. It will be down. OpenAI has had multiple multi-hour outages. During an outage:
-
-- The `callOpenAI` function throws a `GptServiceError` with status 503 or 504.
-- The retry logic in `retryWithBackoff` attempts 3 calls with exponential backoff.
-- After 3 failures, the error propagates to `gpt.ts` route handler, which returns 503.
-- The client shows "Couldn't generate interpretation."
-- The user's daily counter was incremented by the middleware *before* the GPT call was attempted.
-
-That last point is the fragility. The rate limit is decremented regardless of whether OpenAI succeeds. A paid user on the basic tier (20 calls/day) attempts a call during an OpenAI outage, gets an error, and loses one of their 20 daily calls. They did not receive what they paid for. If the outage lasts 3 hours and they try once per hour, they lose 3 calls before giving up.
-
-The fix is not to refund calls — that is complex. The fix is to not decrement the counter when the downstream call fails. The middleware currently decrements on the way in, before the result is known. Either move the decrement to a response hook that only fires on success, or use a two-phase approach: reserve the call slot on request, release it if OpenAI returns an error.
-
-This is harder to implement than it sounds because the middleware runs before the async GPT call. The cleanest path is to pass a `releaseSlot` callback into `res.locals` from the middleware, and call it in the route handler on non-5xx errors only.
+The proposal is to fix the sort while touching `synastry.ts` for the prompt additions. Two lines.
 
 ---
 
-## What the Sprint Vision Is Ignoring
+### 4. The `AspectRow` component's `maxHeight: '6rem'` brief expansion will clip solar return and synastry briefs that are longer than transit briefs
 
-The vision is a flow diagram. "User pays → webhook fires → tier elevates → user has more calls." Every step in that diagram assumes a reliable world. The real system operates in an unreliable world.
+`AspectRow` was designed for transit aspect briefs, which are constrained to 200 characters by the `truncateToLimit` call in `computeTransitAspectBrief`. The expanded brief panel uses `maxHeight: '6rem'`. At the default `text-xs` line height of approximately 16px, 6rem is about 6 lines — enough for 200 characters at normal line width.
 
-The vision does not have an answer to: what does a user do when their tier does not match their payment? There is no support email listed, no admin panel, no manual override path. When the first webhook failure happens — and it will happen — there is no recovery mechanism for the customer and no operational tooling for the owner.
+Sprint 0011 proposes using `AspectRow` for composite transit aspects in `SynastryTransitPage.tsx`. The brief for a composite transit should name the relationship area being activated — "Saturn pressing into the composite 7th house (partnership and commitment) suggests the relationship itself is being asked to grow up." That sentence is 118 characters — fine. But once you add a second sentence naming the aspect nature, you approach 220–250 characters, which overflows the 200-character truncation.
 
-The vision treats the `events` analytics table as a write-only sink. It does not ask: who reads it, how, and what queries will they run? The answer determines the schema. A schema designed for writes that do not anticipate specific reads is a schema that will be rebuilt six months later under production load.
+More importantly: if someone writes the synastry relational briefs without the truncation constraint (the sprint vision does not mention applying the transit truncation function to synastry briefs), a 350-character brief will be clipped by `maxHeight: 6rem` with an invisible overflow. The text is not truncated — it is hidden. The user taps the row, the brief expands, but the last sentence is cut off mid-word because the div stops expanding. There is no scroll, no ellipsis, no indicator that more text exists.
 
-The vision adds OAuth as a sign-up option without asking what a user does when their OAuth provider is unreachable. The answer should be: they have an email/password fallback. But the schema has `password_hash TEXT NOT NULL`, which means OAuth users cannot be created without a password hash. Either the migration makes `password_hash` nullable (and existing users are unaffected) or OAuth users are created with a random unusable hash. The vision does not specify which. The developer will make a choice. It may be the wrong one.
+The `maxHeight` of `6rem` is a design assumption that works for 200-character briefs. If sprint 0011 introduces briefs from a new data source written to a different length convention, some briefs will be silently clipped in every expand.
 
 ---
 
-## Proposals I Am Making
+### 5. The Solar Return page renders `srChart.planets` without guarding against `unknownTime` — the SR chart always has a computed time, but the natal comparison column assumes the natal chart does too
 
-### Proposal 1: Stripe reconciliation at login — eliminate the webhook-is-single-truth dependency
-
-At `/api/auth/me` and at login, if the user has a `stripe_customer_id` and their tier is `free`, check Stripe's subscriptions API for that customer. If an active subscription exists, elevate the tier in DB and return the corrected tier. This costs one Stripe API call (cacheable for the session) and eliminates the entire class of "paid but tier not elevated" failures. Mark it as non-blocking: if the Stripe check fails (network error), proceed with the DB value. Never block authentication on a Stripe call.
-
-**Fragility addressed:** Webhook delivery failure leaves paid users on free tier. Reconciliation at login is the recovery path.
-
-### Proposal 2: Persist the rate limit counter to SQLite — the in-memory map is not durable
-
-Add `gpt_usage(user_id INTEGER, date TEXT, count INTEGER, PRIMARY KEY (user_id, date))`. On each GPT request: `INSERT OR IGNORE ... then UPDATE ... SET count = count + 1 WHERE count < limit`. The `WHERE count < limit` in the UPDATE is the atomicity guarantee — it is a single SQL statement, not a check-then-act. If the UPDATE affects 0 rows, the limit was exceeded. The in-memory map becomes an L1 cache over this table for hot paths.
-
-**Fragility addressed:** Process restart resets all in-memory counters. Paid users' limits reset on every deploy. Free users get unlimited calls across deployments.
-
-### Proposal 3: Re-fetch `/api/auth/me` after Stripe redirect returns
-
-The Stripe Checkout success URL should be `/?payment=success`. In `AuthContext`, detect the `payment=success` query parameter on mount and trigger a forced session re-fetch. Update the `tier` field in context. This is a 10-line change that prevents the dissonant experience of a paying user seeing a free-tier UI.
-
-**Fragility addressed:** Client-side tier state is stale after successful payment. The user paid, the GPT calls work, but the UI says they're on free.
-
-### Proposal 4: Gate the localhost bypass behind `NODE_ENV !== 'production'`
-
-In `gptRateLimit.ts`, wrap the localhost bypass in an environment check:
+In `SolarReturnPage.tsx`, the `SRPlanetTable` component looks up natal planets by name to display the "Natal Sign" column:
 
 ```typescript
-if (process.env.NODE_ENV !== 'production' && LOCALHOST.has(req.ip ?? '')) {
+const np = srData.natalChart.planets.find(p => p.name === sp.name)
 ```
 
-This is a one-line change. The cost is zero. The risk of not doing it is a spoofable rate limit in any misconfigured production environment.
+The SR chart is always calculated with a precise UTC time (`calculateSolarReturn` uses `findSolarReturn`), so `srChart.planets` always have valid house data. But `srData.natalChart` is the user's natal chart — and if `unknownTime` is true, the natal chart's house fields are all `0`.
 
-**Fragility addressed:** `X-Forwarded-For` spoofing bypasses the rate limiter in production.
+The `SRPlanetTable` currently shows only "Natal Sign" — so the unknownTime case is handled by accident. But sprint 0011 proposes adding SR Sun/Moon house interpretation using `PLANET_IN_HOUSE`. The proposed call would be `PLANET_IN_HOUSE[`Sun_H${srSun.house}`]` where `srSun.house` comes from the SR chart (which has valid houses). This is safe.
 
-### Proposal 5: Do not decrement the rate limit counter on OpenAI 5xx errors
+The fragility is in the proposed static interpretation layer: "SR Sun house and SR Moon house are the most important static facts on the page." This is correct. But it assumes the implementer will use `srChart.planets` (which always has houses) and not accidentally reach for `natalChart.planets` (which may have house `0`). The two chart references live side-by-side in `srData`. An implementer who writes `natalChart.planets.find(p => p.name === 'Sun')?.house` to show "natal Sun in its house for context" will get house `0` or `undefined` for users without birth time, and `PLANET_IN_HOUSE['Sun_H0']` or `PLANET_IN_HOUSE['Sun_Hundefined']` will silently return `undefined`. The brief disappears without explanation.
 
-Pass a `releaseSlot` function via `res.locals` from the middleware. The function sets `entry.count--` on the in-memory map (and decrements the DB row in the durable implementation). In the GPT route handler, call `res.locals.releaseSlot?.()` when the error is a 503 from OpenAI. Do not release the slot on 4xx errors (malformed requests) — those consumed a real call attempt.
+This is the same `unknownTime` ghost that haunted sprint 0010. It does not die; it migrates to the next set of lookups.
 
-**Fragility addressed:** Paid users lose daily quota during OpenAI outages. The call was not served; the limit should not be consumed.
+---
 
-### Proposal 6: Create the `events` table indexes at definition time, not later
+### 6. The `TodayPage` top-transits block uses `getTopActiveTransits(chartData, 3, 8)` — the orb limit is 8, but `AspectRow` receives the full `applying` flag from an aspect that may be barely within orb
 
-When writing the `CREATE TABLE events` migration in `server/db.ts`, add these indexes in the same migration block:
+`getTopActiveTransits` in `transits.ts` returns the 3 tightest aspects within 8 degrees. Sprint 0011 wants to render these using `AspectRow`, which shows an "applying/separating" badge. This badge is computed from the `applying` field on the `TransitAspect`.
 
-```sql
-CREATE INDEX IF NOT EXISTS idx_events_session_event ON events(session_id, event);
-CREATE INDEX IF NOT EXISTS idx_events_user_event ON events(user_id, event, created_at);
-CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
-```
+The `applying` detection logic was designed for reading-level aspects (1–3 degrees orb). At 8 degrees, "applying" means the transit planet is moving toward the natal planet but has a week or more before it perfects. An "applying" badge on a Saturn-Moon square at 7.8 degrees is technically correct — Saturn is moving toward the user's Moon — but experientially misleading. The user will interpret "applying" as "happening now." At 7.8 degrees from exact, a slow planet like Saturn may be "applying" for 3–4 months. The badge creates false urgency.
 
-Add a purge mechanism from day one: a scheduled function (daily cron via `setInterval` on server startup, or a manual admin endpoint) that deletes events older than 90 days.
+The vision's quality bar says briefs should tell the user "what the current activation means for it." An aspect at 8 degrees orb is not a current activation in any meaningful astrological sense. `getTopActiveTransits` uses orb 8 to ensure the TodayPage has something to show even on quiet days. But the sprint's proposed expand-and-brief treatment was designed for transit reading aspects at 1–4 degree orbs. Applying it without orb context to 8-degree aspects will produce "applying" badges and two-sentence briefs on slow-moving transits that are weeks or months from mattering.
 
-**Fragility addressed:** Unbounded table growth leads to full-scan queries that block SQLite's file lock. Indexes defined post-hoc on a multi-million-row table require a full table rebuild.
-
-### Proposal 7: Make `password_hash` nullable in the OAuth migration — explicitly, not implicitly
-
-The OAuth migration must include `ALTER TABLE users RENAME COLUMN password_hash TO password_hash_old` and re-add it as `TEXT` (nullable) plus a column rename back. Or, the safer path: add `oauth_provider TEXT` and `oauth_subject TEXT` columns; add a `CHECK` constraint that either `password_hash IS NOT NULL OR (oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL)`. This makes the schema self-documenting and prevents the invalid state of a user with neither a password nor an OAuth identity.
-
-**Fragility addressed:** OAuth requires `password_hash` to be nullable but the column is currently `NOT NULL`. A naive migration that adds OAuth columns without addressing `password_hash` will either fail on OAuth user creation or create users with a garbage password hash.
+The fix is simple: either reduce `getTopActiveTransits`'s orb to 4–5 degrees when used with `AspectRow`, or display the orb prominently enough that the user can calibrate urgency themselves. The current rendering in `TodayPage` shows the orb on the same line — but the brief expansion, once added, will draw attention away from the orb number. The hierarchy inverts.
 
 ---
 
 ## What Everyone Is Ignoring
 
-The team is focused on the happy path. User arrives, pays, gets more calls, is happy. That is not the path that causes production incidents. The path that causes incidents is: user arrives, pays, Stripe webhook fails, user emails in rage, there is no admin panel to manually fix the tier, the owner must SSH into the server and run a SQLite UPDATE command.
+### The compatibility score is a meaningless number that gains credibility as the sprint adds more interpretation around it
 
-This scenario will happen. Webhooks fail. The question is whether the system was built with recovery mechanisms or whether the owner will be hand-editing a database at 11pm.
+The "Overall Resonance" score in `CompatibilitySection` is computed as:
 
-The recovery mechanisms are not complex. A one-page admin endpoint (`/admin/users?secret=...`) that shows user emails, their tier, their Stripe customer ID, and a button to manually sync tier from Stripe would cost 2 hours to build and would eliminate the entire class of manual interventions. The vision does not mention it. Nobody is thinking about what happens after the payment system breaks — only about building the payment system.
+```typescript
+const overall = normalize(
+  harmoniousCount * 3 + neutralCount * 2 + challengingCount * 1,
+  totalAspects * 3,
+)
+```
 
-Build the system as if every external dependency will fail at the worst possible time. Because it will.
+This scores purely by aspect count ratios. Two charts with 20 harmonious trines between outer planets (Uranus trine Neptune, Jupiter trine Pluto) will score higher than two charts with 5 tight inner-planet contacts including a challenging Venus-Mars square and a Sun-Moon conjunction. The score ignores orb weighting for the overall number, ignores whether the aspects involve personal or outer planets, and ignores house context entirely.
+
+The score is not astrologically meaningful. Every working astrologer knows that 3 tight inner-planet aspects tell you more about a relationship than 15 loose outer-planet trines. The sprint 0011 work does not touch the scoring function. But it adds relational briefs, house overlay interpretations, and element profiles in GPT — all of which make the surrounding reading richer, more authoritative, and more detailed. A user who reads a rich, specific two-paragraph AI interpretation, plus 22 house overlay entries with briefs, plus 40 synastry aspect briefs — and then sees "Overall Resonance: 82" — will anchor on that number as if it were certified by the same analysis engine that produced the text. The number is not. The number is a simplistic count ratio produced by broken element analysis code.
+
+Sprint 0011 makes the number more dangerous by making the page more credible overall. The number should be removed or clearly labeled as "a rough indicator, not a score." This costs nothing to implement.
+
+### The `SynastryTransitPage` composite transit briefs assume the transit is hitting the *composite* chart — but the engine calculates transit aspects to the composite planets using the same natal aspect machinery as individual chart transits
+
+When `buildCoupleTransitPrompt` sends "Transit Saturn square Composite Moon," it means Saturn is transiting to the composite midpoint Moon position. The brief generated by `computeTransitAspectBrief` will name a house based on the composite Moon's house. But the composite chart's houses are calculated from midpoint angles (lines 211–215 in `synastry.ts`). The midpoint Ascendant is the mean of two people's Ascendants. This is numerically coherent but astrologically contested — many practitioners consider composite houses meaningful only when interpreted as representing the relationship dynamic, not as literal life areas.
+
+The `computeTransitAspectBrief` function will produce: "Saturn pressing on your House of Communication" — as if there is a "you" whose communication house is being pressed. But the composite chart has no "you." The composite Moon is not in anyone's 3rd house. It is in the relationship's 3rd house, which is a fundamentally different interpretive register.
+
+This is not a bug. It is an ontological assumption baked into the brief generation function. The function was written for individual chart transits. Reusing it for composite transits produces grammatically correct but ontologically confused output. "Your House of Communication" applied to a composite planet implies an individual who has that house. Nobody does. The composite relationship has that house.
+
+The brief for composite transit aspects needs a different subject: "the relationship's area of communication" or "your shared 3rd house." This distinction matters when the interpretation surfaces alongside a rich GPT paragraph that uses the correct relational framing. The GPT text will say "this Saturn transit is testing the communication patterns of the relationship." The static brief will say "Saturn pressing on your House of Communication." The tonal register conflict is small enough to be ignored and large enough to erode trust in the static layer.
+
+### The synastry relational brief table will create a hidden dependency between `SynastryPage` and `SynastryTransitPage` through shared data — the "composite transit" briefs need different framing than the "synastry aspect" briefs, but they may accidentally share a lookup
+
+The sprint adds briefs to two separate surfaces: synastry cross-chart aspects in `SynastryPage.tsx`, and composite transit aspects in `SynastryTransitPage.tsx`. The vision describes these as using different logic — synastry briefs use the new relational table, composite transit briefs use `computeTransitAspectBrief` adapted for the composite chart.
+
+But the composite transit brief lookup key is `transitPlanet + aspectType + natalPlanet` (where natalPlanet is the composite planet). If the implementer writes the synastry relational brief table with similar keys — "Venus_trine_Moon" for synastry — and then decides to check for synastry-flavored text in the composite transit path as well, the two contexts will share a data source written for neither.
+
+More likely: the implementer writes two separate lookups that both happen to key off "planet pair + aspect type," and at some future date someone merges them "for cleanliness." At that point, a relational brief written for synastry cross-chart context will appear in the composite transit context and vice versa. The merge will look reasonable. It will produce wrong output.
+
+The correct architecture is a clear semantic label on the data: `SYNASTRY_ASPECT_BRIEFS` (cross-chart, relational, second person directed at Person 1 about Person 2) vs. `COMPOSITE_TRANSIT_BRIEFS` (relationship-as-entity, transit activating the relationship dynamic). Separate tables, separate keys, not interchangeable.
+
+---
+
+## Proposals
+
+### Proposal 1: Fix the `elementCompat` sort bug before shipping the synastry element profile to GPT
+
+The comparator at `synastry.ts:261` is `count2[b] - count1[a]`. This should be `count1[b] - count1[a]`. One character fix. Without it, `buildSynastryPrompt`'s new element profile section will show correct data (from `analyzeElements`) while `CompatibilitySection`'s element compatibility string shows potentially wrong data (from `elementCompat`). The inconsistency will surface when a user reads a GPT paragraph saying "Person 1 is primarily a Fire chart" while the compatibility UI says "Harmonious — Earth and Air." Fix the comparator while the file is open for prompt additions.
+
+**Fragility addressed:** Silent data inconsistency between the compatibility UI label and the GPT element analysis, caused by a sorting bug that has existed since `synastry.ts` was written.
+
+### Proposal 2: Constrain the house overlay brief to high-signal planet-house pairs only — do not render all 22 entries
+
+Write the `HouseOverlaySection` brief logic to only show interpretation text for traditionally significant synastry placements: Sun, Moon, Venus, Mars in the 1st, 4th, 5th, 7th, 8th, and 12th houses of the partner's chart. These are the roughly 6–8 entries that astrologers actually discuss in synastry readings. Skip or minimize the rest (Saturn in partner's 11th gets no brief — it does not need one to be readable).
+
+This reduces the content from 22 undifferentiated entries to 6–8 highlighted ones, making the section navigable without adding expand/collapse UI that the vision explicitly rules out as redesign.
+
+**Fragility addressed:** 22 simultaneous interpretation paragraphs in a flat table produces an information wall that inverts the sprint's stated goal of making the section "readable." High-signal filtering makes the important facts findable.
+
+### Proposal 3: Add a visible orb threshold label to `TodayPage` top transits before applying `AspectRow` with briefs
+
+When `getTopActiveTransits` returns an aspect at 6–8 degrees orb, the `AspectRow` "applying" badge creates false urgency. Add orb-band language to the brief: if `orb > 4`, the brief should open with "building toward" rather than describing an active influence. Alternatively, cap `getTopActiveTransits`'s orb to 4 when used in the TodayPage context. The "Sky Highlights" framing implies now-active influences; 7-degree orbs are not now-active influences.
+
+**Fragility addressed:** "Applying" badge on a 7.8-degree Saturn transit tells the user something is happening today when it is happening over the next three months. The brief expansion will make this misleading framing more visible, not less.
+
+### Proposal 4: Add explicit composite-subject framing to the `computeTransitAspectBrief` call for composite transits
+
+When adapting `AspectRow` for `SynastryTransitPage.tsx`, pass a `subject` parameter or use a distinct brief generator for composite context. The brief should read "this relationship's House of Communication" rather than "your House of Communication." The change is two words in the template string inside `computeTransitAspectBrief` — or an optional `subject` argument that defaults to "your" for individual transits and accepts "the relationship's" for composite transits.
+
+**Fragility addressed:** Ontological subject mismatch between GPT framing (relational) and static brief framing (individual) erodes user trust in the static layer without anyone understanding why.
+
+### Proposal 5: Remove the "Overall Resonance" number or add an honest caveat — do not let it gain credibility from the richer surrounding content
+
+Sprint 0011 will make the synastry page significantly more interpretively rich. The `CompatibilitySection`'s percentage scores will look more authoritative in context. These scores are computed from aspect count ratios without planet weighting, from a broken element sort, and without any consideration of house context. Adding a single line under the score — "This index counts aspect types only. Tighter aspects and inner planet contacts carry more weight in the reading above." — tells the truth without removing the visual anchor users expect.
+
+**Fragility addressed:** A numerically-expressed score displayed alongside rich, specific interpretation text is treated by users as an authoritative summary. When the score is based on a count ratio and partially incorrect element analysis, displaying it without caveat is a credibility liability that grows as the surrounding content improves.
+
+---
+
+## What This Sprint Will Actually Look Like When It Ships
+
+The sprint ships. The synastry rows have expand/collapse briefs. The house overlay section has interpretation text for some or all entries. The Solar Return page has a static SR Sun/Moon paragraph before the GPT block. The TodayPage top transits expand on tap.
+
+What nobody will notice: the compatibility score is still partially wrong due to the broken sort comparator, and nobody will cross-check the "Harmonious — Earth and Air" label against the GPT analysis that correctly identifies one person as a Fire-dominant chart. The two surfaces describe the same charts differently. Users will assume the UI and the GPT agree. They do not.
+
+What users will notice that nobody expected: the house overlay section with 22 brief entries is overwhelming. The user who would have found "Your Venus falls in their 7th house" by reading a short table now has to read through 21 other entries with their own two-sentence interpretations to find the one that matters. The section became longer and denser at the same time it became richer. Length and richness are not the same thing.
+
+What will be caught in QA and fixed: the `maxHeight: 6rem` clipping on longer briefs, once someone writes a 300-character synastry brief and tests the expand behavior.
+
+What will not be caught in QA: the "applying" badge on 7-degree TodayPage transits creating false urgency. QA does not test semantic correctness of astrological framing.
+
+The fragility of this sprint is not in the implementation. The fragility is in the interpretation design — specifically, the assumption that more text is the same as more signal, and that reusing existing patterns in new contexts preserves their meaning. The `AspectRow` pattern is well-built. Using it for synastry cross-chart aspects, composite transits, and TodayPage highlights in the same sprint applies three different semantic contexts to an interface designed for one. Two of those three will work well. One will produce output that sounds right and means something slightly different than intended. I am not certain which one.
