@@ -128,3 +128,32 @@ Both `chartEngine.ts` and `aspects.ts` use `PlanetName | 'NorthNode'` as a compo
 
 **4. Grand Cross detection correctness in the port.**
 The Grand Cross detection block in `aspects.ts` (lines 147–167) has a known structural issue: the `hasAllSquares` guard reads `squares[0]!` before checking if `squares` is non-empty, and the OR condition on line 155 effectively short-circuits if any single square happens to match the first pair. The logic was written to require 4 adjacent squares but the implementation only enforces it weakly. This is a pre-existing frontend bug. The port copies it faithfully — the spec says behavioral parity, not correctness improvements. Noting this so the implementing engineer does not "fix" the detection logic during porting and silently diverge from the frontend's behavior.
+
+---
+
+## Outcome Notes
+
+**Status:** Done — 2026-05-14
+
+**Files created:**
+- `server/engine/aspectEngine.ts` — full port of `src/engine/aspects.ts` for server use. Exports `AspectType`, `AspectDefinition`, `Aspect`, `AspectPattern`, `AspectPatternType`, `ASPECT_DEFINITIONS` (natal orbs), `calculateAspects`, `detectPatterns`. Inlines `normalizeAngle` (two lines) per spec; no import from `chartEngine.ts`. Defines `PlanetName` locally. All four pattern detectors ported with behavioral parity including the known Grand Cross weak-enforcement bug.
+
+**Files modified:**
+- `server/services/gpt.ts` — added import of `calculateAspects` and `Aspect` from `aspectEngine.js`. Extended `buildNatalContextFromChart` with optional `aspects?: Aspect[]` parameter that appends `## Natal Aspects (tightest orb first)` section (top 7 by orb). In `handleDreamInterpretation` chart fallback block: after `calculateChart`, calls `calculateAspects(computed.planets)` and passes result to `buildNatalContextFromChart`. Zero other call sites changed.
+
+**Build:** `tsc -b && vite build` — clean, no errors, no new warnings.
+
+**Spec checklist:**
+- [x] `AspectType` exported
+- [x] `AspectDefinition` exported
+- [x] `Aspect` exported
+- [x] `AspectPattern` exported
+- [x] `ASPECT_DEFINITIONS` exported with natal orbs (8°/6°/8°/8°/8°/2°/3°)
+- [x] `calculateAspects(planets)` exported — pairs all planets, one aspect per pair (tightest), sorted ascending orb
+- [x] `detectPatterns(aspects)` exported — Grand Trine, T-Square, Grand Cross, Yod
+- [x] `normalizeAngle` inlined, not imported from `chartEngine.ts`
+- [x] `PlanetName` defined locally, not imported from frontend `types.ts`
+- [x] `ASPECT_DEFS` (transit orbs) in `chartEngine.ts` left untouched
+- [x] `buildNatalContextFromChart` extended with optional `aspects?` parameter — opt-in, backward compatible
+- [x] `handleDreamInterpretation` computes aspects from server-computed chart and passes them through
+- [x] No other handlers modified
