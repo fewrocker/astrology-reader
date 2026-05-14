@@ -94,9 +94,12 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
   return data.result
 }
 
-export async function getGptInterpretation(systemPrompt: string): Promise<string> {
+export async function getGptInterpretation(
+  period: string,
+  targetMonth?: string,
+): Promise<string> {
   try {
-    const result = await callProxy('transit-interpretation', { systemPrompt })
+    const result = await callProxy('transit-interpretation', { transitPeriod: period, targetMonth })
     return (result as string) || 'Unable to generate interpretation.'
   } catch (err) {
     if (err instanceof RateLimitError) throw err
