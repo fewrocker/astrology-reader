@@ -1,5 +1,16 @@
 # Done Proposals
 
+## Sprint 0013 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-analytics-jwt-key-mismatch](issue-analytics-jwt-key-mismatch.md) | Issue Fix | merged sprint-0013 |
+| [issue-index-html-missing-meta](issue-index-html-missing-meta.md) | Issue Fix | merged sprint-0013 |
+| [issue-todayused-counter-staleness](issue-todayused-counter-staleness.md) | Issue Fix | merged sprint-0013 |
+| [code-upgrade-modal-checkout-race](code-upgrade-modal-checkout-race.md) | Code Enhancement | merged sprint-0013 |
+| [feat-conversion-funnel-analytics](feat-conversion-funnel-analytics.md) | Feature | merged sprint-0013 |
+| [feat-persistent-reading-limit-display](feat-persistent-reading-limit-display.md) | Feature | merged sprint-0013 |
+
 ## Sprint 0011 — Completed
 
 | Proposal | Type | Delivered |
