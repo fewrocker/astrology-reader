@@ -58,7 +58,7 @@ export const SYNASTRY_ASPECT_BRIEFS: Record<string, string> = {
   'Moon_Conjunction_Moon':
     'your emotional rhythms overlap — you instinctively know what the other needs, and the shared undercurrent can feel like coming home.',
   'Moon_Opposition_Moon':
-    'your inner lives reach for different kinds of comfort — you can hold the other's needs without erasing your own, but it asks deliberate care.',
+    `your inner lives reach for different kinds of comfort — you can hold the other's needs without erasing your own, but it asks deliberate care.`,
   'Moon_Trine_Moon':
     'your emotional natures flow together without effort — moods pass between you naturally, and neither has to explain what they feel.',
   'Moon_Square_Moon':

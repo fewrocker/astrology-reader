@@ -1,5 +1,3 @@
-import { getHouseTheme } from './houseThemes'
-
 /**
  * Relational voice: "your planet in their house" — what the incoming planet activates
  * in the partner who receives it. Not natal self-description; not archetype labels.
