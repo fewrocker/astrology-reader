@@ -2,6 +2,8 @@ import OpenAI from 'openai'
 import { getDb } from '../db.js'
 import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/chartEngine.js'
 import type { ServerChartData } from '../engine/chartEngine.js'
+import { calculateAspects } from '../engine/aspectEngine.js'
+import type { Aspect } from '../engine/aspectEngine.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -229,7 +231,7 @@ async function handleTransitInterpretation(payload: { systemPrompt: string }): P
   return result || 'Unable to generate interpretation.'
 }
 
-function buildNatalContextFromChart(chart: ServerChartData, birthDate: string): string {
+function buildNatalContextFromChart(chart: ServerChartData, birthDate: string, aspects?: Aspect[]): string {
   let ctx = `Born: ${birthDate}\n`
   for (const p of chart.planets) {
     ctx += `${p.name}: ${p.sign} ${p.degree}°${p.minute}'`
@@ -239,6 +241,11 @@ function buildNatalContextFromChart(chart: ServerChartData, birthDate: string): 
   }
   ctx += `Ascendant: ${chart.angles.ascendant.sign} ${chart.angles.ascendant.degree}°\n`
   ctx += `Midheaven: ${chart.angles.midheaven.sign} ${chart.angles.midheaven.degree}°\n`
+  if (aspects && aspects.length > 0) {
+    ctx += '\n## Natal Aspects (tightest orb first)\n'
+    ctx += aspects.slice(0, 7).map(a => `${a.planet1} ${a.symbol} ${a.planet2} (${a.orb}°, ${a.nature})`).join('\n')
+    ctx += '\n'
+  }
   return ctx
 }
 
@@ -255,18 +262,23 @@ async function handleDreamInterpretation(payload: {
   let natalCtx = payload.natalContext
 
   if (!chart && userId) {
-    const birthCtx = resolveUserBirthContext(userId)
-    if (birthCtx) {
-      const computed = calculateChart(
-        birthCtx.birthDate,
-        birthCtx.birthTime ?? '12:00',
-        birthCtx.lat,
-        birthCtx.lng,
-        birthCtx.tz,
-        !birthCtx.birthTime,
-      )
-      chart = computed
-      natalCtx = buildNatalContextFromChart(computed, birthCtx.birthDate)
+    try {
+      const birthCtx = resolveUserBirthContext(userId)
+      if (birthCtx) {
+        const computed = calculateChart(
+          birthCtx.birthDate,
+          birthCtx.birthTime ?? '12:00',
+          birthCtx.lat,
+          birthCtx.lng,
+          birthCtx.tz,
+          !birthCtx.birthTime,
+        )
+        chart = computed
+        const natalAspects = calculateAspects(computed.planets)
+        natalCtx = buildNatalContextFromChart(computed, birthCtx.birthDate, natalAspects)
+      }
+    } catch {
+      // Non-fatal — proceed without chart if DB lookup fails
     }
   }
 
