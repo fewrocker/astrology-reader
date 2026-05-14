@@ -16,6 +16,8 @@ export interface AspectRowProps {
   applying: boolean
   /** Pre-computed interpretation brief. Null → no expand toggle shown. */
   brief: string | null
+  /** Label prefix for the natal planet (default: "Natal"). Pass "Composite" for composite chart rows. */
+  natalLabel?: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -50,6 +52,7 @@ export default function AspectRow({
   orb,
   applying,
   brief,
+  natalLabel = 'Natal',
 }: AspectRowProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -83,7 +86,7 @@ export default function AspectRow({
         {/* Label */}
         <div className="flex-1 min-w-0">
           <span className="text-mystic-text text-sm">
-            Transit {transitPlanet} {aspectType} Natal {natalPlanet}
+            Transit {transitPlanet} {aspectType} {natalLabel} {natalPlanet}
           </span>
         </div>
 
