@@ -3,6 +3,7 @@ import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
 import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_NUDGE } from './gptErrors'
 import { track } from './analytics'
+import { AUTH_TOKEN_KEY } from './authService'
 
 // ─── Rate limit signal ────────────────────────────────────────────────────────
 
@@ -25,15 +26,13 @@ export class RateLimitError extends Error {
   }
 }
 
-// JWT key used by auth service — injected as Authorization header when present
-const JWT_STORAGE_KEY = 'astral-chart-jwt'
 
 // Session-level GPT call counter for unauthenticated nudge (spec section 9)
 let _sessionCalls = 0
 
 function isAuthenticated(): boolean {
   try {
-    return !!localStorage.getItem(JWT_STORAGE_KEY)
+    return !!localStorage.getItem(AUTH_TOKEN_KEY)
   } catch {
     return false
   }
@@ -50,7 +49,7 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   let hasToken = false
   try {
-    const token = localStorage.getItem(JWT_STORAGE_KEY)
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
       hasToken = true

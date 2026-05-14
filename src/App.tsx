@@ -213,7 +213,7 @@ function SynastryTransitSelectScreen() {
 
 function AppContent() {
   const { state, dispatch } = useApp()
-  const { isAuthenticated, tier } = useAuth()
+  const { isAuthenticated, tier, incrementTodayUsed } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authModalTab, setAuthModalTab] = useState<'login' | 'register'>('login')
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false)
@@ -317,6 +317,7 @@ function AppContent() {
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         void prompt // built for local display only; server recomputes from period
         const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
@@ -376,6 +377,7 @@ function AppContent() {
           { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
           { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
         )
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
@@ -423,6 +425,7 @@ function AppContent() {
           state.synastryTransitPeriod!,
           state.synastryTransitTargetMonth ?? undefined,
         )
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
@@ -480,6 +483,7 @@ function AppContent() {
 
         // Get GPT interpretation asynchronously — server computes from stored birth data
         const interpretation = await getSolarReturnInterpretation(srData.targetYear)
+        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
