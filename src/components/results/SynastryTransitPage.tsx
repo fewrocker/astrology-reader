@@ -7,27 +7,12 @@ import { formatPosition } from '../../engine/zodiac'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import { track } from '../../services/analytics'
+import CollapsibleSection from '../ui/CollapsibleSection'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Couple Reading',
   weekly: 'Weekly Couple Reading',
   monthly: 'Monthly Couple Reading',
-}
-
-function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen)
-  return (
-    <div className="border border-mystic-gold/20 rounded-lg overflow-hidden mb-4">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-5 py-3 bg-mystic-gold/5 hover:bg-mystic-gold/10 transition-colors text-left"
-      >
-        <span className="font-heading text-lg text-mystic-gold">{title}</span>
-        <span className="text-mystic-muted text-xl transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }}>▾</span>
-      </button>
-      {open && <div className="px-5 py-4">{children}</div>}
-    </div>
-  )
 }
 
 function TransitAspectsToComposite({ transitData }: { transitData: TransitData }) {
@@ -37,7 +22,7 @@ function TransitAspectsToComposite({ transitData }: { transitData: TransitData }
     n === 'harmonious' ? 'text-green-400' : n === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
   return (
-    <Section title={`Transit Aspects to Composite (${transitData.transitAspects.length})`} defaultOpen>
+    <CollapsibleSection title={`Transit Aspects to Composite (${transitData.transitAspects.length})`} defaultOpen>
       <p className="text-mystic-muted text-xs mb-3">How current transits affect the relationship as a whole</p>
       <div className="space-y-2">
         {transitData.transitAspects.map((a, i) => {
@@ -61,13 +46,13 @@ function TransitAspectsToComposite({ transitData }: { transitData: TransitData }
           )
         })}
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
 function CurrentPlanetsTable({ transitData }: { transitData: TransitData }) {
   return (
-    <Section title="Current Planet Positions">
+    <CollapsibleSection title="Current Planet Positions">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -95,7 +80,7 @@ function CurrentPlanetsTable({ transitData }: { transitData: TransitData }) {
           </tbody>
         </table>
       </div>
-    </Section>
+    </CollapsibleSection>
   )
 }
 
