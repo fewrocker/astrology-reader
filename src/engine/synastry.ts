@@ -472,9 +472,10 @@ export function buildSynastryPrompt(
     prompt += `Midheaven: ${chart2.angles.midheaven.degree}°${chart2.angles.midheaven.minute}' ${chart2.angles.midheaven.sign}\n`
   }
 
-  // Cross-chart aspects
+  // Cross-chart aspects — sorted by orb ascending so GPT sees tightest contacts first
+  const sortedAspects = [...synastryData.synastryAspects].sort((a, b) => a.orb - b.orb)
   prompt += `\n## Synastry Aspects (Cross-Chart)\n`
-  for (const a of synastryData.synastryAspects) {
+  for (const a of sortedAspects) {
     prompt += `- Person 1 ${a.person1Planet} ${a.symbol} Person 2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
   }
 
@@ -505,6 +506,13 @@ export function buildSynastryPrompt(
   prompt += `Harmonious aspects: ${synastryData.compatibility.harmoniousCount}, Challenging: ${synastryData.compatibility.challengingCount}, Neutral: ${synastryData.compatibility.neutralCount}\n`
 
   prompt += `\n## Instructions\n`
+
+  // Priority header — lead with the tightest cross-chart aspect
+  const tightestSynastry = sortedAspects[0]
+  if (tightestSynastry) {
+    prompt += `Priority: Lead with the single most significant contact in this synastry — the tightest orb aspect that involves personal planets (Sun, Moon, Venus, Mars, Mercury). State what this contact means for the relationship before expanding to the broader picture. If the tightest aspect involves Venus or Moon, begin with the emotional/affectional register. If it involves Saturn or an outer planet, begin with the structural or growth dimension.\n\n`
+  }
+
   prompt += `Provide a comprehensive couple synastry reading covering:\n`
   prompt += `1. Overall relationship energy and core dynamic\n`
   prompt += `2. Romantic and physical chemistry (Venus-Mars, Sun-Moon contacts)\n`
@@ -514,6 +522,15 @@ export function buildSynastryPrompt(
   prompt += `6. House overlay insights — what each person activates in the other\n`
   prompt += `7. Composite chart — the nature of the relationship as its own entity\n`
   prompt += `8. Key strengths and areas for conscious work\n\n`
+
+  // House-naming instruction — gated on at least one person having known birth time
+  if (!chart1.unknownTime || !chart2.unknownTime) {
+    prompt += `Where house data is available for either person, name the house that receives each planet placement and state what it governs for that person. Use "Person 1's 7th house (partnership)" rather than "Person 1's Libra." Where birth time is unknown, interpret in terms of sign and nature only.\n\n`
+  }
+
+  // Anti-generic constraint
+  prompt += `Write as if you know these two people's charts specifically. Do not write sentences that could apply to any Venus-Moon trine or any Saturn square. Ground every statement in the actual degrees and signs listed above.\n\n`
+
   prompt += `Write 6-8 flowing paragraphs. Be direct, specific, and reference actual placements. `
   prompt += `State what works well between them and what will be genuinely difficult — do not minimize tensions or over-romanticize strengths. `
   prompt += `Use "Person 1" and "Person 2" as labels. Close with the most important factual dynamic to be aware of, not generic encouragement.`
