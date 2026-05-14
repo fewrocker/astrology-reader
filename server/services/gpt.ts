@@ -4,28 +4,8 @@ import { calculateChart, getMoonInfo, getActiveTransitAspects } from '../engine/
 import type { ServerChartData } from '../engine/chartEngine.js'
 
 // ---------------------------------------------------------------------------
-// Types — mirrors the relevant subsets of src/engine/types for server use
+// Types
 // ---------------------------------------------------------------------------
-
-interface Planet {
-  name: string
-  sign: string
-  house: number
-  retrograde: boolean
-  degree: number
-  longitude: number
-}
-
-interface Angles {
-  ascendant: { sign: string }
-  midheaven: { sign: string }
-}
-
-interface ChartData {
-  planets: Planet[]
-  angles: Angles
-  unknownTime: boolean
-}
 
 interface TransitAspect {
   transitPlanet: string
@@ -141,7 +121,7 @@ function masterLabel(n: number): string {
   return ` [${labels[n]}]`
 }
 
-function buildDreamscapeContext(chart: ChartData): string {
+function buildDreamscapeContext(chart: ServerChartData): string {
   const neptune = chart.planets.find(p => p.name === 'Neptune')
   const moon = chart.planets.find(p => p.name === 'Moon')
   const showHouses = !chart.unknownTime
@@ -208,10 +188,10 @@ async function handleDreamInterpretation(payload: {
   transitSummary: string
   transitAspectsText: string
   skyContext: { moonSign: string; moonPhase: string; transits?: Array<{ transitPlanet: string; aspect: string; natalPlanet: string; orb: number }> } | null
-  chartData: ChartData | null
+  chartData: ServerChartData | null
 }, userId?: number): Promise<string> {
   // --- Chart fallback: compute server-side if client didn't send it ---
-  let chart: ChartData | ServerChartData | null = payload.chartData
+  let chart: ServerChartData | null = payload.chartData
   let natalCtx = payload.natalContext
 
   if (!chart && userId) {
@@ -264,7 +244,7 @@ async function handleDreamInterpretation(payload: {
     }
   }
 
-  const dreamscapeSection = chart ? buildDreamscapeContext(chart as ChartData) + '\n' : ''
+  const dreamscapeSection = chart ? buildDreamscapeContext(chart) + '\n' : ''
 
   const prompt = `${dreamscapeSection}## Dreamer's Natal Chart\n${natalCtx}\n\n## Today's Astrological Picture\n${payload.transitSummary}\n\n## Active Transit Aspects Today\n${payload.transitAspectsText}${skySection}\n\n## The Dream\n${payload.dreamDescription}\n\nThe symbolic and emotional core of the dream is primary — explore the imagery, narrative, and feeling tone with depth and precision. If a natal placement or active transit directly and unmistakably illuminates a specific dream element, bring it in briefly and precisely. Do not scatter planet names throughout for their own sake. Astrology is a lens, not a mandate — use it surgically when the connection is undeniable. Be evocative, specific, and personal — 4 to 6 paragraphs in second person.`
 
@@ -298,7 +278,7 @@ async function handleDreamDiscuss(payload: {
 
 async function handleAstroNumerologyCross(payload: {
   numbers: { lifePath: number; birthdayNumber: number; personalYear: number; expressionNumber?: number }
-  chartData: ChartData
+  chartData: ServerChartData
   userName: string | null
 }): Promise<string> {
   const nameStr = payload.userName ? `Name: ${payload.userName}` : 'Name: not provided'
@@ -537,7 +517,7 @@ async function handleJournalAnnotation(payload: {
   topTransits: TransitAspect[]
   moonPhase: string
   moonSign: string
-  chartData: { planets: Planet[]; angles: { ascendant?: { sign: string } } }
+  chartData: ServerChartData
 }): Promise<{ annotation: string; tags: string[] }> {
   const sun = payload.chartData.planets.find(p => p.name === 'Sun')
   const moon = payload.chartData.planets.find(p => p.name === 'Moon')
@@ -602,7 +582,7 @@ Return JSON with:
 
 async function handleCosmicPatternReading(payload: {
   patterns: PatternSummary[]
-  chartData: ChartData
+  chartData: ServerChartData
   totalEntryCount: number
 }): Promise<PatternReading[]> {
   const sun = payload.chartData.planets.find(p => p.name === 'Sun')
