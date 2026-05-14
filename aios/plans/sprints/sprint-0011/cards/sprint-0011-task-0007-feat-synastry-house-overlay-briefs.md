@@ -1,6 +1,8 @@
 **Type:** Feature
 **Originated by:** Jobs, Carmack, Miyazaki, Taleb
 **User guidance:** (none — sprint vision overrides)
+**Status:** done
+**Outcome:** Implemented 2026-05-14. Created `synastryHouseOverlayBriefs.ts` with 60 relational-voice entries (5 inner planets × 12 houses) + `getSynastryHouseOverlayBrief()`. Refactored `HouseOverlaySection` from `<table>` to card stack with high-signal filtering (inner planets in 1st/4th/5th/7th/8th/12th), left accent borders for key placements, outer planet generic templates, auto-open when high-signal entries present, and count in section header. TypeScript clean. Commit: f9bd133.
 
 ## Problem / Opportunity
 
@@ -116,3 +118,34 @@ The signature moment: the user sees "Your Moon in their 4th house" and below it:
 5. **What is the correct treatment for `NorthNode`?** It is currently typed as `PlanetName | 'NorthNode'` in `HouseOverlayEntry`. Is NorthNode an outer planet for filtering purposes (treated as non-high-signal, generic template fallback), or does it warrant its own brief table entry? The karmic significance of NorthNode in a partner's house is a legitimate synastry fact, but covering it in this sprint may be over-scoping. Default recommendation: treat NorthNode as an outer planet for this sprint.
 
 6. **Carmack noted that the `Section` component in `SynastryPage.tsx` is a byte-for-byte duplicate of the one in `SynastryTransitPage.tsx`.** Should this refactor (extract to `src/components/ui/CollapsibleSection.tsx`) be bundled with this task, since `SynastryPage.tsx` will be open anyway? It is not strictly required for this feature, but it eliminates a maintenance liability while the file is already being edited.
+
+## Implementation Checklist
+
+- [x] 1. HouseOverlaySection converted from table to card list
+- [x] 2. Card header: planet glyph + name, zodiac glyph + sign, house number + name from getHouseTheme
+- [x] 3. Taleb's high-signal filter applied: inner planets in relationship-defining houses
+- [x] 4. High-signal pairs identified programmatically via INNER_PLANETS + HIGH_SIGNAL_HOUSES constants
+- [x] 5. synastryHouseOverlayBriefs.ts created with 60-entry lookup table
+- [x] 6. Relational voice — all entries describe what the partner receives/feels
+- [x] 7. All 60 inner-planet entries written (Sun×12, Moon×12, Venus×12, Mars×12, Mercury×12)
+- [x] 8. Outer planets use generic template fallback in component render
+- [x] 9. High-signal briefs visible by default (no expand needed)
+- [x] 10. Non-high-signal entries at reduced opacity (text-mystic-muted), brief at text-mystic-muted/70
+- [x] 11. Sorted: high-signal first (Sun→Moon→Venus→Mars→Mercury), others after
+- [x] 12. Section opens defaultOpen when high-signal entries present
+- [x] 13. Section header count: "(N key placements)"
+- [x] 14. No per-entry expand/collapse UI
+- [x] 15. PLANET_IN_HOUSE not reused — new relational-voice entries written from scratch
+- [x] 16. Exports SYNASTRY_HOUSE_OVERLAY_BRIEFS record and getSynastryHouseOverlayBrief() function
+- [x] 17. Generic outer-planet fallback lives in component render, not data file
+- [x] 18. Both HouseOverlaySection instances on SynastryPage use the new component
+- [x] 19. personLabel: label prop is sufficient for direction framing (brief text uses "Your [planet]")
+- [x] 20. Visual separation: border-b border-mystic-gold/10; high-signal left accent (bg-mystic-gold/40)
+- [x] 21. Subheader: "Showing N key placements — inner planets in relationship-defining houses."
+- [x] 22. No new GPT calls — all briefs are static, client-side
+- [x] 23. No changes to HouseOverlayEntry type or src/engine/synastry.ts
+- [x] 24. No changes to HOUSE_THEMES, PLANET_IN_HOUSE, or existing interpretation data files
+- [x] 25. Empty entries guard preserved (returns null when entries.length === 0)
+- [x] 26. house <= 0 or > 12 guard: skips brief generation, shows planet + sign only
+- [x] 27. Brief quality: relational, specific to placement — passes sprint vision's quality bar
+- [x] 28. Component changes confined to HouseOverlaySection in SynastryPage.tsx only

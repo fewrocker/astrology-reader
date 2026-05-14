@@ -48,3 +48,7 @@ Both import sites are updated:
 - `src/components/results/SynastryTransitPage.tsx`: remove the local `Section` function (lines 17–31), add `import CollapsibleSection from '../ui/CollapsibleSection'`, rename all JSX call sites. Call sites: `TransitAspectsToComposite` (line 40), `CurrentPlanetsTable` (line 70).
 
 Zero behavioral change. The rendered HTML, class names, and open/close logic are identical to what both files produce today. TypeScript compilation and existing snapshot tests must pass without modification.
+
+## Outcome
+
+Completed 2026-05-14. `src/components/ui/CollapsibleSection.tsx` created with the extracted component (explicit `ReactNode` import, idiomatic with codebase). Both `SynastryPage.tsx` and `SynastryTransitPage.tsx` updated: local `Section` definitions removed, import added, all JSX call sites renamed. TypeScript compiles clean with zero errors. Two commits on branch `sprint-0011-task-0002-code-collapsible-section-extraction`.

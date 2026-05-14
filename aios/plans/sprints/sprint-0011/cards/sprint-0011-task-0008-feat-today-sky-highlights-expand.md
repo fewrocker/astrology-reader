@@ -74,6 +74,14 @@ The Sky Highlights card should feel like a pocket transit reading: three taps, t
 - No handling for more or fewer than 3 transit rows. `getTopActiveTransits` already returns at most `maxCount` rows; the map renders whatever is returned.
 - No applying/separating calculation changes in `transits.ts`. The `applying` field on `TransitAspect` is computed correctly from planetary motion direction. Taleb's concern is about orb magnitude communicating urgency, not about the applying calculation being wrong for transits.
 
+## Outcome
+
+**Status:** done — commit 47400b3 on branch `sprint-0011-task-0008-feat-today-sky-highlights-expand`
+
+All 13 specs implemented and verified. Option A (orb cap to 5°) was chosen per recommendation. All unused imports (`ASPECT_KEYWORDS`, `PLANET_GLYPHS`, `PlanetName`, `getAspectKeyword`) removed. `computeTransitAspectBrief` wired as the `brief` prop. Stable key `${a.transitPlanet}-${a.natalPlanet}-${a.type}` used. TypeScript clean. Spec reviewer: all 13 items ✅. Code quality reviewer: APPROVED (no blocking issues).
+
+Open questions resolved: Option A (5°) chosen; collapsed-by-default kept; `ASPECT_KEYWORDS` confirmed unused in other sections before removal.
+
 ## Open Questions
 
 1. **Option A vs Option B for the orb cutoff.** The proposal recommends Option A (cap to 5 degrees). If the product owner wants to ensure Sky Highlights always shows 3 rows even on quiet transit days, Option B (keep 8 degrees, improve orb readability) is the fallback. This should be decided before implementation begins.

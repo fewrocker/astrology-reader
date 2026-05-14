@@ -1,6 +1,16 @@
 **Type:** Code Enhancement
 **Originated by:** Jobs, Carmack
 **User guidance:** (none — sprint vision overrides)
+**Status:** done
+
+## Outcome
+
+Implemented in branch `sprint-0011-task-0003-code-gpt-prompt-element-profiles` (commit 79a2a8a). Changes across 2 files, 29 insertions:
+
+- `src/engine/synastry.ts`: Added `analyzeElements` import. In `buildSynastryPrompt`, added `analyzeElements` calls for both charts and injected `## Person 1 Element Profile` / `## Person 2 Element Profile` blocks after each natal positions section. Updated priority instruction to require life-area naming for house contacts. Extended house-naming instruction to require full life-area names (not just house numbers). In `buildCoupleTransitPrompt`, added element analysis calls on full planet lists (not the inner-planet subset), injected element profile blocks after each person's summary, added priority instruction leading with the tightest composite transit, and extended instructions to require naming the relationship dimension activated by each transit.
+- `src/engine/solarReturn.ts`: Added `analyzeElements` import and injected a `## Natal Element Profile` block between the natal chart section and the SR chart section, matching the `buildTransitPrompt` reference pattern exactly.
+
+TypeScript check (`npx tsc --noEmit`) passed with zero errors.
 
 ## Problem / Opportunity
 

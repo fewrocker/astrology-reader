@@ -1,6 +1,30 @@
 **Type:** Feature
 **Originated by:** Jobs, Carmack, Miyazaki, Taleb
 **User guidance:** (none — sprint vision overrides)
+**Status:** done
+
+## Outcome
+
+Implemented `SRStaticBriefs` as a local function component in `SolarReturnPage.tsx`. It renders two cards — SR Sun house and SR Moon house — above the GPT block in the Reading tab, always visible once `solarReturnData` is non-null. Each card shows the planet, house number, an eyebrow label (Primary Focus / Emotional Climate), and the `PLANET_IN_HOUSE` brief prefixed with "This year: ". Guards for house 0, out-of-range values, and missing planets are in place. Layout uses `grid-cols-1 sm:grid-cols-2` (stacked mobile, side-by-side desktop). Visual style is lighter than the GPT block (`bg-amber-900/5 border border-amber-500/10`).
+
+Also added `analyzeElements` injection into `buildSolarReturnPrompt` in `solarReturn.ts` — inserts a `## Natal Element Profile` block between the natal chart positions and SR chart sections, matching the format used in `buildTransitPrompt`.
+
+TypeScript check passed clean. Committed as `a5dc561`.
+
+## Spec Checklist
+
+- [x] 1. Location in layout — above GptSkeleton/SRReading, unconditionally visible in all GPT states
+- [x] 2. Data source for SR Sun house — `srData.srChart.planets.find(p => p.name === 'Sun')`, `PLANET_IN_HOUSE[\`Sun_H${srSun.house}\`]?.brief`
+- [x] 3. Data source for SR Moon house — same pattern for Moon
+- [x] 4. Guard against house 0 or out-of-range — house must be 1–12 inclusive before lookup
+- [x] 5. Guard against missing planet — card suppressed if planet is undefined
+- [x] 6. Visual treatment — `bg-amber-900/5 border border-amber-500/10`, lighter than GPT `bg-mystic-gold/5 border-mystic-gold/20`
+- [x] 7. Label text — "Primary Focus" and "Emotional Climate" matching KeyPlacements descriptors
+- [x] 8. Brief text framing — prefixed with "This year: ", no modification to `planetInHouse.ts`
+- [x] 9. No new shared component — implemented as local function within `SolarReturnPage.tsx`
+- [x] 10. Element profile in `buildSolarReturnPrompt` — `analyzeElements` imported and injected
+- [x] 11. Year-change behavior — static cards derive from `solarReturnData.srChart`, update automatically on year toggle
+- [x] 12. Unknown birth time edge case — reads exclusively from `srData.srChart`, which always has valid houses
 
 ## Problem / Opportunity
 

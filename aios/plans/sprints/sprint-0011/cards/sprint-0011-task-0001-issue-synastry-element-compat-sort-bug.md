@@ -33,3 +33,7 @@ const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count1[b] - count
 ```
 
 The sort comparator for `dom1` should be `count1[b] - count1[a]`: a descending sort entirely within `count1`, parallel to the `count2[b] - count2[a]` comparator used for `dom2` on line 262. This produces the element with the highest planet count in Person 1's chart as `dom1`, which is the correct dominant-element definition. The `elementCompat` compatibility string will then accurately reflect both charts, and will agree with the element profile data sent to GPT via `analyzeElements`.
+
+## Outcome
+
+Fixed in commit `d817c65` on branch `sprint-0011-task-0001-issue-synastry-element-compat-sort-bug`. Changed `count2[b] - count1[a]` to `count1[b] - count1[a]` on line 261 of `src/engine/synastry.ts`. One-character fix; TypeScript check passed with no errors.

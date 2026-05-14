@@ -86,6 +86,33 @@ The `house: 0` limitation is documented as a known gap, not masked. When composi
 - **Orb filtering.** The composite transit aspects displayed are whatever `synastryTransitData.transitAspects` contains — no orb cap is added or removed by this proposal.
 - **Compatibility score accuracy.** The `elementCompat` sort bug in `synastry.ts:261` is documented in Taleb's voice analysis. It is not addressed here.
 
+## Outcome
+
+**Status:** done — 2026-05-14
+
+Implemented as specified. All 14 spec items addressed:
+
+- [x] 1. Static loop replaced with `AspectRow` components in `TransitAspectsToComposite`
+- [x] 2. All prop fields mapped correctly (`transitPlanet`, `natalPlanet`, `aspectType`, `nature`, `symbol`, `orb`, `applying`, `brief`)
+- [x] 3. `computeTransitAspectBrief` called for each row; house:0 falls to generic fallback as expected
+- [x] 4. Subject-swap applied: `.replace(/\byour\b/gi, "the relationship's")` at call site — `getAspectPerfectionBrief` does contain "your" in some entries (verified line 61, 487 of transitEvents.ts)
+- [x] 5. Inline comment added to `house: 0` in `calculateCompositeChart` in synastry.ts
+- [x] 6. Section subtitle preserved unchanged
+- [x] 7. `applying` badge displayed normally
+- [x] 8. Expand/collapse present on all rows (brief is always non-null)
+- [x] 9. Local `natureColor` helper removed
+- [x] 10. Brief truncated at 200 chars by `computeTransitAspectBrief`
+- [x] 11. Empty state guard preserved
+- [x] 12. `space-y-2` wrapper removed; replaced with plain `<div>`
+- [x] 13. `natalLabel?: string` prop added to `AspectRow` (default: `"Natal"`); `"Composite"` passed from `TransitAspectsToComposite`
+- [x] 14. No other files touched beyond `AspectRow.tsx`, `SynastryTransitPage.tsx`, `synastry.ts` (comment only)
+
+TypeScript: clean (`npx tsc --noEmit` — no errors).
+
+Open question 1 resolved: `getAspectPerfectionBrief` does contain "your" — subject-swap applied at call site.
+Open question 2 resolved: Used `"Composite"` (chart-type label matching the existing manual label in the old code).
+Open question 3: deferred — `computeTransitAspectBrief` does not yet accept a `subject` param; noted in inline comment.
+
 ## Open Questions
 
 1. **`getAspectPerfectionBrief` subject language.** Before shipping, verify that `getAspectPerfectionBrief` in `transitEvents.ts` and the `fallbackSentence` helper in `transitAspectBriefs.ts` return subject-neutral text (no "your") when used for composite transit rows. If any fallback contains second-person language, is a blanket `.replace(/\byour\b/gi, "the relationship's")` at the call site the right fix, or should the brief generator accept an explicit `subject` parameter?

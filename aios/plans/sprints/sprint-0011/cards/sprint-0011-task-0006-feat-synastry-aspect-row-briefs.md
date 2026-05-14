@@ -183,6 +183,34 @@ The quality bar from the sprint vision applies: a brief that reads "Mercury trin
 - Compatibility score display changes or the `elementCompat` sort bug in `synastry.ts` line 261 (noted by Taleb as a pre-existing bug — the `dom1` sort comparator uses `count2[b] - count1[a]` instead of `count1[b] - count1[a]`). This bug is not introduced by this feature and fixing it is outside this proposal's scope, though the `elementCompat` bug should be tracked as technical debt to fix before shipping element profiles to the GPT prompt.
 - New screens, new page-level layout changes, new GPT calls, new calculation engines.
 
+## Outcome
+
+**Status:** done  
+**Branch:** sprint-0011-task-0006-feat-synastry-aspect-row-briefs  
+**Completed:** 2026-05-14
+
+### What was implemented
+
+- `src/data/interpretations/synastryAspectBriefs.ts` — new file with 37 primary entries in relational second-person voice across all required pairs. Module-level `SYNASTRY_ASPECT_BRIEFS` constant, `PLANET_ARCHETYPES` fallback table (11 entries inc. NorthNode), `ASPECT_NATURE_CLAUSES`, `truncateToLimit` helper (copied, not imported, per spec), and `computeSynastryAspectBrief(person1Planet, aspectType, person2Planet, _nature)` export. Function never throws, never returns empty string.
+- `src/components/reading/AspectRow.tsx` — added `showApplyingBadge?: boolean` (default `true`) and `labelOverride?: string` to `AspectRowProps`. Badge is conditionally excluded from DOM entirely when false. Both props are backward-compatible.
+- `src/components/results/SynastryPage.tsx` — `SynastryAspectsSection` rewritten to use `AspectRow` with `showApplyingBadge={false}`, `applying={false}`, `labelOverride="P1 {P1Planet} {AspectType} P2 {P2Planet}"`, and `computeSynastryAspectBrief` for every row.
+
+### Open questions resolved
+
+1. **Directionality** → symmetric framing; asymmetric pairs (Saturn–Moon, Pluto–Moon) acknowledge both roles implicitly in one brief
+2. **labelOverride vs mode** → `labelOverride?: string` added to AspectRow
+3. **Brief length** → Option A: `truncateToLimit(text, 200)` in `computeSynastryAspectBrief`
+4. **Planet archetype table** → co-located in synastryAspectBriefs.ts
+5. **NorthNode in primary table** → YES — primary entries for NorthNode_Conjunction_Sun, Moon_Conjunction_NorthNode, NorthNode_Conjunction_Venus
+
+### Fix applied post-implementation
+
+A case mismatch was caught in code review: engine `AspectType` values are lowercase (`'conjunction'`) while the table keys used title-case (`'Conjunction'`). Fixed by normalizing in `buildKey` and the `ASPECT_NATURE_CLAUSES` lookup with `charAt(0).toUpperCase() + slice(1)`. TypeScript was clean throughout (no TS error surfaced the mismatch because `Record<string, string>` accepts any key).
+
+### All specs implemented
+
+Specs 1–50: ✅
+
 ## Open Questions
 
 1. **Directionality in briefs.** When P1 is Saturn and P2 is Moon vs. P1 is Moon and P2 is Saturn, the experience differs substantially — the Saturn person carries the weight; the Moon person feels the structure. Should the brief function accept a `reversed` flag or should entries be duplicated for the reversed orientation on pairs where directionality is meaningful? For pairs where both planets are roughly symmetric (Moon–Venus trine), directionality matters less. For asymmetric pairs (Saturn–Moon, Pluto–Moon, Mars–Moon), it matters significantly. Decision needed before writing the table.
