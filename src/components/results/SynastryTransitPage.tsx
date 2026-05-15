@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { resolvePersonLabel } from '../../context/appState'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import type { PlanetName } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
@@ -102,8 +103,10 @@ export default function SynastryTransitPage() {
 
   if (!synastryTransitData || !synastryTransitPeriod) return null
 
-  const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
-  const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+  const label1 = resolvePersonLabel(birthData)
+  const label2 = resolvePersonLabel(partnerBirthData)
+  const person1CityStr = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const person2CityStr = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
   const formatDateDisplay = (dateStr: string) => {
     const d = new Date(dateStr + 'T12:00:00')
@@ -125,9 +128,9 @@ export default function SynastryTransitPage() {
           }
         </p>
         <div className="flex flex-col sm:flex-row gap-2 justify-center text-mystic-muted text-xs mt-1">
-          <span>Person 1: {birthData.date} — {person1Label}</span>
+          <span>{label1}{person1CityStr ? ` — ${person1CityStr}` : ''}</span>
           <span className="hidden sm:inline text-mystic-gold">✦</span>
-          <span>Person 2: {partnerBirthData.date} — {person2Label}</span>
+          <span>{label2}{person2CityStr ? ` — ${person2CityStr}` : ''}</span>
         </div>
       </div>
 

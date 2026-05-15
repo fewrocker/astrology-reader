@@ -191,10 +191,23 @@ export function loadCachedPartnerData(): BirthData {
       unknownTime: typeof cached.unknownTime === 'boolean' ? cached.unknownTime : false,
       city: cached.city && typeof cached.city === 'object' ? cached.city : null,
       focusAreas: [],
+      userName: typeof cached.userName === 'string' ? cached.userName : undefined,
     }
   } catch {
     return { ...initialBirthData }
   }
+}
+
+/**
+ * Resolve a human-readable label for a person from their birth data.
+ * Returns their name if set, otherwise "Born [Month Day, Year]".
+ */
+export function resolvePersonLabel(birthData: BirthData): string {
+  const name = birthData.userName?.trim()
+  if (name) return name
+  if (!birthData.date) return 'Unknown'
+  const date = new Date(birthData.date + 'T12:00:00')
+  return `Born ${date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
 }
 
 export interface CachedSynastryResults {

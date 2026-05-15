@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
+import { resolvePersonLabel } from '../../context/appState'
 import { getDiscussResponse, type ChatMessage } from '../../services/gptInterpretation'
 import type { ChartData } from '../../engine/types'
 import type { FullReading } from '../../data/interpretations'
@@ -171,33 +172,35 @@ function buildSynastryContext(
   person1City: string,
   person2City: string,
   synastryInterpretation: string | null,
+  label1: string,
+  label2: string,
 ): string {
   let ctx = `## Couple Synastry Analysis\n\n`
 
-  ctx += `### Person 1\nBorn: ${person1Date} — ${person1City}\n`
+  ctx += `### ${label1}\nBorn: ${person1Date} — ${person1City}\n`
   for (const p of chart1.planets) {
     ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart1.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
   }
 
-  ctx += `\n### Person 2\nBorn: ${person2Date} — ${person2City}\n`
+  ctx += `\n### ${label2}\nBorn: ${person2Date} — ${person2City}\n`
   for (const p of chart2.planets) {
     ctx += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart2.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
   }
 
   ctx += `\n### Synastry Aspects (Cross-Chart)\n`
   for (const a of synastryData.synastryAspects) {
-    ctx += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
+    ctx += `- ${label1} ${a.person1Planet} ${a.symbol} ${label2} ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
   }
 
   if (synastryData.houseOverlay?.person1InPerson2Houses?.length > 0) {
     ctx += `\n### House Overlays\n`
-    ctx += `P1 planets in P2 houses:\n`
+    ctx += `${label1} planets in ${label2} houses:\n`
     for (const h of synastryData.houseOverlay.person1InPerson2Houses) {
-      ctx += `- ${h.planet} → P2 House ${h.house}\n`
+      ctx += `- ${h.planet} → ${label2} House ${h.house}\n`
     }
-    ctx += `P2 planets in P1 houses:\n`
+    ctx += `${label2} planets in ${label1} houses:\n`
     for (const h of synastryData.houseOverlay.person2InPerson1Houses) {
-      ctx += `- ${h.planet} → P1 House ${h.house}\n`
+      ctx += `- ${h.planet} → ${label1} House ${h.house}\n`
     }
   }
 
@@ -228,11 +231,13 @@ function buildSynastryTransitContext(
   person2Date: string,
   person1City: string,
   person2City: string,
+  label1: string,
+  label2: string,
 ): string {
   let ctx = `## Couple Transit Reading (${transitPeriod})\n`
   ctx += `Period: ${transitData.dateRange.start} to ${transitData.dateRange.end}\n`
-  ctx += `Person 1: ${person1Date} — ${person1City}\n`
-  ctx += `Person 2: ${person2Date} — ${person2City}\n\n`
+  ctx += `${label1}: ${person1Date} — ${person1City}\n`
+  ctx += `${label2}: ${person2Date} — ${person2City}\n\n`
 
   ctx += `### Composite Chart\n`
   for (const p of synastryData.compositeChart.planets) {
@@ -241,7 +246,7 @@ function buildSynastryTransitContext(
 
   ctx += `\n### Key Synastry Aspects\n`
   for (const a of synastryData.synastryAspects.slice(0, 15)) {
-    ctx += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
+    ctx += `- ${label1} ${a.person1Planet} ${a.symbol} ${label2} ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
   }
 
   ctx += `\n### Current Transit Planet Positions\n`
@@ -308,13 +313,15 @@ export default function DiscussModal({ open, onClose, mode }: DiscussModalProps)
 
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
   const partnerCityLabel = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+  const label1 = resolvePersonLabel(birthData)
+  const label2 = resolvePersonLabel(partnerBirthData)
 
   const buildContext = (): string => {
     if (mode === 'synastry-transit' && synastryData && synastryTransitData && synastryTransitPeriod) {
-      return buildSynastryTransitContext(synastryData, synastryTransitData, synastryTransitPeriod, synastryTransitInterpretation, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel)
+      return buildSynastryTransitContext(synastryData, synastryTransitData, synastryTransitPeriod, synastryTransitInterpretation, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, label1, label2)
     }
     if (mode === 'synastry' && partnerChartData && synastryData) {
-      return buildSynastryContext(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, synastryInterpretation)
+      return buildSynastryContext(chartData, partnerChartData, synastryData, birthData.date, partnerBirthData.date, cityLabel, partnerCityLabel, synastryInterpretation, label1, label2)
     }
     let ctx = buildBirthChartContext(chartData, reading, birthData.date, cityLabel)
     if (mode === 'transit' && transitData && transitPeriod) {

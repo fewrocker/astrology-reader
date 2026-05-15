@@ -27,7 +27,7 @@ import { calculateSynastry } from './engine/synastry'
 import { calculateSolarReturn } from './engine/solarReturn'
 import { getGptInterpretation, getSolarReturnInterpretation, getSynastryInterpretation, getCoupleTransitInterpretation, RateLimitError } from './services/gptInterpretation'
 import type { RateLimitInfo } from './services/gptInterpretation'
-import { hasCachedBirthData } from './context/appState'
+import { hasCachedBirthData, resolvePersonLabel } from './context/appState'
 import { track } from './services/analytics'
 
 function SessionBadge({ onOpenAuth }: { onOpenAuth: () => void }) {
@@ -192,8 +192,10 @@ function TransitSelectScreen() {
 function SynastryTransitSelectScreen() {
   const { state, dispatch } = useApp()
   const { birthData, partnerBirthData } = state
-  const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
-  const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+  const label1 = resolvePersonLabel(birthData)
+  const label2 = resolvePersonLabel(partnerBirthData)
+  const person1CityStr = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const person2CityStr = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
   const periods: PeriodOption[] = [
     { id: 'daily', label: 'Today', icon: '☀', description: "How today's transits affect your relationship dynamic." },
@@ -208,8 +210,8 @@ function SynastryTransitSelectScreen() {
         <>
           <h2 className="font-heading text-2xl text-mystic-gold mb-1">Relationship Transit Reading</h2>
           <div className="text-mystic-muted text-xs mt-1 mb-6 space-y-0.5">
-            <p>Person 1: {birthData.date} — {person1Label}</p>
-            <p>Person 2: {partnerBirthData.date} — {person2Label}</p>
+            <p>{label1}{person1CityStr ? ` — ${person1CityStr}` : ''}</p>
+            <p>{label2}{person2CityStr ? ` — ${person2CityStr}` : ''}</p>
           </div>
         </>
       }
@@ -393,8 +395,8 @@ function AppContent() {
 
         // Get GPT interpretation asynchronously (server-sovereign — raw birth fields sent, prompt built server-side)
         const interpretation = await getSynastryInterpretation(
-          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
-          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
+          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz, name: birthData.userName?.trim() || undefined },
+          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz, name: partnerBirthData.userName?.trim() || undefined },
         )
         incrementTodayUsed()
 
@@ -443,8 +445,8 @@ function AppContent() {
 
         // Get GPT interpretation (server-sovereign — raw birth fields sent, prompt built server-side)
         const interpretation = await getCoupleTransitInterpretation(
-          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz },
-          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz },
+          { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz, name: birthData.userName?.trim() || undefined },
+          { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz, name: partnerBirthData.userName?.trim() || undefined },
           state.synastryTransitPeriod!,
           state.synastryTransitTargetMonth ?? undefined,
         )
