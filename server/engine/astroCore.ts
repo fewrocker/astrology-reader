@@ -1,5 +1,40 @@
 import * as Astronomy from 'astronomy-engine'
-export { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion, getHouseForLongitude } from '../../src/engine/ephemeris'
+export function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
+  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
+  const geo = Astronomy.GeoVector(body, time, true)
+  return Astronomy.Ecliptic(geo).elon
+}
+
+export function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
+  const T = time.tt / 36525
+  const omega = 125.0445479 - 1934.1362891 * T + 0.0020754 * T * T + T * T * T / 467441 - T * T * T * T / 60616000
+  return normalizeAngle(omega)
+}
+
+export function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  const lon1 = getPlanetLongitude(body, time)
+  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const lon2 = getPlanetLongitude(body, timePlus)
+  let diff = lon2 - lon1
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
+}
+
+export function getHouseForLongitude(longitude: number, cusps: number[]): number {
+  for (let i = 0; i < 12; i++) {
+    const nextI = (i + 1) % 12
+    const start = cusps[i]
+    const end = cusps[nextI]
+    if (start < end) {
+      if (longitude >= start && longitude < end) return i + 1
+    } else {
+      if (longitude >= start || longitude < end) return i + 1
+    }
+  }
+  return 1
+}
 import { elliptic, planetposition } from 'astronomia'
 import vsop87Bearth from 'astronomia/data/vsop87Bearth'
 

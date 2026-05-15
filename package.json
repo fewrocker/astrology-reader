@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "server:dev": "tsx watch server/index.ts",
     "server:build": "tsc -p tsconfig.server.json",
-    "start": "node dist-server/index.js"
+    "start": "node dist-server/index.js",
+    "postinstall": "echo '{\"type\":\"module\"}' > node_modules/astronomy-engine/esm/package.json"
   },
   "dependencies": {
     "@types/cookie-parser": "^1.4.10",

@@ -828,7 +828,7 @@ Before any proposal is generated, the sprint must know what it is about. The rec
      1. Spawn a **Code Review Agent** — a new isolated subagent whose sole job is to review the implementation in the task's worktree. Pass it:
         - The full contents of the sprint card (problem, proposal, specifications)
         - The worktree path and branch name (`sprint-XXXX-task-YYYY-[TASK_NAME]`)
-        - Instruction to invoke the `superpowers:requesting-code-review` skill and apply it to all changed files in the worktree
+        - Instruction to conduct a thorough code review of all changed files in the worktree
         - Instruction to produce a structured review report: one section per issue found, each with severity (`blocking` / `warning` / `suggestion`), the file and line, and a clear description of what is wrong and why
         - Instruction to write the review report to `sprints/sprint-XXXX/cards/sprint-XXXX-task-YYYY-[TASK_NAME]-review.md`
      2. Wait for the Code Review Agent to finish and read its report.

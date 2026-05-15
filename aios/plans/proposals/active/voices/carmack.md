@@ -1,269 +1,293 @@
-# John Carmack's Technical Analysis: Asteroid Interpretations Architecture
+# John Carmack's Technical Analysis: Sprint 0018 — Advance Tab Marker System
 
-## Status Summary
-The asteroid interpretation system has a **critical gap between infrastructure and surface**: data exists but wiring is blocked. The architecture is sound but the implementation is fragile in three specific ways.
+## The Honest Summary
 
----
+The vision document is unusually precise — it already knows where the code lives, what the primitives are called, and what the implementation shape should look like. That's good. It saves time I'd otherwise spend reading code and writing the same conclusions. My job here is to be the adversary: find what the vision gets wrong or understates, identify the failure modes before they happen, and propose the implementation path that closes those gaps.
 
-## What's Wired vs. What's Blocked
+The core premise is correct: the data already exists. `preCalculateSnapshots` at `AdvanceTab.tsx:167` computes `transitPlanets`, `transitAspects`, and `retrogrades` for every step — up to 53 entries for weekly, 37 for monthly, 31 for daily. The `computeEnergyRating` function at `transits.ts:480` already does harmonic scoring. `computePowerDayBanner` at `AdvanceTab.tsx:106` already detects slow-planet angle contacts and tight applying clusters. The marker layer is a read operation over already-computed data. There is no expensive new computation to introduce.
 
-### Currently Wired (Functional)
-- **Asteroid retrograde data**: 5 entries exist in `NATAL_RETROGRADE` (Chiron, Ceres, Pallas, Juno, Vesta). Lines 44–51 in `retrogrades.ts` are complete and substantive.
-- **Asteroid house interpretations**: 60 entries exist in `PLANET_IN_HOUSE` (5 asteroids × 12 houses). Keys follow `Chiron_H1`, `Ceres_H7`, etc. Quality is high — see lines like `Chiron_H1` in `planetInHouse.ts` (~200 words, specific and mythologically grounded).
-- **Chart wheel glyphs and archetypes**: `ASTEROID_GLYPHS` and `ASTEROID_ARCHETYPES` are defined. `getBodyGlyph()` handles both planets and asteroids correctly.
-
-### Currently Blocked (Data Exists, Not Surfaced)
-- **Asteroid sign interpretations**: 60 entries already exist in `PLANET_IN_SIGN` (`Chiron_Aries`, `Ceres_Taurus`, etc.). Verified by grep: exactly 60 entries present. Each has `brief` and `detail` fields with quality matching the house entries.
-- **Interpretation retrieval in `assembleReading()`**: Lines 138–141 in `src/data/interpretations/index.ts` **explicitly return `null`** for all asteroid interpretations:
-  ```typescript
-  signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(...) : null,
-  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : ...,
-  retrogradeInterpretation: (p.retrograde && !isAsteroid(...) && ...) ? ... : null,
-  ```
-  These three guards can be **safely removed or inverted** — the data is ready.
-- **Chart tooltip rendering for asteroids**: The `PlanetTooltip` component in `ChartWheel.tsx` (lines 69–150) already handles asteroid archetype display but conditionally suppresses sign/house/retrograde interpretations. Lines 71–74 repeat the same `!isAsteroidBody` checks that block data access.
+The risks are: (1) implementing the marker computation inside the render path and tanking slider performance, (2) the station detection being wrong — using `getRetrogradeStatus` per-snapshot instead of detecting the crossing between consecutive snapshots, (3) marker overlays intercepting pointer events on the native range input, and (4) the animation approach creating visual noise rather than mystical atmosphere. Let me work through each.
 
 ---
 
-## Function Signature Issues
+## The `preCalculateSnapshots` Cost Model: What's Actually Slow
 
-### Critical: Type Mismatch in Lookup Functions
-The two core lookup functions have signatures that exclude `AsteroidName`:
+First, measure the actual cost before optimizing it. The snapshot loop at `AdvanceTab.tsx:167` runs:
 
-**Line 19, `src/data/interpretations/index.ts`:**
+- `calculateCurrentPositions(targetDate)` — calls `getPlanetLongitude` for each of 10 planets plus 5 asteroids, each of which calls into the `astronomy-engine` WebAssembly module. For the Moon it uses `EclipticGeoMoon`, for the Sun `SunPosition`, for others `GeoVector` + `Ecliptic`. Then it calls `getDailyMotion` for each body, which doubles those calls by computing positions at T+24h too. Total: roughly 30 WASM calls per snapshot just for positions.
+
+- `calculateTransitAspects(transitPlanets, chartData.planets, period)` — O(bodies × natal_planets × aspect_defs) = roughly 16 transit bodies × 16 natal bodies × 7 aspects = 1792 comparisons per snapshot. Each comparison is cheap arithmetic. For 53 snapshots (weekly): ~95,000 comparisons. This is negligible.
+
+- `getRetrogradeStatus(targetDate)` — calls `getDailyMotion` for 8 planets + 5 asteroids, each of which calls `getPlanetLongitude` twice. That's another 26 WASM calls per snapshot.
+
+- `assignTransitHouses` — 16 bodies × 12 house divisions, pure arithmetic.
+
+Total WASM calls per snapshot: approximately 56. For 53 weekly snapshots: ~3000 WASM calls. For 37 monthly snapshots: ~2000 calls. These are not trivial — a single WASM call through the astronomy-engine FFI is not free. The `useTransition` wrapper correctly keeps this off the main thread for UI purposes. The snapshot computation probably takes 200–800ms on a mid-range mobile device. That's already a known cost.
+
+**The scoring pass adds zero WASM calls.** A `scoreSnapshot()` function that operates on the already-computed `TransitAspect[]` array and `retrogrades[]` is pure arithmetic over in-memory data. For 53 snapshots, scoring takes microseconds total. This is the right architecture — run the expensive ephemeris work once in `preCalculateSnapshots`, then derive everything else from that output.
+
+**Performance critical point:** the marker layer must be a `useMemo` keyed on `snapshots`, not on `offset`. The score array and marker array are properties of the full snapshot set, not of the current slider position. Computing markers on every slider drag would be wrong — you'd be re-running the O(n) scoring pass on every `onChange` event. The correct structure:
+
 ```typescript
-export function getPlanetInSignInterpretation(planet: PlanetName | 'NorthNode', sign: ZodiacSign): InterpretationEntry | null
+// Computed once when snapshots settle — not on slider drag
+const markers = useMemo(() => {
+  if (snapshots.length === 0) return []
+  return snapshots.map(s => scoreSnapshot(s, chartData)).filter(m => m.category !== 'neutral')
+}, [snapshots, chartData])
 ```
 
-**Line 23:**
-```typescript
-export function getPlanetInHouseInterpretation(planet: PlanetName | 'NorthNode', house: number): InterpretationEntry | null
-```
-
-**The fix is straightforward:** Change both signatures to accept `BodyName` instead of `PlanetName | 'NorthNode'`:
-```typescript
-export function getPlanetInSignInterpretation(planet: BodyName, sign: ZodiacSign): InterpretationEntry | null
-export function getPlanetInHouseInterpretation(planet: BodyName, house: number): InterpretationEntry | null
-```
-
-**Why this works:** The lookup uses string concatenation (`${planet}_${sign}`, `${planet}_H${house}`), which already works correctly for asteroids since the data file uses the same key convention. No internal logic change needed — just widen the type.
-
-**No breakage risk:** These functions are called in exactly two places:
-1. `assembleReading()` at lines 138–139 (already guarded by `!isAsteroid`, but will work fine with asteroids)
-2. `PlanetTooltip` in `ChartWheel.tsx` at lines 71–72 (also guarded, will work fine)
-
-Both callers use the conditional `isAsteroid()` check, so changing the signature does not force callers to pass asteroids — it just permits them.
+This is a `useMemo` over `snapshots` (which only changes after the `useTransition` completes), not over `offset`. The slider thumb position changes on drag; `snapshots` does not.
 
 ---
 
-## The `assembleReading()` Problem: Minimal Correct Fix
+## Station Detection: The Current Approach Is Wrong for This Use Case
 
-Current problematic code (lines 136–142):
+`getRetrogradeStatus` at `transits.ts:227` detects whether a planet is retrograde at a specific date. It uses `getDailyMotion` at that point in time and the `isStationing = Math.abs(motion) < 0.02` threshold. This is what goes into `snapshot.retrogrades`.
+
+The vision says: "Any planet stations (motion crosses zero — direct to retrograde or vice versa) within the step's window." The problem is that `getRetrogradeStatus` at a single point in time does not detect crossings. It detects current state. A planet could be stationing at offset 7 but by the time `getRetrogradeStatus(date_at_offset_7)` runs, it might already be retrograde — in which case `isStationing` is false and `isRetro` is true, and you miss the fact that the station happened near this snapshot.
+
+The correct detection for the "shift" category in the marker system is to compare consecutive snapshots: if `snapshots[i-1].retrogrades.find(r => r.planet === X).isRetro !== snapshots[i].retrogrades.find(r => r.planet === X).isRetro`, then a station occurred between those two steps. For weekly resolution, this is accurate enough — the station happened somewhere in that week. For daily resolution, you know it happened on exactly that day.
+
+Implementation — the `scoreSnapshot` function should receive both the current snapshot and the previous one:
+
 ```typescript
-const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
-  planet: p,
-  signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign) : null,
-  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as PlanetName | 'NorthNode', p.house),
-  dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
-  retrogradeInterpretation: (p.retrograde && !isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? (NATAL_RETROGRADE[p.name] ?? null) : null,
-}))
-```
-
-**The fix (3 lines change):**
-```typescript
-const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
-  planet: p,
-  signInterpretation: getPlanetInSignInterpretation(p.name as BodyName, p.sign),  // Remove isAsteroid guard
-  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as BodyName, p.house),
-  dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,  // Keep as is
-  retrogradeInterpretation: (p.retrograde && isAsteroid(p.name as BodyName)) ? (NATAL_RETROGRADE[p.name] ?? null) : (p.retrograde && p.name !== 'NorthNode' ? NATAL_RETROGRADE[p.name] ?? null : null),  // Invert isAsteroid check, but keep guard for classical retrograde
-}))
-```
-
-Actually, **simpler approach** (and more correct): just remove the `!isAsteroid` guard for sign interpretations and flip the logic for retrograde:
-```typescript
-const planetReadings: PlanetReading[] = chart.planets.map((p) => {
-  const isAst = isAsteroid(p.name as BodyName);
-  return {
-    planet: p,
-    signInterpretation: getPlanetInSignInterpretation(p.name as BodyName, p.sign),
-    houseInterpretation: (chart.unknownTime || isAst) ? null : getPlanetInHouseInterpretation(p.name as BodyName, p.house),
-    dignity: (!isAst && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
-    retrogradeInterpretation: (p.retrograde ? NATAL_RETROGRADE[p.name] ?? null : null),
-  };
-})
-```
-
-Wait — **critical observation**: the retrograde lookup uses `p.name` as a string key directly into `NATAL_RETROGRADE`. For asteroids, this works fine — Chiron retrograde is key `'Chiron'`, which exists. For classical planets, same. So the retrograde guard can actually be **removed entirely**:
-```typescript
-retrogradeInterpretation: p.retrograde ? (NATAL_RETROGRADE[p.name] ?? null) : null,
-```
-
-This handles both classical planets and asteroids, NorthNode is excluded because NorthNode is never retrograde and has no retrograde entry.
-
----
-
-## Data Structure and Key Naming Convention
-
-**Current approach is correct and consistent:**
-- Planet-in-sign keys: `Sun_Aries`, `Mercury_Gemini`, `Chiron_Aries` (verified: `Chiron_Aries` exists in `planetInSign.ts`)
-- Planet-in-house keys: `Sun_H1`, `Chiron_H1` (verified: `Chiron_H1` exists in `planetInHouse.ts`)
-- Retrograde keys: just `'Chiron'`, `'Ceres'`, etc. (verified: all 5 asteroid retrograde entries exist in `retrogrades.ts`)
-
-No changes needed here. The naming is already uniform.
-
----
-
-## AsteroidSection Component: Simplest Correct Architecture
-
-Looking at `ReadingDisplay.tsx`, the existing `PlanetCard` and `PlanetSection` pattern is generic enough that asteroids already render there — they just have `null` interpretations. **A dedicated `AsteroidSection` is a UI choice, not a data requirement.**
-
-**Minimal AsteroidSection implementation:**
-```typescript
-function AsteroidCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }) {
-  // Identical to PlanetCard, but with asteroid-specific theming
-  // Use amber/orange colors instead of mystic-gold
-  // Show archetype badge (already in ASTEROID_ARCHETYPES)
-  // Render signInterpretation.brief + full detail
-  // Render houseInterpretation if known-time chart
-  // Render retrogradeInterpretation if retrograde
-}
-
-export function AsteroidSection({ reading, showHouse }: { reading: FullReading; showHouse: boolean }) {
-  const asteroids = reading.planets.filter(pr => isAsteroid(pr.planet.name as BodyName));
-  if (asteroids.length === 0) return null;
-  
-  return (
-    <Section title="Asteroids" defaultOpen={false}>
-      {asteroids.map(pr => <AsteroidCard key={pr.planet.name} pr={pr} showHouse={showHouse} />)}
-    </Section>
-  );
+function scoreSnapshot(
+  snapshot: AdvanceSnapshot,
+  prev: AdvanceSnapshot | null,
+  chartData: ChartData,
+): SnapshotScore {
+  // ...
+  // Station detection: compare retrograde state to previous snapshot
+  if (prev) {
+    for (const r of snapshot.retrogrades) {
+      const prevR = prev.retrogrades.find(pr => pr.planet === r.planet)
+      if (prevR && prevR.isRetro !== r.isRetro) {
+        hasStation = true
+        stationPlanet = r.planet
+        stationDirection = r.isRetro ? 'retrograde' : 'direct'
+      }
+    }
+  }
 }
 ```
 
-**Where to place it in `ResultsPage.tsx` (line 67):**
-- After `PlanetSection` (line 67)
-- Before `AspectSection` (line 68)
+This is more correct than the single-point approach and requires no additional WASM calls.
 
-This respects the visual hierarchy: classical planets first (primary), asteroids second (secondary but meaningful), aspects third.
+**A separate correctness issue with `getRetrogradeStatus`:** The `isStationing` threshold of `Math.abs(motion) < 0.02` degrees/day is applied uniformly across all planets. Saturn's normal daily motion is about 0.033 degrees/day. Near station, it slows to near-zero. Mercury's normal motion is about 1.6 degrees/day, and it slows to near-zero before stationing. The 0.02 threshold makes sense for slow planets but is far too tight for Mercury — Mercury stations when its daily motion is approaching zero from well above 0.02, and the function may flag "Stationing" for Mercury for a much shorter window than it should. For the marker system's purposes, this doesn't matter much because we're using the consecutive-snapshot comparison method instead, but the underlying `getRetrogradeStatus` function has this latent inaccuracy.
 
 ---
 
-## Fragility Assessment: What Could Break
+## The `scoreSnapshot` Function: Exact Implementation Shape
 
-### 1. **Missing Asteroid Entry Lookup** — MINIMAL RISK
-If an asteroid is somehow in the chart but lacks a sign/house entry, the lookup returns `null` and rendering gracefully skips the interpretation. This is safe because the code already handles `null` interpretations throughout.
+The vision document's table (power > favorable > challenging > shift > neutral, with shift able to co-display) is the right priority order. Here is the concrete implementation:
 
-### 2. **Type Casting Inconsistency** — REAL ISSUE
-Current code casts `p.name` to `PlanetName | 'NorthNode'` in lines 138–141, even though `p.name` is actually `BodyName` and can be an asteroid. After the signature fix, **remove these unnecessary casts** — the type system will be honest.
-
-Current fragility:
 ```typescript
-getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign)
+export type MarkerCategory = 'power' | 'favorable' | 'challenging' | 'shift' | 'neutral'
+
+export interface SnapshotScore {
+  category: MarkerCategory
+  coShift: boolean   // true when shift co-occurs with favorable/challenging
+  intensity: number  // 0.0–1.0, used to scale dot size/glow
+  reason: string
+  shiftPlanet?: string
+  shiftDirection?: 'retrograde' | 'direct'
+}
 ```
 
-Should be:
+The `computePowerDayBanner` function at `AdvanceTab.tsx:106` already implements the power-day logic cleanly. Rather than duplicate it, refactor it: extract the detection logic into `scoreSnapshot`, and have `computePowerDayBanner` call `scoreSnapshot` and format the result into banner text. This is the right factoring — one scoring function, one formatting function. Currently, `computePowerDayBanner` mixes detection and formatting, which is why it returns a pre-formatted string rather than structured data.
+
+**On orb thresholds per period:**
+
+The vision proposes loosening orbs for weekly (angle contact to 2°, applying threshold to 3°) and monthly (angle contact to 3°). This is correct but needs to be implemented carefully. The `ADVANCE_CONFIG` already knows the period — pass it to `scoreSnapshot`:
+
 ```typescript
-getPlanetInSignInterpretation(p.name as BodyName, p.sign)
+const ORB_THRESHOLDS: Record<TransitPeriod, { angleContact: number; applyingTight: number; energyMinAspects: number }> = {
+  daily:   { angleContact: 1.0, applyingTight: 2.0, energyMinAspects: 2 },
+  weekly:  { angleContact: 2.0, applyingTight: 3.0, energyMinAspects: 3 },
+  monthly: { angleContact: 3.0, applyingTight: 4.0, energyMinAspects: 2 }, // fewer aspects, but coarser
+}
 ```
 
-Better still:
-```typescript
-getPlanetInSignInterpretation(p.name, p.sign)  // No cast needed if p.name is BodyName
+For monthly, require slow planets only (Saturn/Uranus/Neptune/Pluto) for the power category — Jupiter is already excluded from `SLOW_PLANETS_FOR_BANNER` (line 43) and should remain excluded for the power marker as well. The month-level favorable/challenging threshold should require `computeEnergyRating` score ≥ 3 (Highly Favorable) for green, or ≤ 1 (Demanding) for red — not 2 or 4. Reserve month-level markers for genuinely extreme readings.
+
+**On the energy rating function:**
+
+`computeEnergyRating` at `transits.ts:480` filters to classical aspects (excluding asteroids) and scores the top 8 by +1/-1. Its output scale is: score ≥ 3 = "Highly Favorable" (5), ≥ 1 = "Favorable" (4), 0 = "Mixed" (3), ≥ -2 = "Tense" (2), else = "Demanding" (1). The vision maps favorable ≥ 3 and challenging ≤ 1. That's scores of 5 (energy rating) for favorable and 1 for challenging. In actual usage, `computeEnergyRating` returns a `.score` field from 1–5. So "favorable marker" = `energyRating.score >= 4` AND 2+ tight applying harmonious, "challenging marker" = `energyRating.score <= 2` AND 2+ tight applying challenging. The vision's "≥ 3 AND 2+ applying harmonious" should read as: energy rating score (the 1-5 integer) ≥ 4, not the raw harmonic/challenging aspect count differential ≥ 3. Be explicit about which score scale is being compared.
+
+---
+
+## The Native Range Input Overlay: The Exact Layout Trap
+
+The slider HTML at `AdvanceTab.tsx:265–276` is a plain `<input type="range">` inside a `<div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-5 mb-6">`. The vision's proposed wrapper div is correct, but there's a layout detail that will burn implementation time if not understood upfront.
+
+**The problem:** The native `<input type="range">` in WebKit/Blink has a clickable area that extends a few pixels beyond the visible track — the hit area includes the thumb region and some padding. A `<div>` overlaid with `pointer-events-none` won't intercept clicks, but the native input's `<input>` element itself extends to fill its CSS width. The marker dots need to be positioned relative to the track width, not the input element's full width, because the track is inset from the input edges.
+
+On Webkit, the slider track starts and ends at the thumb's center, which is inset by `thumb_width/2` from the input edges. With a 20px thumb (`[&::-webkit-slider-thumb]:w-5`), the track effectively starts at `10px` from the left and ends at `10px` from the right. A marker at `left: 0%` or `left: 100%` will be offset.
+
+**The fix:** Use CSS padding on the marker container div to match the thumb inset:
+
+```jsx
+<div className="relative w-full">
+  <input type="range" ... />
+  <div 
+    className="absolute pointer-events-none"
+    style={{ top: '50%', transform: 'translateY(-50%)', left: '10px', right: '10px' }}
+  >
+    {markers.map(m => (
+      <MarkerDot
+        key={m.offset}
+        marker={m}
+        max={config.max}
+        onClick={() => setOffset(m.offset)}
+      />
+    ))}
+  </div>
+</div>
 ```
 
-### 3. **The `isAsteroid()` Guard Duplication** — REAL FRAGILITY
-Every call to `getPlanetInSignInterpretation` is guarded by `!isAsteroid()`. This creates **two places that must stay in sync**:
-- The caller's guard (`!isAsteroid`)
-- The function's acceptance of the input
+And the `MarkerDot` positions at `left: (m.offset / config.max) * 100%` relative to this inset container — not relative to the full input width. This maps correctly to where the thumb would be at that offset.
 
-If someone later changes the guard logic but forgets to change the function, or vice versa, silent data loss occurs. The fix: **remove the guard and let the function handle both types equally**. This is the "defense in depth" principle: the function should work correctly regardless of input type, not rely on the caller to pre-filter.
-
-### 4. **PlanetReading Interface Typing** — ACCEPTABLE
-The `PlanetReading` interface's `signInterpretation: InterpretationEntry | null` does not distinguish between "classical planet with no entry found" vs. "asteroid, entry not provided yet". In practice, the data is now complete, so this is no longer a problem. But if new asteroids are added later without interpretation data, this ambiguity could cause confusion. **Acceptable for now**, but document the assumption.
-
-### 5. **No Retrograde Filtering for Asteroids in Analysis Functions** — CORRECT
-Lines 201–202 in `assembleReading()` filter `chart.planets` to get retrograde planets, which automatically includes asteroids. This is correct — the retrograde summary should mention asteroids if they are retrograde. The code doesn't accidentally exclude them.
+**Click handlers on marker dots:** The marker container has `pointer-events-none`, which means individual child elements can override this with `pointer-events-auto`. The dots themselves should have `pointer-events-auto` and an `onClick` that calls `setOffset(m.offset)`. The native input still receives pointer events normally because the `pointer-events-none` is on the container, not on the input.
 
 ---
 
-## Retrograde Interpretation Lookup: Second-Order Issue
+## The Overview Strip: Implementation Caution
 
-The current code at line 141 uses `NATAL_RETROGRADE[p.name]`, which works because `p.name` is the string key. For asteroids, this is safe because all 5 have entries (`Chiron`, `Ceres`, etc.). The `?? null` fallback handles any missing key gracefully.
+The vision proposes an overview strip above the slider — a `w-full h-6` horizontal bar with colored dots at percentage positions. This is the right concept but has one practical problem: **dot density at the extremes**.
 
-**However**, the guard `!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode'` is overly cautious. It should be:
-```typescript
-retrogradeInterpretation: p.retrograde ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+For 53 weekly snapshots in a `w-full` container on mobile (320–375px wide), each step represents about 6px of horizontal space. If two consecutive weeks are both marked (e.g., a favorable week followed by a power week), their dots are 6px apart on mobile — they will visually overlap. You need a collision-avoidance strategy.
+
+Simple approach: for each marked step, check if `|marker.offset - prevRenderedMarker.offset| < minGapSteps` where `minGapSteps = Math.ceil(config.max / containerWidthPx * minGapPx)`. Skip rendering the lower-priority marker if it would overlap the higher-priority one. Priority order: power > shift > favorable > challenging.
+
+For daily (30 steps in 320px = ~10px/step), there's no collision problem. For weekly (52 steps in 320px ≈ 6px/step), light overlap is possible. For monthly (36 steps in 320px ≈ 9px/step), mostly fine. The mobile case for weekly is the worst.
+
+An alternative that sidesteps this: render the overview strip as a heat map using a `<canvas>` or an SVG `rect` per step rather than individual dots. Each step is a colored column, 1–2px wide, and the colors blend into each other. No collision, no overlap, and the visual density itself communicates the distribution better than discrete dots. For 52 weeks × 2px per step = 104px — this fits in any mobile viewport. However, a canvas adds complexity. The simpler approach (just filter overlapping dots) is correct for v1.
+
+---
+
+## Animation: What Not to Do
+
+The codebase uses Tailwind's animation classes. The vision warns against `animate-bounce` and `animate-ping` — that's right, those look like notification badges and are too fast. But `animate-pulse` as-is also has a problem: Tailwind's default `animate-pulse` pulses opacity from 1 to 0.5 on a 2-second cycle. On a dark background with a small dot (6–8px), this makes the dot mostly invisible for half its cycle. That's wrong.
+
+The right animation for "mystical breathing" is a glow/shadow pulse that keeps the dot fully opaque but breathes the shadow radius:
+
+```css
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 4px 1px currentColor; opacity: 0.85; }
+  50%       { box-shadow: 0 0 8px 3px currentColor; opacity: 1.0; }
+}
 ```
 
-This is simpler, more correct, and includes asteroids. NorthNode is still excluded because it has no retrograde entry (and NorthNode is never retrograde).
+In Tailwind config, add this as a custom animation or use the `style` prop inline for the duration. The `animation` CSS property on the dot element: `animation: glow-pulse 3s ease-in-out infinite` for power/gold, `2s` for challenging/red, `4s` for shift/blue, and no animation for favorable/green (favorable is stable, not attention-seeking).
+
+**The practical issue with CSS custom animations in Tailwind:** Adding custom keyframes requires `tailwind.config.js` changes (`theme.extend.keyframes` and `theme.extend.animation`). This is standard practice but requires coordination with whoever owns the Tailwind config. Alternatively, use `style={{ animation: '...' }}` inline for the initial implementation — it avoids the config change entirely. Inline animation strings are fine for one-off elements.
 
 ---
 
-## Summary: What Needs to Change
+## Tooltip Architecture
 
-### Must Do (Unblocks Data)
-1. **Change function signatures** (2 lines in `index.ts`):
-   - `getPlanetInSignInterpretation(planet: BodyName, ...)` 
-   - `getPlanetInHouseInterpretation(planet: BodyName, ...)`
+The vision mentions a hover tooltip showing date, category label, and reason. There are two implementation approaches:
 
-2. **Fix `assembleReading()`** (3–4 lines in `index.ts`, lines 136–141):
-   - Remove `!isAsteroid` guard from sign interpretation lookup
-   - Simplify retrograde interpretation logic to include asteroids
-   - Remove unnecessary type casts
+**Approach 1: CSS `:hover` tooltip.** The `MarkerDot` renders a sibling `<div>` that's `hidden group-hover:block` using Tailwind's group modifier. No React state needed. Limitation: the tooltip position is relative to the marker dot, which may overflow the slider container at the far left or right edges.
 
-3. **Wire up tooltip** (2 lines in `ChartWheel.tsx`, lines 71–74):
-   - Remove `!isAsteroidBody` guards from sign/house/retrograde lookups in `PlanetTooltip`
+**Approach 2: React state tooltip.** A `hoveredMarker` state in `AdvanceTab`, set on `onMouseEnter`/`onFocus` of each dot, cleared on `onMouseLeave`/`onBlur`. The tooltip renders once, positioned absolutely relative to the slider container. Cleaner overflow behavior.
 
-### Should Do (Polish)
-4. **Create `AsteroidSection` component** in `ReadingDisplay.tsx`:
-   - Filter `reading.planets` for asteroids
-   - Render with amber theming and archetype badges
-   - Same card structure as `PlanetCard`
+Approach 2 is right for this component — the tooltip is styled content, not a plain `title` attribute, and you need position clamping to avoid overflow at edges. One state variable is not expensive. The `hoveredMarker` state does not trigger `preCalculateSnapshots` to re-run (it only triggers a re-render of the tooltip div), so there's no performance concern.
 
-5. **Add to `ResultsPage.tsx`** (1 line):
-   - Insert `<AsteroidSection reading={reading} showHouse={!chartData.unknownTime} />` after `PlanetSection`
+**Don't show the tooltip when the slider thumb is at that offset.** The current date display already shows `formatDate(snapshot.date)` and the banner already shows the power day text. Showing both simultaneously creates redundancy. The tooltip is for off-position markers. When `offset === marker.offset`, suppress the tooltip and rely on the existing UI to communicate that position's meaning.
 
 ---
 
-## Code Quality Notes
+## `AdvanceSnapshot` Type Extension
 
-### Strengths
-- The data layer is complete and high-quality. The asteroid interpretation text (60 sign entries, 60 house entries, 5 retrograde entries) is substantive and specific.
-- The lookup functions are simple string-based maps — fast and reliable.
-- The `isAsteroid()` type guard is well-placed and used consistently throughout.
-- The existing `Section` and `PlanetCard` components are generic enough to handle both classical planets and asteroids.
+The current `AdvanceSnapshot` interface at `AdvanceTab.tsx:17`:
 
-### Weaknesses
-- **Over-guarding**: The `!isAsteroid` check is duplicated at call sites instead of being handled inside the functions. This violates the DRY principle and creates fragility.
-- **Type casting instead of honest types**: Code casts `p.name as PlanetName | 'NorthNode'` when `p.name` is actually `BodyName`. This hides the truth from the type system.
-- **No unified retrograde lookup**: Retrograde logic is scattered across multiple guards instead of being consolidated in one place.
+```typescript
+interface AdvanceSnapshot {
+  offset: number
+  date: Date
+  dateStr: string
+  transitPlanets: TransitPosition[]
+  housedTransitPlanets: TransitPosition[]
+  transitAspects: TransitAspect[]
+  retrogrades: { planet: PlanetName; isRetro: boolean; status: string }[]
+}
+```
 
-### Recommendations
-- After unblocking asteroid interpretations, audit the codebase for similar patterns where type safety is weakened by unnecessary guards or casts.
-- Consider adding a "body interpretation" type (union of all interpretation types) to consolidate lookups and reduce guard duplication in the future.
+The vision proposes adding a pre-computed `score` field. I agree this is the right approach — scoring during `preCalculateSnapshots` instead of during the `useMemo([snapshots])` pass collapses the architecture from two passes to one. But it couples the scoring logic to the snapshot computation loop, making `preCalculateSnapshots` responsible for both data collection and analysis.
+
+The trade-off: slightly more coupled code vs. a simpler data flow. I'd choose the coupled approach — add `score: SnapshotScore` to the interface and compute it in the `preCalculateSnapshots` loop. The benefit: the marker array derivation (`useMemo`) becomes a single filter over `snapshots` rather than a map+filter. The scoring is done when the data is fresh, the retrogrades are right there, and you avoid a second pass over 53 elements.
+
+The one complication is station detection requires looking at the previous snapshot. In the loop, `snapshots[i-1]` is available — pass it to `scoreSnapshot`:
+
+```typescript
+for (let i = 0; i <= config.max; i++) {
+  // ... compute transitPlanets, transitAspects, retrogrades, housedTransitPlanets ...
+  const prev = snapshots[i - 1] ?? null
+  const score = scoreSnapshot({ offset: i, date: targetDate, transitAspects, retrogrades }, prev, chartData, period)
+  snapshots.push({ offset: i, date: targetDate, dateStr, transitPlanets, housedTransitPlanets, transitAspects, retrogrades, score })
+}
+```
+
+This is clean. The `score` field is computed once, stored, and reused by both the marker layer and the power day banner.
 
 ---
 
-## Risk Assessment
+## `computePowerDayBanner` Refactor
 
-**Implementation Risk: Very Low**
-The changes are surgical and localized. The data already exists. The function signatures are being widened, not changed. Type safety improves.
+Currently `computePowerDayBanner` at `AdvanceTab.tsx:106` is ~57 lines that detect a condition and format a string. After adding `scoreSnapshot`, it should become a 5-line function:
 
-**Regression Risk: Very Low**
-All existing classical planet and NorthNode lookups continue to work unchanged. The asteroid path is currently returning `null`; any non-null value is an improvement.
+```typescript
+function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
+  if (snapshot.offset === 0) return null
+  if (snapshot.score.category === 'neutral') return null
+  return formatScoreAsBannerText(snapshot.score) // new formatting function
+}
+```
 
-**Data Completeness Risk: Very Low**
-All 60 asteroid sign entries exist and were verified by grep. All 60 house entries exist. All 5 retrograde entries exist.
+The existing detection logic inside `computePowerDayBanner` (the `detectAngleContact` call, the SLOW_PLANETS loop, the `tightApplying.length >= 3` check) moves into `scoreSnapshot`. The text-formatting logic (`ASPECT_VERB_BANNER`, `ANGLE_DOMAIN`, `spellCount`) stays as formatting helpers called from `formatScoreAsBannerText`. The detection and presentation concerns are now separate.
+
+This means `computePowerDayBanner` no longer needs `chartData` as a parameter — the chart-specific context was used for detection, which is now in `scoreSnapshot`. The banner function only needs the pre-scored snapshot. That's a cleaner interface.
 
 ---
 
-## Conclusion
+## One Thing the Vision Gets Wrong
 
-The asteroid interpretation system is **architecturally sound but administratively blocked**. The data layer is complete and correct. The minimum viable fix requires:
-1. Two type signature changes (5 minutes)
-2. Simplification of `assembleReading()` retrograde logic (5 minutes)
-3. Removal of guards from `PlanetTooltip` (5 minutes)
-4. Creation and placement of `AsteroidSection` component (30 minutes)
+The vision says "The `shift` category is orthogonal and should co-display with favorable or challenging if both conditions are met (a stacked or dual-dot treatment rather than suppression)."
 
-The entire feature can be unblocked and shipped in under one hour of focused work. The code quality will improve in the process — fewer unnecessary guards, more honest types, clearer intent.
+This is correct in principle but I'd push back on implementing dual-dot in the initial sprint. A "stacked or dual-dot treatment" requires:
+- Determining the vertical or horizontal offset between the two dots
+- Ensuring neither dot is cut off by the slider container
+- Defining hover behavior for a dual-dot position (which tooltip shows?)
+- Testing on mobile where dots are already small
+
+The simpler implementation: use a single dot with a mixed color indicator. If the category is `favorable` with `coShift = true`, render a blue border ring around the green dot (or a blue dot with a small shift indicator). This conveys both signals with one DOM element and avoids the layout complexity. Call it "category with modifier" rather than "dual dot." The `SnapshotScore` type already has `coShift: boolean` and `shiftPlanet`/`shiftDirection` fields — the data model is ready for this, the rendering just uses a ring instead of a second dot.
+
+---
+
+## Implementation Order
+
+**Task 1 (foundation):** Refactor `computePowerDayBanner` into `scoreSnapshot` + `formatScoreAsBannerText`. Add `score: SnapshotScore` to `AdvanceSnapshot`. No UI changes — just restructure the scoring logic. Validate that the existing power day banner still renders correctly (regression check).
+
+**Task 2 (marker layer):** Add the marker overlay to the slider wrapper. Wire `markers = useMemo(...)` over `snapshots`. Render static colored dots with no animation. Verify pointer events don't interfere with slider dragging. Add click-to-jump on marker dots.
+
+**Task 3 (overview strip):** Add the horizontal strip above the slider. Wire dot positions. Add click-to-jump. Add the "Notable moments" label.
+
+**Task 4 (polish):** Add animations to marker dots. Add tooltip system. Calibrate thresholds per period. Verify the visual system (color, shape, opacity) is internally consistent.
+
+Tasks 1 and 2 are the core and should ship together. Tasks 3 and 4 are additive value on top of a working marker system.
+
+---
+
+## Key Files and Line Numbers for Implementation
+
+- **Score computation goes here:** `AdvanceTab.tsx:167` — the `preCalculateSnapshots` function. Add `scoreSnapshot` call at the end of each loop iteration.
+- **Score type comes from here:** New `scoreSnapshot` function lives at the top of `AdvanceTab.tsx`, after line 163 (current bottom of the banner section).
+- **Detection primitives reuse:** `AdvanceTab.tsx:43` (`SLOW_PLANETS_FOR_BANNER`), `AdvanceTab.tsx:82` (`detectAngleContact`), `transits.ts:480` (`computeEnergyRating`).
+- **Slider HTML to wrap:** `AdvanceTab.tsx:265–276`.
+- **Overview strip inserts before slider container:** `AdvanceTab.tsx:259` (the `<div className="bg-mystic-surface/50 ...">` that wraps the slider section).
+- **Marker layer sits inside the slider wrapper:** New `<div>` sibling of the `<input>` at `AdvanceTab.tsx:265`.
+- **Power day banner refactors:** `AdvanceTab.tsx:106–163` (entire `computePowerDayBanner` function) — retain its structure, gut its body, have it delegate to `scoreSnapshot`.
+- **Station detection requires consecutive snapshot comparison** — not a new primitive, just access to `snapshots[i-1]` in the loop.
+- **`computeEnergyRating` (`transits.ts:480`) is the right primitive for favorable/challenging scoring** — do not replicate its logic.
+- **Do not call `buildTransitTimeline` from `AdvanceTab`** — that function's `findAspectPerfection` binary-search approach is expensive and redundant given that `preCalculateSnapshots` already has the aspect data.

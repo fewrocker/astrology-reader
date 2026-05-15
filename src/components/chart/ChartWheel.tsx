@@ -18,6 +18,7 @@ interface ChartWheelProps {
   synastryPlanets?: PlanetPosition[]
   synastryAspects?: SynastryAspect[]
   synastryViewMode?: 'charts' | 'connections'
+  synastryPersonFilter?: 'both' | 'person1' | 'person2'
 }
 
 const SIZE = 700
@@ -383,7 +384,7 @@ function SynastryAspectTooltip({ aspect }: { aspect: SynastryAspect }) {
   )
 }
 
-export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects, synastryPlanets, synastryAspects, synastryViewMode }: ChartWheelProps) {
+export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects, synastryPlanets, synastryAspects, synastryViewMode, synastryPersonFilter = 'both' }: ChartWheelProps) {
   const [hover, setHover] = useState<HoverState>(null)
   const [tapped, setTapped] = useState(false)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -814,7 +815,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         </g>
 
         {/* Planets (classical — asteroids rendered separately below) */}
-        {chartData.planets.filter(p => !isAsteroid(p.name as BodyName)).map((planet, idx) => {
+        {synastryPersonFilter !== 'person2' && chartData.planets.filter(p => !isAsteroid(p.name as BodyName)).map((planet, idx) => {
           const pos = polarToXY(CX, CY, PLANET_R, offset(planet.longitude))
           const isHovered = hoveredPlanet === planet.name
           const glyph = PLANET_GLYPHS[planet.name as PlanetName | 'NorthNode'] ?? '?'
@@ -840,7 +841,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 r={isHovered ? 20 : (isSun ? 22 : isMoon ? 18 : 14)}
                 fill={isSun ? '#e8a820' : isMoon ? '#b8c8e8' : '#9080c0'}
                 filter={glowFilter}
-                opacity={isHovered ? 0.7 : (synastryViewMode === 'connections' ? 0.10 : (isSun ? 0.55 : isMoon ? 0.45 : 0.2))}
+                opacity={isHovered ? 0.7 : (synastryViewMode === 'connections' ? 0.15 : (isSynastryMode ? 0.22 : (isSun ? 0.55 : isMoon ? 0.45 : 0.2)))}
                 className={glowClass}
                 style={{
                   animationDelay: isSun ? '0s' : isMoon ? '3s' : `${idx * 0.8}s`,
@@ -884,7 +885,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         })}
 
         {/* Asteroids — inner amber ring at ASTEROID_R with de-collision */}
-        {(() => {
+        {synastryPersonFilter !== 'person2' && (() => {
           const asteroidPlanets = chartData.planets.filter(p => isAsteroid(p.name as BodyName))
           const displayAngles = asteroidPlanets.map(p => offset(p.longitude))
           for (let i = 0; i < displayAngles.length; i++) {
@@ -1156,7 +1157,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         })}
 
         {/* Synastry planets (outer ring) — Person 2's planets in lilac-purple */}
-        {isSynastryMode && synastryPlanets!.map((sp, idx) => {
+        {isSynastryMode && synastryPersonFilter !== 'person1' && synastryPlanets!.map((sp, idx) => {
           const pos = polarToXY(CX, CY, SYNASTRY_PLANET_R, offset(sp.longitude))
           const isHovered = hoveredSynastry === sp.name
           const glyph = getBodyGlyph(sp.name as BodyName)
@@ -1177,7 +1178,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 r={isHovered ? 16 : 14}
                 fill={SYNASTRY_COLOR}
                 filter="url(#synastryGlow)"
-                opacity={isHovered ? 0.6 : (synastryViewMode === 'connections' ? 0.10 : 0.20)}
+                opacity={isHovered ? 0.6 : (synastryViewMode === 'connections' ? 0.15 : 0.22)}
                 style={{ transition: 'r 200ms ease, opacity 200ms ease' }}
               />
               {/* Circle */}

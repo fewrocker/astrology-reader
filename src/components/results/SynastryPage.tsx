@@ -373,6 +373,7 @@ export default function SynastryPage() {
   const [discussOpen, setDiscussOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [viewMode, setViewMode] = useState<'charts' | 'connections'>('charts')
+  const [personFilter, setPersonFilter] = useState<'both' | 'person1' | 'person2'>('both')
 
   useEffect(() => { track('reading_viewed', { reading_type: 'synastry' }) }, [])
 
@@ -413,16 +414,22 @@ export default function SynastryPage() {
       {/* Bi-wheel — Person 1 inner, Person 2 outer */}
       <div className="flex flex-col items-center mb-8">
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center text-xs text-center mb-3">
-          <span className="text-mystic-muted">
+          <button
+            onClick={() => setPersonFilter(f => f === 'person1' ? 'both' : 'person1')}
+            className={`text-mystic-muted hover:text-mystic-text transition-opacity ${personFilter === 'person2' ? 'opacity-30' : ''}`}
+          >
             <span style={{ color: '#c9a84c' }} className="mr-1">●</span>
-            <span className="font-medium text-mystic-text/80">{label1} (inner)</span>
+            <span className={`font-medium ${personFilter === 'person1' ? 'text-[#c9a84c]' : 'text-mystic-text/80'}`}>{label1} (inner)</span>
             {' · '}{birthData.date}
-          </span>
-          <span className="text-mystic-muted">
+          </button>
+          <button
+            onClick={() => setPersonFilter(f => f === 'person2' ? 'both' : 'person2')}
+            className={`text-mystic-muted hover:text-mystic-text transition-opacity ${personFilter === 'person1' ? 'opacity-30' : ''}`}
+          >
             <span style={{ color: '#c084fc' }} className="mr-1">●</span>
-            <span className="font-medium text-mystic-text/80">{label2} (outer)</span>
+            <span className={`font-medium ${personFilter === 'person2' ? 'text-[#c084fc]' : 'text-mystic-text/80'}`}>{label2} (outer)</span>
             {' · '}{partnerBirthData.date}
-          </span>
+          </button>
         </div>
         <div className="flex justify-center mb-3">
           <div className="inline-flex rounded-full border border-mystic-gold/20 bg-mystic-gold/5 p-0.5 gap-0.5">
@@ -455,6 +462,7 @@ export default function SynastryPage() {
             synastryPlanets={partnerChartData.planets}
             synastryAspects={synastryData.synastryAspects}
             synastryViewMode={viewMode}
+            synastryPersonFilter={personFilter}
           />
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-center justify-center mt-2 text-mystic-muted">
