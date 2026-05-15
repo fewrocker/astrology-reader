@@ -222,10 +222,13 @@ export function loadCachedSynastryResults(): CachedSynastryResults | null {
     const raw = localStorage.getItem(SYNASTRY_RESULTS_CACHE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
+    // Version guard: discard stale cache after schema change
     if (!parsed || parsed._v !== SYNASTRY_CACHE_VERSION) {
       localStorage.removeItem(SYNASTRY_RESULTS_CACHE_KEY)
       return null
     }
+    // Structural guard: discard old cache that uses deprecated CompatibilityScore shape
+    if (!parsed.synastryData?.coupleProfile) return null
     return parsed as CachedSynastryResults
   } catch {
     return null

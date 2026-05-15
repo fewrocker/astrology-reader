@@ -206,11 +206,13 @@ function buildSynastryContext(
     ctx += `- Composite ${p.name}: ${p.degree}°${p.minute}' ${p.sign}\n`
   }
 
-  ctx += `\n### Compatibility\n`
-  ctx += `Elements: ${synastryData.compatibility.elementCompatibility}\n`
-  ctx += `Modalities: ${synastryData.compatibility.modalityCompatibility}\n`
-  ctx += `Harmonious: ${synastryData.compatibility.harmoniousCount}, Challenging: ${synastryData.compatibility.challengingCount}\n`
-  ctx += `Key themes: ${synastryData.compatibility.keyThemes.join('; ')}\n`
+  ctx += `\n### Couple Profile\n`
+  ctx += `Elements: ${synastryData.elementCompatibility}\n`
+  ctx += `Modalities: ${synastryData.modalityCompatibility}\n`
+  ctx += `Key themes: ${synastryData.keyThemes.join('; ')}\n`
+  ctx += `Intensity: ${synastryData.coupleProfile.intensity.label} (${synastryData.coupleProfile.intensity.leftPole} ←→ ${synastryData.coupleProfile.intensity.rightPole})\n`
+  ctx += `Emotional Flow: ${synastryData.coupleProfile.emotionalFlow.label}\n`
+  ctx += `Communication: ${synastryData.coupleProfile.communicationStyle.label}\n`
 
   if (synastryInterpretation) {
     ctx += `\n### Previous Synastry Interpretation\n${synastryInterpretation}\n`
@@ -263,11 +265,13 @@ function buildSynastryTransitContext(
     ctx += `\n### Transit Interpretation for This Period\n${transitInterpretation}\n`
   }
 
-  ctx += `\n### Compatibility Summary\n`
-  ctx += `Elements: ${synastryData.compatibility.elementCompatibility}\n`
-  ctx += `Modalities: ${synastryData.compatibility.modalityCompatibility}\n`
-  ctx += `Harmonious: ${synastryData.compatibility.harmoniousCount}, Challenging: ${synastryData.compatibility.challengingCount}\n`
-  ctx += `Key themes: ${synastryData.compatibility.keyThemes.join('; ')}\n`
+  ctx += `\n### Couple Profile\n`
+  ctx += `Elements: ${synastryData.elementCompatibility}\n`
+  ctx += `Modalities: ${synastryData.modalityCompatibility}\n`
+  ctx += `Key themes: ${synastryData.keyThemes.join('; ')}\n`
+  ctx += `Intensity: ${synastryData.coupleProfile.intensity.label} (${synastryData.coupleProfile.intensity.leftPole} ←→ ${synastryData.coupleProfile.intensity.rightPole})\n`
+  ctx += `Emotional Flow: ${synastryData.coupleProfile.emotionalFlow.label}\n`
+  ctx += `Communication: ${synastryData.coupleProfile.communicationStyle.label}\n`
 
   return ctx
 }
