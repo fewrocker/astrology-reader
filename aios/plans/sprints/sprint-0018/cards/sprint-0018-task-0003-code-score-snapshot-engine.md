@@ -280,3 +280,32 @@ The current structure has a single function that knows too much: it knows how to
 The proposed structure has clear ownership: `scoreSnapshot` knows the astrological facts, `formatScoreAsBannerText` knows English, `AdvanceSnapshot.score` stores the result, and every consumer reads from the stored result. Changing a scoring threshold means changing one constant table. Changing banner wording means changing one formatting function. Adding a new marker category means adding a branch to `scoreSnapshot` and a color to the marker renderer — none of these changes touch each other.
 
 The `computePowerDayBanner` function's secondary trigger (3+ tight applying aspects → "notable concentration") also gains category specificity it currently lacks: a cluster of harmonious aspects becomes `favorable`; a cluster of challenging aspects becomes `challenging`. The banner wording changes accordingly, which is a correctness improvement over the current binary treatment.
+
+---
+
+## Outcome Notes
+
+**Completed:** 2026-05-15  
+**Branch:** sprint-0018-task-0003-code-score-snapshot-engine  
+**Commit:** 6ec7aa8
+
+### What was implemented
+- `MarkerCategory` and `SnapshotScore` types added and exported above `AdvanceSnapshot`
+- `score: SnapshotScore` field added to `AdvanceSnapshot` interface
+- `ORB_THRESHOLDS` constant added with period-sensitive thresholds (daily/weekly/monthly)
+- `scoreSnapshot()` function implemented with all 5 categories in correct priority order (power > favorable > challenging > shift > neutral); station detection uses prev-snapshot retrograde comparison per spec
+- `formatScoreAsBannerText()` formatting helper added
+- `computePowerDayBanner()` reduced to 4-line formatter that delegates to `snapshot.score`; no longer takes `chartData`
+- `preCalculateSnapshots()` loop scores each snapshot once at push time; zero additional WASM calls
+- `useMemo` call site simplified — `chartData` dependency removed
+- `spellCount` removed (replaced by structured `reason` field in `SnapshotScore`)
+
+### Deviations from spec
+- `triggerAspect` stored as `string` (AspectType), not the nested object shape from an early draft. The final `SnapshotScore` interface in the card specifies `triggerAspect?: string` — implementation is consistent with the final spec.
+- Old guard `if (snapshot.transitAspects.length === 0) return null` in `computePowerDayBanner` removed — this case is handled implicitly by `scoreSnapshot` returning neutral when no aspects trigger a category.
+
+### Build
+TypeScript strict check: clean. `npm run build`: clean (no TS errors, vite bundle complete).
+
+### Code review
+Passed in first review pass — no blocking issues. Review file: `sprint-0018-task-0003-code-score-snapshot-engine-review.md`

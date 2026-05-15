@@ -271,3 +271,44 @@ This proposal does not modify how the overview strip or the marker dots on the s
 4. **What orb threshold governs "the slider is at a marked position" for the halo?** Spec 8 defines this as an exact match: `markers.some(m => m.offset === offset)`. This is correct because offsets are discrete integers. However, if a future version of the slider introduces half-step offsets or floating-point positions, the exact-equality check would fail silently. This is not a current concern but should be noted for future maintainers.
 
 5. **Should the aspect list header suffix appear when `transitAspects.length === 0` but a marker still exists at the offset?** A scored snapshot with zero transit aspects is unlikely (a snapshot with no aspects is typically scored neutral by the `scoreSnapshot` guard), but if it occurs, the aspect list section is not rendered at all (line 351: `{snapshot && snapshot.transitAspects.length > 0 && (...)`). The header suffix is therefore moot in that case — but this edge case should be confirmed during implementation.
+
+---
+
+## Implementation Outcome
+
+**Completed:** 2026-05-15
+**Branch:** sprint-0018-task-0005-feat-advance-next-notable-navigation
+**Commit:** feat(advance): prev/next navigation, thumb halo, aspect list category label
+
+### What was built
+
+The task included implementing the marker scoring foundation (since tasks ran in parallel with task-0003/0004) as well as the three navigation/context enhancements:
+
+**Foundation**
+- `MarkerCategory` type and `SnapshotScore` interface added
+- `score: SnapshotScore` field added to `AdvanceSnapshot`
+- `scoreSnapshot()` function: detects shift (retrograde station), power (slow planet angle contact), favorable/challenging (tight applying aspect counts and overall balance)
+- `preCalculateSnapshots()` refactored to build raw snapshots then score in a second pass with access to the previous snapshot
+- `markers` useMemo filters non-neutral snapshots
+
+**Prev/Next navigation**
+- `<- Prev` and `-> Next` buttons rendered below slider when `markers.length > 0`
+- Disabled (with `disabled` + `aria-disabled`) when no marker exists in that direction
+- Touch targets: `min-h-[44px] px-4` — satisfies WCAG 44px minimum
+- Click calls `setOffset()` directly — no animation, instant jump
+- `aria-label` attributes: "Jump to previous notable moment" / "Jump to next notable moment"
+
+**Thumb halo**
+- Global CSS rule in `src/index.css`: `input[type='range'].has-thumb-halo::-webkit-slider-thumb` and `:-moz-range-thumb` consuming `var(--thumb-halo)`
+- `has-thumb-halo` class applied to `<input>` when `currentMarker` is non-null
+- `--thumb-halo` CSS variable set inline as `React.CSSProperties`
+- Colors: power=amber, favorable=emerald, challenging=rose, shift=blue (per spec 9)
+
+**Aspect list header echo**
+- `CATEGORY_LABELS` map covers all four non-neutral categories
+- Suffix rendered inline within same `font-heading text-lg text-mystic-gold` span
+- Only appears when `currentMarker` is non-null
+
+### Open question resolutions (implementation notes)
+- Q3 (CSS custom property fallback): single global rule scoped to `.has-thumb-halo` class — no other range inputs in the app, so no conflict risk
+- Q5 (zero-aspect snapshot): confirmed moot — `scoreSnapshot` returns neutral when `transitAspects.length === 0`, so such snapshots are excluded from `markers`

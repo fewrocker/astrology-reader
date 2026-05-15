@@ -109,3 +109,19 @@ The `STATION_THRESHOLD` map should be declared at module scope near `BODY_MAP` (
 **Downstream effect on Sprint 0018 station-detection:** Carmack's analysis (station detection section) also recommends that `scoreSnapshot` use consecutive-snapshot retrograde-state comparison (`snapshots[i-1].retrogrades[planet].isRetro !== snapshots[i].retrogrades[planet].isRetro`) to detect a crossing rather than reading `status === 'Stationing'` directly. Both approaches benefit from this fix: the per-planet threshold makes the `isStationing` field accurate for single-point queries (such as the existing Reading tab retrograde section), while the consecutive-snapshot comparison is the correct method for the Advance tab's shift-marker detection. The two approaches are complementary, not competing. This fix must land first because `snapshot.retrogrades[*].isRetro` must be correct for the crossing-detection to produce a meaningful diff.
 
 **Files changed:** `/projects/astrology-reader/src/engine/transits.ts` — lines 227–246 (add `STATION_THRESHOLD` map at module scope, replace literal `0.02` with `STATION_THRESHOLD[name] ?? 0.020` in `getRetrogradeStatus`). No other files require changes; all consumers of `getRetrogradeStatus` receive the corrected `status` string automatically.
+
+## Outcome
+
+**Status:** completed
+**Completed:** 2026-05-15
+**Commit:** d501bd8 — "fix(transits): per-planet station velocity thresholds in getRetrogradeStatus"
+**Branch:** sprint-0018-task-0002-issue-advance-station-threshold-overfire
+
+**What was done:**
+- Added `STATION_THRESHOLD: Partial<Record<PlanetName, number>>` at module scope in `src/engine/transits.ts`, immediately after `BODY_MAP`, with per-planet values calibrated to actual station velocities (Mercury 0.020, Venus 0.050, Mars 0.030, Jupiter 0.015, Saturn 0.010, Uranus 0.008, Neptune 0.006, Pluto 0.005).
+- Replaced `Math.abs(motion) < 0.02` with `Math.abs(motion) < (STATION_THRESHOLD[name] ?? 0.020)` in `getRetrogradeStatus`.
+- TypeScript type check (`tsc --noEmit`) passed clean.
+
+**Code review:** Approved — see sprint-0018-task-0002-issue-advance-station-threshold-overfire-review.md. All threshold values confirmed correct against card reference table. No blocking issues found.
+
+**Key fix:** Saturn was being classified as "Stationing retrograde" for the bulk of its 4.5-month retrograde arc because its normal retrograde motion (0.02–0.03°/day) matched or exceeded the old single threshold (0.02). The new Saturn threshold (0.010) restricts the "Stationing" label to the brief window when Saturn is actually near its station point.

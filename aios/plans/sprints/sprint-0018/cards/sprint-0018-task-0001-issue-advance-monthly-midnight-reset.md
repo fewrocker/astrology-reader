@@ -82,3 +82,20 @@ No other files require changes. The fix has zero effect on daily and weekly snap
 ### Verification
 
 After the fix, `snapshot.date.getHours()` should return `12` for every monthly snapshot, including offset 0 (which continues to use `baseDate` directly and is already correct). Moon position discrepancy against reference ephemeris should fall below 0.5° for all monthly advance snapshots.
+
+---
+
+## Outcome
+
+**Status:** completed
+**Completed:** 2026-05-15
+**Branch:** sprint-0018-task-0001-issue-advance-monthly-midnight-reset
+**Commit:** `fix(advance): monthly snapshots use noon time — new Date(y, m, d, 12, 0, 0)`
+
+### What was done
+
+Applied the one-line fix to `src/components/reading/AdvanceTab.tsx` line 180, adding `12, 0, 0` as the hour, minute, and second arguments to the monthly branch `Date` constructor in `preCalculateSnapshots`. TypeScript type check (`tsc --noEmit`) passed with zero errors. Code review found no blocking issues.
+
+### Files changed
+
+- `src/components/reading/AdvanceTab.tsx` — 1 line changed (monthly Date constructor, `preCalculateSnapshots` function)

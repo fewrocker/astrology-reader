@@ -464,3 +464,40 @@ const MARKER_COLORS: Record<MarkerCategory, string> = {
 **Q5 — Applying-flag hysteresis threshold:** Spec 14.4 proposes inheriting a marker category across a single snapshot gap when the orb difference is under 0.5°. The 0.5° threshold is a guess. Should this be a named constant (`MARKER_HYSTERESIS_ORB`) to make it tuneable after initial testing?
 
 **Q6 — Retrograde section header rename:** Spec 8.2 renames the retrograde section header to "Planetary Shift" when the current snapshot is a shift marker. If the snapshot is simultaneously a station event and a retrograde planet is already mid-retrograde (a separate planet), the header cannot correctly describe both. Should the rename apply only when the stationing planet is the only active retrograde, or unconditionally when the marker category is shift?
+
+---
+
+## Outcome Notes (2026-05-15)
+
+**Status:** completed
+**Commit:** `043f79c` on branch `sprint-0018-task-0004-feat-advance-marker-system`
+**Build:** TypeScript clean (tsc --noEmit: 0 errors); vite build: 9.84s, 0 errors
+
+### Implemented Specs (all 18 sections, all numbered specs)
+
+- **Types (1.1–1.2):** `MarkerCategory`, `SnapshotScore`, `AdvanceSnapshot.score` — all exported
+- **scoreSnapshot (1.3–1.12):** Pure function with 5-category priority logic, ORB_THRESHOLDS per period, intensity formulas, specific reason strings via `buildPowerReason`/`buildAspectReason` helpers
+- **preCalculateSnapshots changes (1.11–1.13):** Monthly noon fix, score injection in loop with prev snapshot, hysteresis post-processing pass, 20% global density cap
+- **computePowerDayBanner refactor (2.1–2.4):** Delegates entirely to `snapshot.score`; chartData parameter removed; generalized banner handles all 4 non-neutral categories with per-category colors and symbols
+- **Marker overlay (3.1–3.8):** `pointer-events-none` container with `left: 10px / right: 10px` inset; `MarkerDot` (React.memo) with 44×44px touch wrappers; diamond/circle shapes; active state (+4px, static box-shadow, full opacity); coShift outline ring
+- **Animations (4.1–4.7):** Inline `<style>` tag with GPU-safe keyframes (opacity + transform only); `glow-breathe-gold` 3s, `glow-breathe-red` 2s, `shift-rotate` 4s; `prefers-reduced-motion` override; favorable static (no animation)
+- **Overview strip (5.1–5.8):** h-10 rounded-full strip; collision handling at 5% threshold; position indicator; quiet-period empty state; unknownTime annotation; pending placeholder
+- **Tooltip (6.1–6.6):** hover-only (desktop); suppressed when slider at that offset; date+weekday, category label+orb suffix, reason; clamped percentage position
+- **Click-to-jump (7.1–7.4):** Strip dots, MarkerDot wrappers, Next ✦ / ← Prev buttons (44px touch targets, aria-labels)
+- **Quick-stats enhancements (8.1–8.3):** Aspect header suffix per category; "Planetary Shift" retrograde header when shift; dynamic thumb shadow class
+- **Loading state (9.1–9.2):** "Reading the next N units…"; strip pending placeholder
+- **Performance (10.1–10.6):** markers useMemo keyed on [snapshots]; React.memo on MarkerDot; no new WASM calls in scoring; buildTransitTimeline not called; useRef snapshot cache; GPU-only animations
+- **UnknownTime (11.1–11.3):** Power suppressed; strip annotation; favorable/challenging available
+- **Offset 0 guard (12.1–12.3):** scoreSnapshot neutral; markers filter; prev/next navigation guards
+- **Mobile (13.1–13.4):** 44×44px touch targets everywhere; tooltip desktop-only; collision handling; prominent nav buttons
+- **Edge cases (14.1–14.6):** Empty strip; density cap preserves top-1; end-of-month comment; hysteresis pass; monthly loosened thresholds + cap
+
+### Open Question Resolutions
+- **Q1 (keyframes):** Chose inline `<style>` tag — no config changes, faster to iterate
+- **Q3 (cache location):** Cache placed inside AdvanceTab via `useRef<Map<string, AdvanceSnapshot[]>>` — avoids lifting state while satisfying spec 10.5
+- **Q5 (hysteresis):** Named constant `MARKER_HYSTERESIS_ORB = 0.5` added, easily tuneable
+
+### Notes for Consolidation
+- Task 0001 monthly midnight fix: already reimplemented here (noon for i≥1). If task-0001 merged first, this implementation supersedes it.
+- Task 0003 scoreSnapshot engine: task-0004 includes its own `scoreSnapshot` inline in AdvanceTab; consolidation should reconcile with any shared engine from task-0003.
+- Task 0005 next/prev navigation: also implemented here inline (← Prev / Next ✦ buttons). If task-0005 has additional features, consolidation should merge them.
