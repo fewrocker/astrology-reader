@@ -25,13 +25,7 @@ const PLANET_R = INNER_R + 35
 const ASTEROID_R = 240
 const TRANSIT_PLANET_R = 288 // between natal planets (263) and zodiac ring inner (298)
 
-type HoverState =
-  | { kind: 'planet'; name: string }
-  | { kind: 'transit'; name: string }
-  | { kind: 'aspect'; index: number }
-  | { kind: 'transitAspect'; index: number }
-  | { kind: 'house'; house: number }
-  | null
+type HoverState = { kind: string; key: string } | null
 
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
   const rad = (180 + angleDeg) * (Math.PI / 180)
@@ -306,13 +300,12 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
 
   const offset = useCallback((lon: number) => lon - ascLon, [ascLon])
 
-  const hoveredPlanet = hover?.kind === 'planet' ? hover.name : null
-  const hoveredTransit = hover?.kind === 'transit' ? hover.name : null
+  const hoveredPlanet = hover?.kind === 'planet' ? hover.key : null
+  const hoveredTransit = hover?.kind === 'transit' ? hover.key : null
 
-  const filteredAspects = useMemo(() =>
-    aspects.filter(a =>
-      ['conjunction', 'sextile', 'square', 'trine', 'opposition'].includes(a.type)
-    ), [aspects])
+  const filteredAspects = aspects.filter(a =>
+    ['conjunction', 'sextile', 'square', 'trine', 'opposition'].includes(a.type)
+  )
 
   // ─── Interaction handlers ───
 
@@ -337,14 +330,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
   const handleTap = useCallback((state: HoverState, e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation()
     // If tapping the same item, close it
-    if (tapped && hover && state &&
-        hover.kind === state.kind &&
-        ((hover.kind === 'planet' && state.kind === 'planet' && hover.name === state.name) ||
-         (hover.kind === 'transit' && state.kind === 'transit' && hover.name === state.name) ||
-         (hover.kind === 'aspect' && state.kind === 'aspect' && hover.index === state.index) ||
-         (hover.kind === 'transitAspect' && state.kind === 'transitAspect' && hover.index === state.index) ||
-         (hover.kind === 'house' && state.kind === 'house' && hover.house === state.house))
-    ) {
+    if (tapped && hover && state && hover.key === state.key && hover.kind === state.kind) {
       setHover(null)
       setTapped(false)
       setMousePos(null)
@@ -395,7 +381,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
     if (hover.kind === 'house') return '#7c5cbf'
     if (hover.kind === 'transit' || hover.kind === 'transitAspect') return '#5ec4c4'
     if (hover.kind === 'aspect') {
-      const a = filteredAspects[hover.index]
+      const a = filteredAspects[parseInt(hover.key)]
       return a ? getAspectColor(a.nature) : '#c9a84c'
     }
     return '#c9a84c'
@@ -489,23 +475,25 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         <circle cx={CX} cy={CY} r={OUTER_R} fill="url(#chartBg)" stroke="#3a3a50" strokeWidth="1.2" className="chart-outer-ring" />
 
         {/* Degree tick marks on outer ring */}
-        {Array.from({ length: 360 }, (_, deg) => {
-          const angle = offset(deg)
-          const isMajor = deg % 10 === 0
-          const outerTick = polarToXY(CX, CY, OUTER_R, angle)
-          const innerTick = polarToXY(CX, CY, OUTER_R - (isMajor ? 5 : 2.5), angle)
+        {(() => {
+          let majorD = ''
+          let minorD = ''
+          for (let deg = 0; deg < 360; deg++) {
+            const angle = offset(deg)
+            const isMajor = deg % 10 === 0
+            const outer = polarToXY(CX, CY, OUTER_R, angle)
+            const inner = polarToXY(CX, CY, OUTER_R - (isMajor ? 5 : 2.5), angle)
+            const segment = `M${outer.x.toFixed(2)},${outer.y.toFixed(2)}L${inner.x.toFixed(2)},${inner.y.toFixed(2)}`
+            if (isMajor) majorD += segment
+            else minorD += segment
+          }
           return (
-            <line
-              key={`tick-${deg}`}
-              x1={outerTick.x}
-              y1={outerTick.y}
-              x2={innerTick.x}
-              y2={innerTick.y}
-              stroke={isMajor ? '#3a3a50' : '#2a2a3a'}
-              strokeWidth={isMajor ? 0.8 : 0.4}
-            />
+            <>
+              <path d={majorD} stroke="#3a3a50" strokeWidth={0.8} fill="none" />
+              <path d={minorD} stroke="#2a2a3a" strokeWidth={0.4} fill="none" />
+            </>
           )
-        })}
+        })()}
 
         {/* Zodiac sign segments */}
         {ZODIAC_SIGNS.map((sign, i) => {
@@ -589,7 +577,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             const numPos = polarToXY(CX, CY, INNER_R + 20, midAngle)
 
             const isAngular = [1, 4, 7, 10].includes(house.house)
-            const isHouseHovered = hover?.kind === 'house' && hover.house === house.house
+            const isHouseHovered = hover?.kind === 'house' && hover.key === String(house.house)
 
             return (
               <g key={`house-${house.house}`}>
@@ -611,9 +599,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                   fontSize="11"
                   className="cursor-pointer"
                   fontWeight={isHouseHovered ? '600' : '400'}
-                  onMouseEnter={() => handleHoverEnter({ kind: 'house', house: house.house })}
+                  onMouseEnter={() => handleHoverEnter({ kind: 'house', key: String(house.house) })}
                   onMouseLeave={handleHoverLeave}
-                  onClick={(e) => handleTap({ kind: 'house', house: house.house }, e)}
+                  onClick={(e) => handleTap({ kind: 'house', key: String(house.house) }, e)}
                   style={{ transition: 'fill 200ms ease' }}
                 >
                   {house.house}
@@ -636,7 +624,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             const pos2 = polarToXY(CX, CY, r2, offset(p2.longitude))
             const color = getAspectColor(aspect.nature)
             const baseOpacity = Math.max(0.15, 1 - aspect.orb / 8)
-            const isAspectHovered = hover?.kind === 'aspect' && hover.index === i
+            const isAspectHovered = hover?.kind === 'aspect' && hover.key === String(i)
 
             const isConnected = !hoveredPlanet ||
               aspect.planet1 === hoveredPlanet ||
@@ -674,9 +662,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                   stroke="transparent"
                   strokeWidth="12"
                   className="cursor-pointer"
-                  onMouseEnter={() => handleHoverEnter({ kind: 'aspect', index: i })}
+                  onMouseEnter={() => handleHoverEnter({ kind: 'aspect', key: String(i) })}
                   onMouseLeave={handleHoverLeave}
-                  onClick={(e) => handleTap({ kind: 'aspect', index: i }, e)}
+                  onClick={(e) => handleTap({ kind: 'aspect', key: String(i) }, e)}
                 />
               </g>
             )
@@ -698,9 +686,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           return (
             <g
               key={planet.name}
-              onMouseEnter={() => handleHoverEnter({ kind: 'planet', name: planet.name })}
+              onMouseEnter={() => handleHoverEnter({ kind: 'planet', key: planet.name })}
               onMouseLeave={handleHoverLeave}
-              onClick={(e) => handleTap({ kind: 'planet', name: planet.name }, e)}
+              onClick={(e) => handleTap({ kind: 'planet', key: planet.name }, e)}
               className="chart-planet cursor-pointer"
               style={{ animationDelay: `${0.5 + idx * 0.07}s` }}
             >
@@ -777,9 +765,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             return (
               <g
                 key={asteroid.name}
-                onMouseEnter={() => handleHoverEnter({ kind: 'planet', name: asteroid.name })}
+                onMouseEnter={() => handleHoverEnter({ kind: 'planet', key: asteroid.name })}
                 onMouseLeave={handleHoverLeave}
-                onClick={(e) => handleTap({ kind: 'planet', name: asteroid.name }, e)}
+                onClick={(e) => handleTap({ kind: 'planet', key: asteroid.name }, e)}
                 className="chart-planet cursor-pointer"
                 style={{ animationDelay: `${0.5 + idx * 0.09}s` }}
               >
@@ -850,7 +838,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               const natalR = isAsteroid(np.name as BodyName) ? ASTEROID_R : PLANET_R
               const pos2 = polarToXY(CX, CY, natalR, offset(np.longitude))
               const color = getAspectColor(ta.nature)
-              const isTAHovered = hover?.kind === 'transitAspect' && hover.index === origIdx
+              const isTAHovered = hover?.kind === 'transitAspect' && hover.key === String(origIdx)
               const opacity = isTAHovered ? 1 : 0.6
 
               return (
@@ -870,9 +858,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                     stroke="transparent"
                     strokeWidth="12"
                     className="cursor-pointer"
-                    onMouseEnter={() => handleHoverEnter({ kind: 'transitAspect', index: origIdx })}
+                    onMouseEnter={() => handleHoverEnter({ kind: 'transitAspect', key: String(origIdx) })}
                     onMouseLeave={handleHoverLeave}
-                    onClick={(e) => handleTap({ kind: 'transitAspect', index: origIdx }, e)}
+                    onClick={(e) => handleTap({ kind: 'transitAspect', key: String(origIdx) }, e)}
                   />
                 </g>
               )
@@ -899,9 +887,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           return (
             <g
               key={`transit-${tp.name}`}
-              onMouseEnter={() => handleHoverEnter({ kind: 'transit', name: tp.name })}
+              onMouseEnter={() => handleHoverEnter({ kind: 'transit', key: tp.name })}
               onMouseLeave={handleHoverLeave}
-              onClick={(e) => handleTap({ kind: 'transit', name: tp.name }, e)}
+              onClick={(e) => handleTap({ kind: 'transit', key: tp.name }, e)}
               className="chart-transit-planet cursor-pointer"
               style={{ animationDelay: `${0.5 + idx * 0.07}s` }}
             >
@@ -1002,27 +990,27 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         >
           <div className="p-4">
             {hover.kind === 'planet' && (() => {
-              const planet = chartData.planets.find(p => p.name === hover.name)
+              const planet = chartData.planets.find(p => p.name === hover.key)
               if (!planet) return null
               return <PlanetTooltip planet={planet} chartData={chartData} />
             })()}
             {hover.kind === 'transit' && (() => {
-              const tp = transitPlanets?.find(p => p.name === hover.name)
+              const tp = transitPlanets?.find(p => p.name === hover.key)
               if (!tp) return null
               return <TransitPlanetTooltip planet={tp} transitAspects={transitAspects} />
             })()}
             {hover.kind === 'aspect' && (() => {
-              const aspect = filteredAspects[hover.index]
+              const aspect = filteredAspects[parseInt(hover.key)]
               if (!aspect) return null
               return <AspectTooltip aspect={aspect} />
             })()}
             {hover.kind === 'transitAspect' && (() => {
-              const ta = transitAspects?.[hover.index]
+              const ta = transitAspects?.[parseInt(hover.key)]
               if (!ta) return null
               return <TransitAspectTooltip aspect={ta} />
             })()}
             {hover.kind === 'house' && (
-              <HouseTooltip houseNum={hover.house} chartData={chartData} />
+              <HouseTooltip houseNum={parseInt(hover.key)} chartData={chartData} />
             )}
           </div>
         </div>
@@ -1059,27 +1047,27 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               {/* Content */}
               <div className="overflow-y-auto px-4 pb-6 pt-1 scrollbar-thin scrollbar-thumb-mystic-gold/20 scrollbar-track-transparent">
                 {hover.kind === 'planet' && (() => {
-                  const planet = chartData.planets.find(p => p.name === hover.name)
+                  const planet = chartData.planets.find(p => p.name === hover.key)
                   if (!planet) return null
                   return <PlanetTooltip planet={planet} chartData={chartData} />
                 })()}
                 {hover.kind === 'transit' && (() => {
-                  const tp = transitPlanets?.find(p => p.name === hover.name)
+                  const tp = transitPlanets?.find(p => p.name === hover.key)
                   if (!tp) return null
                   return <TransitPlanetTooltip planet={tp} transitAspects={transitAspects} />
                 })()}
                 {hover.kind === 'aspect' && (() => {
-                  const aspect = filteredAspects[hover.index]
+                  const aspect = filteredAspects[parseInt(hover.key)]
                   if (!aspect) return null
                   return <AspectTooltip aspect={aspect} />
                 })()}
                 {hover.kind === 'transitAspect' && (() => {
-                  const ta = transitAspects?.[hover.index]
+                  const ta = transitAspects?.[parseInt(hover.key)]
                   if (!ta) return null
                   return <TransitAspectTooltip aspect={ta} />
                 })()}
                 {hover.kind === 'house' && (
-                  <HouseTooltip houseNum={hover.house} chartData={chartData} />
+                  <HouseTooltip houseNum={parseInt(hover.key)} chartData={chartData} />
                 )}
               </div>
             </div>
