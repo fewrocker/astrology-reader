@@ -67,6 +67,11 @@ const TRANSIT_PLANET_PHRASES: Record<string, PlanetPhrases> = {
     challenging: { applying: 'transforming',         separating: 'having transformed' },
     neutral:     { applying: 'intensifying',         separating: 'having intensified' },
   },
+  Chiron: {
+    harmonious: { applying: 'surfacing',             separating: 'having surfaced' },
+    challenging: { applying: 'reopening',            separating: 'having reopened' },
+    neutral:     { applying: 'activating',           separating: 'having passed through' },
+  },
 }
 
 // ─── Brief truncation helper ─────────────────────────────────────────────────
@@ -105,6 +110,11 @@ export function computeTransitAspectBrief(
   applying?: boolean,
 ): string {
   try {
+    // Chiron Return — dedicated interpretation regardless of house
+    if ((transitPlanet as string) === 'Chiron' && (natalPlanet as string) === 'Chiron') {
+      return 'Chiron is returning to where it stood at your birth — the wound teacher comes full circle. This is your Chiron Return — one of the most significant transits of a human life, occurring around age 49–51.'
+    }
+
     // Fallback for NorthNode as transit planet — no archetype table entry
     const phrases = TRANSIT_PLANET_PHRASES[transitPlanet as string]
 
