@@ -453,7 +453,9 @@ export interface EnergyRating {
  * Shared utility used by DailySnapshotCard, TodayPage, and JournalEntryCard.
  */
 export function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
-  const top = aspects.slice(0, 8)
+  const ASTEROID_NAMES_SET = new Set(['Chiron', 'Ceres', 'Pallas', 'Juno', 'Vesta'])
+  const classical = aspects.filter(a => !ASTEROID_NAMES_SET.has(a.transitPlanet as string))
+  const top = classical.slice(0, 8)
   const score = top.reduce((acc, a) => {
     if (a.nature === 'harmonious') return acc + 1
     if (a.nature === 'challenging') return acc - 1
