@@ -10,7 +10,6 @@ import { getHouseTheme } from '../../data/interpretations/houseThemes'
 import { getSynastryHouseOverlayBrief } from '../../data/interpretations/synastryHouseOverlayBriefs'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
-import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSynastryInterpretation } from '../../services/gptInterpretation'
@@ -111,7 +110,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
   if (aspects.length === 0) return null
 
   return (
-    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen>
+    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`}>
       <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
       <div>
         {aspects.map((a, i) => (
@@ -359,23 +358,37 @@ export default function SynastryPage() {
         </div>
       </div>
 
-      {/* Side-by-side chart wheels */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="text-center">
-          <p className="text-mystic-muted text-xs uppercase tracking-wider mb-2">Person 1</p>
-          <ChartWheel chartData={chartData} aspects={aspects} />
+      {/* Bi-wheel — Person 1 inner, Person 2 outer */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center text-xs text-center mb-3">
+          <span className="text-mystic-muted">
+            <span style={{ color: '#c9a84c' }} className="mr-1">●</span>
+            <span className="font-medium text-mystic-text/80">Person 1 (inner)</span>
+            {' · '}{birthData.date}
+          </span>
+          <span className="text-mystic-muted">
+            <span style={{ color: '#c084fc' }} className="mr-1">●</span>
+            <span className="font-medium text-mystic-text/80">Person 2 (outer)</span>
+            {' · '}{partnerBirthData.date}
+          </span>
         </div>
-        <div className="text-center">
-          <p className="text-mystic-muted text-xs uppercase tracking-wider mb-2">Person 2</p>
-          <ChartWheel chartData={partnerChartData} aspects={partnerAspects} />
+        <div className="w-full max-w-2xl">
+          <ChartWheel
+            chartData={chartData}
+            aspects={aspects}
+            synastryPlanets={partnerChartData.planets}
+            synastryAspects={synastryData.synastryAspects}
+          />
+        </div>
+        <div className="flex flex-wrap gap-4 text-xs text-center justify-center mt-2 text-mystic-muted">
+          <span><span style={{ color: '#4a7fb5' }}>—</span> Harmonious</span>
+          <span><span style={{ color: '#b54a4a' }}>—</span> Challenging</span>
+          <span><span style={{ color: '#c9a84c' }}>—</span> Neutral</span>
         </div>
       </div>
 
       {/* Compatibility overview */}
       <CompatibilitySection synastryData={synastryData} />
-
-      {/* current moon phase */}
-      <CurrentMoonWidget date={new Date()} />
 
       {/* GPT interpretation */}
       {synastryInterpretation === null || retrying ? (
