@@ -5,6 +5,7 @@ import { PLANET_NAMES, isAsteroid } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import type { TransitPeriod } from './transits'
+import { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion } from './ephemeris'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -58,33 +59,10 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
   Pluto: Astronomy.Body.Pluto,
 }
 
-function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
-  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
-  const geo = Astronomy.GeoVector(body, time, true)
-  return Astronomy.Ecliptic(geo).elon
-}
-
-function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  const T = time.tt / 36525
-  const omega = 125.0445479 - 1934.1362891 * T + 0.0020754 * T * T + T * T * T / 467441 - T * T * T * T / 60616000
-  return normalizeAngle(omega)
-}
-
 function getLongitudeForName(name: BodyName, time: Astronomy.AstroTime): number {
   if (name === 'NorthNode') return getMeanNodeLongitude(time)
   if (isAsteroid(name)) return 0 // asteroid calculation path pending
   return getPlanetLongitude(BODY_MAP[name as PlanetName], time)
-}
-
-function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  const lon1 = getPlanetLongitude(body, time)
-  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
-  const lon2 = getPlanetLongitude(body, timePlus)
-  let diff = lon2 - lon1
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
-  return diff
 }
 
 // ─── Aspect perfection date finder (binary search) ──────────────────────────

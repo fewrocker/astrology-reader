@@ -1,6 +1,7 @@
 import { normalizeAngle, longitudeToZodiac } from './zodiac'
-import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
+import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, Element, Modality } from './types'
 import { PLANET_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES } from './types'
+import { getHouseForLongitude } from './ephemeris'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import { analyzeElements } from '../data/interpretations/index'
@@ -112,24 +113,6 @@ export function calculateSynastryAspects(
 
 // ── House Overlays ─────────────────────────────────────────
 
-function getHouseForLongitude(longitude: number, houses: HouseCusp[]): number {
-  if (houses.length === 0) return 1
-  const norm = normalizeAngle(longitude)
-
-  for (let i = 0; i < 12; i++) {
-    const cusp = normalizeAngle(houses[i].longitude)
-    const nextCusp = normalizeAngle(houses[(i + 1) % 12].longitude)
-
-    if (nextCusp > cusp) {
-      if (norm >= cusp && norm < nextCusp) return houses[i].house
-    } else {
-      // Wraps around 0°
-      if (norm >= cusp || norm < nextCusp) return houses[i].house
-    }
-  }
-  return 1
-}
-
 /**
  * Calculate where each person's planets fall in the other person's houses.
  */
@@ -141,11 +124,12 @@ export function calculateHouseOverlays(
   const p2InP1: HouseOverlayEntry[] = []
 
   if (!chart1.unknownTime && chart2.houses.length > 0) {
+    const chart2Cusps = chart2.houses.map(h => h.longitude)
     for (const p of chart1.planets) {
       p1InP2.push({
         planet: p.name,
         sign: p.sign,
-        house: getHouseForLongitude(p.longitude, chart2.houses),
+        house: getHouseForLongitude(p.longitude, chart2Cusps),
         degree: p.degree,
         minute: p.minute,
       })
@@ -153,11 +137,12 @@ export function calculateHouseOverlays(
   }
 
   if (!chart2.unknownTime && chart1.houses.length > 0) {
+    const chart1Cusps = chart1.houses.map(h => h.longitude)
     for (const p of chart2.planets) {
       p2InP1.push({
         planet: p.name,
         sign: p.sign,
-        house: getHouseForLongitude(p.longitude, chart1.houses),
+        house: getHouseForLongitude(p.longitude, chart1Cusps),
         degree: p.degree,
         minute: p.minute,
       })

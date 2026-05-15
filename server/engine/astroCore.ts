@@ -1,4 +1,5 @@
 import * as Astronomy from 'astronomy-engine'
+export { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion, getHouseForLongitude } from '../../src/engine/ephemeris'
 
 // ---------- Types ----------
 
@@ -129,42 +130,4 @@ export function longitudeToZodiac(lon: number): ZodiacPosition {
   const degree = Math.floor(degInSign)
   const minute = Math.floor((degInSign - degree) * 60)
   return { longitude: norm, sign: ZODIAC_SIGNS[signIndex], signIndex, degree, minute }
-}
-
-export function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
-  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
-  return Astronomy.Ecliptic(Astronomy.GeoVector(body, time, true)).elon
-}
-
-export function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  const T = time.tt / 36525
-  return normalizeAngle(
-    125.0445479
-    - 1934.1362891 * T
-    + 0.0020754 * T * T
-    + T * T * T / 467441
-    - T * T * T * T / 60616000,
-  )
-}
-
-export function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  const lon1 = getPlanetLongitude(body, time)
-  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
-  const lon2 = getPlanetLongitude(body, timePlus)
-  let diff = lon2 - lon1
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
-  return diff
-}
-
-export function getHouseForLongitude(longitude: number, cusps: number[]): number {
-  for (let i = 0; i < 12; i++) {
-    const start = cusps[i]
-    const end = cusps[(i + 1) % 12]
-    if (start < end ? longitude >= start && longitude < end : longitude >= start || longitude < end) {
-      return i + 1
-    }
-  }
-  return 1
 }
