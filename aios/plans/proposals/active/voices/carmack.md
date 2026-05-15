@@ -1,259 +1,269 @@
-# John Carmack — Sprint 0014 Voice
+# John Carmack's Technical Analysis: Asteroid Interpretations Architecture
 
-Files read: `src/engine/astronomy.ts`, `src/engine/types.ts`, `src/engine/aspects.ts`, `src/engine/transits.ts`, `src/engine/transitTimeline.ts`, `src/engine/synastry.ts`, `server/engine/astroCore.ts`, `src/components/chart/ChartWheel.tsx`, `src/data/interpretations/planetInSign.ts`, `src/data/interpretations/retrogrades.ts`, `src/data/interpretations/dignities.ts`, `src/data/interpretations/index.ts`, `src/data/interpretations/transitAspectBriefs.ts`, `src/data/interpretations/natalPlanetContext.ts`, `node_modules/astronomia/lib/elliptic.cjs`, `package.json`.
-
----
-
-## Executive Summary
-
-The asteroid integration task is well-scoped and technically feasible. The vision document is unusually precise — it identifies the right library (`astronomia`), the right class (`elliptic.Elements`), and the right data source (JPL Horizons). That's the good news. The bad news is that the current codebase has a structural flaw that will make this sprint messier than it needs to be: the type system and engine are tightly coupled through hardcoded `BODY_MAP` records that appear in four separate files, none of which are aware of each other. Adding asteroids means touching all four, and there's no central registry to update. You'll also discover that `astronomia` is a devDependency, which means it won't be available in the server build without correction — a silent runtime failure waiting to happen.
+## Status Summary
+The asteroid interpretation system has a **critical gap between infrastructure and surface**: data exists but wiring is blocked. The architecture is sound but the implementation is fragile in three specific ways.
 
 ---
 
-## Technical Approach Assessment: Asteroid Calculation
+## What's Wired vs. What's Blocked
 
-### The `elliptic.Elements` API and what it actually does
+### Currently Wired (Functional)
+- **Asteroid retrograde data**: 5 entries exist in `NATAL_RETROGRADE` (Chiron, Ceres, Pallas, Juno, Vesta). Lines 44–51 in `retrogrades.ts` are complete and substantive.
+- **Asteroid house interpretations**: 60 entries exist in `PLANET_IN_HOUSE` (5 asteroids × 12 houses). Keys follow `Chiron_H1`, `Ceres_H7`, etc. Quality is high — see lines like `Chiron_H1` in `planetInHouse.ts` (~200 words, specific and mythologically grounded).
+- **Chart wheel glyphs and archetypes**: `ASTEROID_GLYPHS` and `ASTEROID_ARCHETYPES` are defined. `getBodyGlyph()` handles both planets and asteroids correctly.
 
-The vision correctly identifies `astronomia`'s `elliptic.Elements.position(jde, earth)` as the calculation path. I've read the source at `node_modules/astronomia/lib/elliptic.cjs`. Here's what happens at runtime:
-
-1. It solves Kepler's equation iteratively (up to 15 iterations via `kepler2b`) to get eccentric anomaly E from mean anomaly M.
-2. It computes the true anomaly ν from E, then the heliocentric distance r.
-3. It projects into 3D heliocentric equatorial J2000 coordinates using the orbital elements (inclination, node, argument of perihelion).
-4. It calls `astrometricJ2000`, which fetches Earth's heliocentric position from `solarxyz.positionJ2000(earth, jde)`, applies light-travel-time correction (one extra solve), and returns geocentric equatorial coordinates.
-
-**Critical issue the vision glosses over:** the return type is a `base.Coord` object with `.ra` and `.dec` in radians — not ecliptic longitude. The existing `getPlanetLongitude` functions throughout the codebase all return ecliptic degrees (0–360). You need to convert RA/Dec → ecliptic longitude using the obliquity of the ecliptic. The formula is:
-
-```
-λ = atan2(sin(α)·cos(ε) + tan(δ)·sin(ε), cos(α))
-```
-
-where ε is the mean obliquity at the observation date (available from `Astronomy.e_tilt(time).mobl` in astronomy-engine, already used for house calculation). Failing to do this will place every asteroid at the wrong longitude by an amount that varies from 0° to ~23° depending on position. This is not a rounding error — it's a completely wrong answer. Add a `raDecToEclipticLon(ra: number, dec: number, obliquityRad: number): number` utility to `src/engine/astronomy.ts` and verify it against a known asteroid position before writing any interpretation text.
-
-### The `earth` argument problem
-
-`elliptic.Elements.position(jde, earth)` requires a VSOP87 `V87Planet` object for Earth — it needs the VSOP87 series data loaded. Looking at `node_modules/astronomia/data/`, we have `vsop87Bearth.js`. The import looks like:
-
-```typescript
-import { data, planetposition } from 'astronomia'
-const earth = new planetposition.Planet(data.vsop87Bearth)
-```
-
-This import from a CJS package in an ES module project (`"type": "module"` in `package.json`) requires Vite to handle CJS interop. Vite handles this for client-side bundles, but the server is compiled separately with `tsx`/`tsconfig.server.json`. Verify the import path works in both build contexts before committing to this API. If the server import fails at runtime you'll get a silent `undefined` for `earth` and incorrect positions with no error message.
-
-### Accuracy assessment
-
-For Ceres, Pallas, Juno, and Vesta (main-belt asteroids, semi-major axes 2.1–3.4 AU, eccentricities 0.07–0.23), fixed-epoch Keplerian elements from JPL with no perturbation corrections give roughly 0.1–0.5° accuracy over a decade, degrading to ~1–2° over a century. The vision's claim of "~1 arcminute accuracy" is optimistic for hardcoded elements — that precision requires full numerical integration. However, 0.1–0.5° is **astrologically sufficient**: a 1° error doesn't change the sign or house in most cases, and aspect orb calculations stay valid.
-
-**Chiron is the exception.** Chiron (2060) is a centaur object with a highly eccentric orbit (e=0.379) in a chaotic dynamical environment — it has multiple close encounters with Saturn over its ~50-year orbital period. Pure Keplerian propagation from fixed J2000 elements degrades faster for Chiron than for main-belt asteroids. Expect 0.5–3° errors depending on date. The vision acknowledges "periodic perturbation corrections for Chiron" but doesn't specify what those corrections are. The practical solution: use JPL Horizons' current best-fit elements from an epoch as close to the present date as possible (not J2000), which automatically incorporates integrated perturbations up to that epoch. This reduces Chiron error from ~3° to ~0.5° for dates within ±20 years of the element epoch. Document the epoch date as a comment in the code and plan to update it every 10 years.
-
-### Retrograde detection for asteroids
-
-The current retrograde check in `astronomy.ts` (lines 47–61) compares geocentric longitudes 1 day apart and handles 360° wraparound. This algorithm works correctly for asteroid retrograde detection without modification. Chiron's retrograde period is ~5 months per year; main-belt asteroids retrograde for ~2–4 months. The 1-day delta catches all of them cleanly.
+### Currently Blocked (Data Exists, Not Surfaced)
+- **Asteroid sign interpretations**: 60 entries already exist in `PLANET_IN_SIGN` (`Chiron_Aries`, `Ceres_Taurus`, etc.). Verified by grep: exactly 60 entries present. Each has `brief` and `detail` fields with quality matching the house entries.
+- **Interpretation retrieval in `assembleReading()`**: Lines 138–141 in `src/data/interpretations/index.ts` **explicitly return `null`** for all asteroid interpretations:
+  ```typescript
+  signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(...) : null,
+  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : ...,
+  retrogradeInterpretation: (p.retrograde && !isAsteroid(...) && ...) ? ... : null,
+  ```
+  These three guards can be **safely removed or inverted** — the data is ready.
+- **Chart tooltip rendering for asteroids**: The `PlanetTooltip` component in `ChartWheel.tsx` (lines 69–150) already handles asteroid archetype display but conditionally suppresses sign/house/retrograde interpretations. Lines 71–74 repeat the same `!isAsteroidBody` checks that block data access.
 
 ---
 
-## Architecture Concerns
+## Function Signature Issues
 
-### BODY_MAP duplication — four files, zero coordination
+### Critical: Type Mismatch in Lookup Functions
+The two core lookup functions have signatures that exclude `AsteroidName`:
 
-There are **four** separate `BODY_MAP` declarations in the codebase:
-
-- `src/engine/astronomy.ts` (line 13)
-- `src/engine/transits.ts` (line 47)
-- `src/engine/transitTimeline.ts` (line 48)
-- `server/engine/astroCore.ts` (line 25)
-
-All four are `Record<PlanetName, Astronomy.Body>` and are manually kept in sync. When you add asteroids, you need a parallel `ASTEROID_ORBITAL_ELEMENTS` map in each location — or you can fix the architecture first. The better design: create `src/engine/bodies.ts` that exports:
-
+**Line 19, `src/data/interpretations/index.ts`:**
 ```typescript
-export const PLANET_BODY_MAP: Record<PlanetName, Astronomy.Body> = { ... }
-export const ASTEROID_ORBITAL_ELEMENTS: Record<AsteroidName, KeplerianElements> = { ... }
-export function getAsteroidGeocentricLongitude(name: AsteroidName, time: AstroTime): number
+export function getPlanetInSignInterpretation(planet: PlanetName | 'NorthNode', sign: ZodiacSign): InterpretationEntry | null
 ```
 
-All four current `BODY_MAP` declarations get replaced with a single import. This is the right time to do this consolidation because you're adding a second map type regardless.
-
-### The `astronomia` devDependency problem
-
-`astronomia` is listed as a `devDependency` in `package.json` (line 42). The client-side Vite build bundles devDependencies correctly. But `server/engine/astroCore.ts` is compiled separately and runs in Node.js where it resolves `require('astronomia')` from `node_modules` at runtime. If `astronomia` is in `devDependencies` and the production deployment strips devDependencies (standard `npm install --production`), the server silently fails to calculate asteroids. Move `astronomia` to `dependencies`.
-
-### Type union inflation — fix it before writing code
-
-Every interface that references a body uses `PlanetName | 'NorthNode'`. For 16 bodies this becomes `PlanetName | 'NorthNode' | AsteroidName` — unwieldy and prone to missed update sites. Define a single `BodyName` type:
-
+**Line 23:**
 ```typescript
-export type AsteroidName = 'Chiron' | 'Ceres' | 'Pallas' | 'Juno' | 'Vesta'
-export type BodyName = PlanetName | 'NorthNode' | AsteroidName
+export function getPlanetInHouseInterpretation(planet: PlanetName | 'NorthNode', house: number): InterpretationEntry | null
 ```
 
-Then update: `PlanetPosition.name`, `Aspect.planet1`, `Aspect.planet2`, `TransitAspect.transitPlanet`, `TransitAspect.natalPlanet`, `SynastryAspect.person1Planet`, `SynastryAspect.person2Planet`, `HouseOverlayEntry.planet`, `TimelineEvent.planet`, `TimelineEvent.secondPlanet` — all of these currently typed `PlanetName | 'NorthNode'` — become `BodyName`. This is a find-replace, not a re-architecture. Do it first so the compiler catches any missed call sites when you add the asteroid names.
+**The fix is straightforward:** Change both signatures to accept `BodyName` instead of `PlanetName | 'NorthNode'`:
+```typescript
+export function getPlanetInSignInterpretation(planet: BodyName, sign: ZodiacSign): InterpretationEntry | null
+export function getPlanetInHouseInterpretation(planet: BodyName, house: number): InterpretationEntry | null
+```
 
-Critically: do **not** add asteroids to `PLANET_NAMES`. That constant drives the `BODY_MAP` lookup loops in `calculateCurrentPositions`, `detectIngresses`, `getRetrogradeStatus`, `findStations`, and `calculateCompositeChart`. Asteroids use a different calculation path. Keep `PLANET_NAMES` as the astronomy-engine bodies; add a separate `ASTEROID_NAMES: AsteroidName[]` constant for the Keplerian bodies.
+**Why this works:** The lookup uses string concatenation (`${planet}_${sign}`, `${planet}_H${house}`), which already works correctly for asteroids since the data file uses the same key convention. No internal logic change needed — just widen the type.
 
-### Duplicated utility functions — four copies each
+**No breakage risk:** These functions are called in exactly two places:
+1. `assembleReading()` at lines 138–139 (already guarded by `!isAsteroid`, but will work fine with asteroids)
+2. `PlanetTooltip` in `ChartWheel.tsx` at lines 71–72 (also guarded, will work fine)
 
-These functions are copied verbatim (or near-verbatim) across the codebase:
-
-- `getMeanNodeLongitude`: `astronomy.ts:66`, `transits.ts:67`, `transitTimeline.ts:68`, `astroCore.ts:140`
-- `getPlanetLongitude`: `astronomy.ts:31`, `transits.ts:60`, `transitTimeline.ts:61`, `astroCore.ts:134`
-- `getHouseForLongitude`: `astronomy.ts:230` (exported), `synastry.ts:113` (private), `astroCore.ts:161`
-- `getDailyMotion`: `transits.ts:73`, `transitTimeline.ts:79`, `astroCore.ts:151`
-
-This is four separate bug surfaces for the same four algorithms. The asteroid calculation will be a fifth consumer of some of these. Consolidate into a shared utility module before the asteroid code is written. `src/engine/ephemeris.ts` is a reasonable name — not `utils.ts` (too vague). The server version in `astroCore.ts` can import from the same place if it's pure TypeScript math with no browser-specific deps.
+Both callers use the conditional `isAsteroid()` check, so changing the signature does not force callers to pass asteroids — it just permits them.
 
 ---
 
-## Aspects Engine: What Breaks and What Doesn't
+## The `assembleReading()` Problem: Minimal Correct Fix
 
-### `calculateAspects` in `aspects.ts` — no structural changes needed, but orbs need a config layer
-
-The function at line 62 iterates all planets and cross-joins them. When asteroids are in `chartData.planets`, they participate automatically. The vision is correct that no structural change is needed. However, `ASPECT_DEFINITIONS` has global orb values applied to all pairs. The vision calls for tighter orbs for asteroid-to-asteroid aspects (≤3° major). The cleanest implementation: calculate everything with existing orbs, then post-filter asteroid-to-asteroid aspects with a tighter threshold:
-
+Current problematic code (lines 136–142):
 ```typescript
-export function filterAsteroidAspects(aspects: Aspect[], maxAsteroidOrb = 3): Aspect[] {
-  return aspects.filter(a => {
-    const bothAsteroids = ASTEROID_NAMES.includes(a.planet1 as AsteroidName) &&
-                          ASTEROID_NAMES.includes(a.planet2 as AsteroidName)
-    return !bothAsteroids || a.orb <= maxAsteroidOrb
-  })
+const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
+  planet: p,
+  signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign) : null,
+  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as PlanetName | 'NorthNode', p.house),
+  dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
+  retrogradeInterpretation: (p.retrograde && !isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+}))
+```
+
+**The fix (3 lines change):**
+```typescript
+const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
+  planet: p,
+  signInterpretation: getPlanetInSignInterpretation(p.name as BodyName, p.sign),  // Remove isAsteroid guard
+  houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as BodyName, p.house),
+  dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,  // Keep as is
+  retrogradeInterpretation: (p.retrograde && isAsteroid(p.name as BodyName)) ? (NATAL_RETROGRADE[p.name] ?? null) : (p.retrograde && p.name !== 'NorthNode' ? NATAL_RETROGRADE[p.name] ?? null : null),  // Invert isAsteroid check, but keep guard for classical retrograde
+}))
+```
+
+Actually, **simpler approach** (and more correct): just remove the `!isAsteroid` guard for sign interpretations and flip the logic for retrograde:
+```typescript
+const planetReadings: PlanetReading[] = chart.planets.map((p) => {
+  const isAst = isAsteroid(p.name as BodyName);
+  return {
+    planet: p,
+    signInterpretation: getPlanetInSignInterpretation(p.name as BodyName, p.sign),
+    houseInterpretation: (chart.unknownTime || isAst) ? null : getPlanetInHouseInterpretation(p.name as BodyName, p.house),
+    dignity: (!isAst && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
+    retrogradeInterpretation: (p.retrograde ? NATAL_RETROGRADE[p.name] ?? null : null),
+  };
+})
+```
+
+Wait — **critical observation**: the retrograde lookup uses `p.name` as a string key directly into `NATAL_RETROGRADE`. For asteroids, this works fine — Chiron retrograde is key `'Chiron'`, which exists. For classical planets, same. So the retrograde guard can actually be **removed entirely**:
+```typescript
+retrogradeInterpretation: p.retrograde ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+```
+
+This handles both classical planets and asteroids, NorthNode is excluded because NorthNode is never retrograde and has no retrograde entry.
+
+---
+
+## Data Structure and Key Naming Convention
+
+**Current approach is correct and consistent:**
+- Planet-in-sign keys: `Sun_Aries`, `Mercury_Gemini`, `Chiron_Aries` (verified: `Chiron_Aries` exists in `planetInSign.ts`)
+- Planet-in-house keys: `Sun_H1`, `Chiron_H1` (verified: `Chiron_H1` exists in `planetInHouse.ts`)
+- Retrograde keys: just `'Chiron'`, `'Ceres'`, etc. (verified: all 5 asteroid retrograde entries exist in `retrogrades.ts`)
+
+No changes needed here. The naming is already uniform.
+
+---
+
+## AsteroidSection Component: Simplest Correct Architecture
+
+Looking at `ReadingDisplay.tsx`, the existing `PlanetCard` and `PlanetSection` pattern is generic enough that asteroids already render there — they just have `null` interpretations. **A dedicated `AsteroidSection` is a UI choice, not a data requirement.**
+
+**Minimal AsteroidSection implementation:**
+```typescript
+function AsteroidCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }) {
+  // Identical to PlanetCard, but with asteroid-specific theming
+  // Use amber/orange colors instead of mystic-gold
+  // Show archetype badge (already in ASTEROID_ARCHETYPES)
+  // Render signInterpretation.brief + full detail
+  // Render houseInterpretation if known-time chart
+  // Render retrogradeInterpretation if retrograde
+}
+
+export function AsteroidSection({ reading, showHouse }: { reading: FullReading; showHouse: boolean }) {
+  const asteroids = reading.planets.filter(pr => isAsteroid(pr.planet.name as BodyName));
+  if (asteroids.length === 0) return null;
+  
+  return (
+    <Section title="Asteroids" defaultOpen={false}>
+      {asteroids.map(pr => <AsteroidCard key={pr.planet.name} pr={pr} showHouse={showHouse} />)}
+    </Section>
+  );
 }
 ```
 
-Call this at the display/GPT assembly layer, not inside `calculateAspects` itself — keep the engine function pure.
+**Where to place it in `ResultsPage.tsx` (line 67):**
+- After `PlanetSection` (line 67)
+- Before `AspectSection` (line 68)
 
-### The applying/separating heuristic in `calculateAspects` is wrong
-
-Line 76 in `aspects.ts`:
-```typescript
-const applying = orb < def.orb * 0.5
-```
-
-This says "tight aspects are applying." That's not how applying/separating works. A planet is applying when it is moving toward exact aspect, regardless of current orb. The correct test requires a future-moment comparison — the same logic used correctly in `isRetrograde()`. For natal charts the field is displayed in the tooltip but carries no physical meaning when computed this way. Either implement it properly (delta longitude comparison, similar to `isRetrograde`) or stop emitting it in the natal aspect objects. The transit code in `transits.ts` lines 145–149 does it correctly using `dailyMotion` and direction. The natal code should be consistent.
-
-### `detectPatterns` — asteroid contamination and an existing bug
-
-**Asteroid contamination:** filter asteroid aspects before calling `detectPatterns`. One line at the call site — no changes to the function itself. This is the sprint-scope decision.
-
-**Existing Grand Cross bug (line 155 in `aspects.ts`):**
-```typescript
-const hasAllSquares = hasPair(squares[0]!, opp1.planet1, opp2.planet1) || (
-  squares.filter(s => ...).length >= 4
-)
-```
-
-`squares[0]!` with the `!` non-null assertion will be `undefined` if `squares.length === 0`, and the `||` short-circuit means the second condition is evaluated only sometimes. The second condition itself is wrong: it counts any square involving any of the 4 planets but doesn't verify the specific cross topology (that all 4 adjacent pairs are squared). This can produce false positive Grand Cross detections. Not a sprint-0014 blocker, but worth fixing since you'll be touching this file.
+This respects the visual hierarchy: classical planets first (primary), asteroids second (secondary but meaningful), aspects third.
 
 ---
 
-## Rendering Concerns
+## Fragility Assessment: What Could Break
 
-### ChartWheel planet collision — existing problem made much worse
+### 1. **Missing Asteroid Entry Lookup** — MINIMAL RISK
+If an asteroid is somehow in the chart but lacks a sign/house entry, the lookup returns `null` and rendering gracefully skips the interpretation. This is safe because the code already handles `null` interpretations throughout.
 
-`ChartWheel.tsx` places all natal planets at `PLANET_R = INNER_R + 35 = 263` (line 24). Planet glyph circles have radius 13px (line 693). At 700px SVG size, the PLANET_R circumference is ~1650px. 16 bodies at the same radius averages ~103px spacing — fine in aggregate, but stelliums (multiple planets within 15°) will stack glyphs completely at ~38px total spacing for 3 conjunct bodies.
+### 2. **Type Casting Inconsistency** — REAL ISSUE
+Current code casts `p.name` to `PlanetName | 'NorthNode'` in lines 138–141, even though `p.name` is actually `BodyName` and can be an asteroid. After the signature fix, **remove these unnecessary casts** — the type system will be honest.
 
-The vision's approach (second ring for asteroids) is correct. Put asteroids at an inner ring: `ASTEROID_R = PLANET_R - 22 = 241`. This creates a clear visual hierarchy without conflicting with the transit ring at 288. The transit overlap nudge at lines 783–789 offsets by +12px when within 8° of a natal planet; a symmetric asteroid collision nudge at ±8px will handle crowded natal-asteroid conjunctions.
-
-The existing transit planet rendering (lines 780–860) is a template for asteroid rendering. Copy the pattern with: smaller glyph circle (10px vs 11px for transit vs 13px for natal), amber color (`#c4a472`, distinct from natal gold `#c9a84c` and transit teal `#5ec4c4`), no "T" superscript, an "A" superscript instead to mark as asteroid.
-
-### The `?? '☊'` fallback is silent corruption
-
-In `ChartWheel.tsx` at lines 141, 202, 236, 254:
+Current fragility:
 ```typescript
-PLANET_GLYPHS[name as PlanetName] ?? '☊'
+getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign)
 ```
 
-When `name` is an asteroid not yet in `PLANET_GLYPHS`, this silently renders the North Node glyph. Add asteroid entries to `PLANET_GLYPHS` (or replace the record with a `BodyName`-keyed version), and replace this pattern with a function that throws in development mode when a glyph is missing.
-
-### `PlanetTooltip` will render "House 0" for planets with house assignment deferred
-
-In `PlanetTooltip` at line 93:
+Should be:
 ```typescript
-{planet.degree}°{planet.minute}' {ZODIAC_GLYPHS[planet.sign]} {planet.sign} — House {planet.house}
+getPlanetInSignInterpretation(p.name as BodyName, p.sign)
 ```
 
-There's no guard on `planet.house > 0`. Asteroids computed before house assignment (house initialized to 0 in `calculateChart`) will show "House 0" in the tooltip. This same bug exists for planets during the brief window before `getHouseForLongitude` runs — it's not new, but the asteroid addition makes it more likely to be seen. Guard: `{planet.house > 0 ? ` — House ${planet.house}` : ''}`.
+Better still:
+```typescript
+getPlanetInSignInterpretation(p.name, p.sign)  // No cast needed if p.name is BodyName
+```
+
+### 3. **The `isAsteroid()` Guard Duplication** — REAL FRAGILITY
+Every call to `getPlanetInSignInterpretation` is guarded by `!isAsteroid()`. This creates **two places that must stay in sync**:
+- The caller's guard (`!isAsteroid`)
+- The function's acceptance of the input
+
+If someone later changes the guard logic but forgets to change the function, or vice versa, silent data loss occurs. The fix: **remove the guard and let the function handle both types equally**. This is the "defense in depth" principle: the function should work correctly regardless of input type, not rely on the caller to pre-filter.
+
+### 4. **PlanetReading Interface Typing** — ACCEPTABLE
+The `PlanetReading` interface's `signInterpretation: InterpretationEntry | null` does not distinguish between "classical planet with no entry found" vs. "asteroid, entry not provided yet". In practice, the data is now complete, so this is no longer a problem. But if new asteroids are added later without interpretation data, this ambiguity could cause confusion. **Acceptable for now**, but document the assumption.
+
+### 5. **No Retrograde Filtering for Asteroids in Analysis Functions** — CORRECT
+Lines 201–202 in `assembleReading()` filter `chart.planets` to get retrograde planets, which automatically includes asteroids. This is correct — the retrograde summary should mention asteroids if they are retrograde. The code doesn't accidentally exclude them.
 
 ---
 
-## Performance Considerations
+## Retrograde Interpretation Lookup: Second-Order Issue
 
-Aspect calculation is O(n²): 11 bodies → 55 pairs; 16 bodies → 120 pairs. Each pair checks 7 aspect definitions. 840 comparisons vs 385. This runs in microseconds. Not a concern.
+The current code at line 141 uses `NATAL_RETROGRADE[p.name]`, which works because `p.name` is the string key. For asteroids, this is safe because all 5 have entries (`Chiron`, `Ceres`, etc.). The `?? null` fallback handles any missing key gracefully.
 
-Orbital element calculation: `elliptic.Elements.position()` calls `kepler2b` (up to 15 iterations) plus one light-travel-time correction. For 5 asteroids: 10 kepler solves. Each solve is ~15 iterations of simple arithmetic. Total additional cost per chart: negligible.
+**However**, the guard `!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode'` is overly cautious. It should be:
+```typescript
+retrogradeInterpretation: p.retrograde ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+```
 
-Bundle size is the actual concern. The VSOP87 Earth data file (`data/vsop87Bearth.js`) is a large polynomial series. If Vite includes it in the client bundle, measure the size impact. If it's above ~100KB gzipped, consider dynamic import for the asteroid calculation module so it's lazy-loaded when a chart is first requested, not on initial page load.
+This is simpler, more correct, and includes asteroids. NorthNode is still excluded because it has no retrograde entry (and NorthNode is never retrograde).
 
 ---
 
-## Code Quality Issues Spotted While Exploring
+## Summary: What Needs to Change
 
-### `analyzeElements` is duplicated between client and server
+### Must Do (Unblocks Data)
+1. **Change function signatures** (2 lines in `index.ts`):
+   - `getPlanetInSignInterpretation(planet: BodyName, ...)` 
+   - `getPlanetInHouseInterpretation(planet: BodyName, ...)`
 
-`src/data/interpretations/index.ts` (line 52) and `server/engine/astroCore.ts` (line 100) both implement `analyzeElements` identically. The comment in `astroCore.ts` says "ported from src/data/interpretations/index.ts — keep in sync with frontend." This is the kind of comment you write when you know you have a problem but haven't fixed it. Any math shared between client and server belongs in a `shared/` directory. The asteroid orbital element calculator belongs there too.
+2. **Fix `assembleReading()`** (3–4 lines in `index.ts`, lines 136–141):
+   - Remove `!isAsteroid` guard from sign interpretation lookup
+   - Simplify retrograde interpretation logic to include asteroids
+   - Remove unnecessary type casts
 
-### `calculateCompositeChart` in `synastry.ts` silently drops non-iterated bodies
+3. **Wire up tooltip** (2 lines in `ChartWheel.tsx`, lines 71–74):
+   - Remove `!isAsteroidBody` guards from sign/house/retrograde lookups in `PlanetTooltip`
 
-Lines 195–208:
-```typescript
-for (const name of [...PLANET_NAMES, 'NorthNode' as const]) {
-  const p1 = chart1.planets.find(p => p.name === name)
-  const p2 = chart2.planets.find(p => p.name === name)
-  if (!p1 || !p2) continue
-```
+### Should Do (Polish)
+4. **Create `AsteroidSection` component** in `ReadingDisplay.tsx`:
+   - Filter `reading.planets` for asteroids
+   - Render with amber theming and archetype badges
+   - Same card structure as `PlanetCard`
 
-When asteroids are in both charts' `planets` arrays, the composite chart silently omits them because the iteration only covers `PLANET_NAMES + NorthNode`. Add asteroid names to this iteration, or use a data-driven approach: iterate over names that appear in both charts rather than a hardcoded list.
-
-### `identifyKeyThemes` in `synastry.ts` — missing Chiron detection
-
-Lines 308–353 check for named planet pairs in synastry using string comparisons. There's no Chiron contact detection. The vision explicitly calls out "Person 1's Chiron conjuncts Person 2's Sun — that is one of the most significant synastry contacts in depth psychology." Add Chiron to this function. The check is one block:
-
-```typescript
-const chironAspects = aspects.filter(a => a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron')
-if (chironAspects.length > 0) {
-  const sunMoon = chironAspects.find(a =>
-    (a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron') &&
-    ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person1Planet) ||
-    ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person2Planet)
-  )
-  if (sunMoon) {
-    themes.push("Chiron contacts personal planets — this relationship carries a wound-and-healing dynamic that runs through its core")
-  }
-}
-```
-
-### `retrogradeSummary` will include asteroid names in narrative text correctly
-
-`index.ts` line 190 filters out `NorthNode` from retrograde planets. When asteroids are retrograde and added to `chartData.planets`, they'll appear in `retrogradePlanets`. The `getRetrogradeSummary` function in `retrogrades.ts` just inserts names as strings — it'll work without changes. But `NATAL_RETROGRADE[p.name] ?? null` at line 136 will return `null` for asteroids until you add their entries. That's the correct fallback behavior — no retrograde block shown, no crash.
-
-### `resolveToUTC` has a DST edge case
-
-`astronomy.ts` line 435: the function uses `Intl.DateTimeFormat` to resolve local time to UTC. It fails silently for birth times in the "spring forward" gap (e.g., 2:30 AM during DST transition — a time that doesn't exist). The function returns an incorrect UTC time without any error. This is an existing bug, not a sprint-0014 concern, but it affects birth chart accuracy for people born during DST transitions.
-
-### `buildTransitPrompt` skips NorthNode but will include asteroids
-
-`transits.ts` line 329: `if (p.name === 'NorthNode') continue` intentionally excludes the Node from the GPT transit position list. When asteroids are added to `currentPlanets`, they'll flow through this loop into the GPT prompt automatically. That's the desired behavior. Asteroid daily motions are slow (Chiron ~0.005°/day, main-belt ~0.01–0.02°/day vs Moon ~13°/day) — include a note in the prompt that these bodies move slowly so GPT doesn't hallucinate dramatic transit effects.
+5. **Add to `ResultsPage.tsx`** (1 line):
+   - Insert `<AsteroidSection reading={reading} showHouse={!chartData.unknownTime} />` after `PlanetSection`
 
 ---
 
-## Specific Proposals
+## Code Quality Notes
 
-**P1 — Critical, blocks calculation:** Add `raDecToEclipticLon(ra: number, dec: number, oblRad: number): number` to `src/engine/astronomy.ts`. Test against at least three known asteroid positions from a published ephemeris before writing any interpretation entries. This is the most likely implementation error.
+### Strengths
+- The data layer is complete and high-quality. The asteroid interpretation text (60 sign entries, 60 house entries, 5 retrograde entries) is substantive and specific.
+- The lookup functions are simple string-based maps — fast and reliable.
+- The `isAsteroid()` type guard is well-placed and used consistently throughout.
+- The existing `Section` and `PlanetCard` components are generic enough to handle both classical planets and asteroids.
 
-**P2 — Critical, blocks server:** Move `astronomia` from `devDependencies` to `dependencies` in `package.json`. Verify server build can import and use `elliptic.Elements`.
+### Weaknesses
+- **Over-guarding**: The `!isAsteroid` check is duplicated at call sites instead of being handled inside the functions. This violates the DRY principle and creates fragility.
+- **Type casting instead of honest types**: Code casts `p.name as PlanetName | 'NorthNode'` when `p.name` is actually `BodyName`. This hides the truth from the type system.
+- **No unified retrograde lookup**: Retrograde logic is scattered across multiple guards instead of being consolidated in one place.
 
-**P3 — Architecture, do during sprint:** Consolidate the 4x-duplicated utility functions (`getMeanNodeLongitude`, `getHouseForLongitude`, `getPlanetLongitude`, `getDailyMotion`) into `src/engine/ephemeris.ts`. The asteroid calculation module will be a fifth consumer — fix the duplication before adding a sixth copy.
+### Recommendations
+- After unblocking asteroid interpretations, audit the codebase for similar patterns where type safety is weakened by unnecessary guards or casts.
+- Consider adding a "body interpretation" type (union of all interpretation types) to consolidate lookups and reduce guard duplication in the future.
 
-**P4 — Type system, do before writing asteroid code:** Define `AsteroidName` and `BodyName` in `src/engine/types.ts`. Update all interfaces. Verify the TypeScript compiler catches all missed sites before adding any runtime code.
+---
 
-**P5 — Rendering, required for legibility:** Implement `isAsteroid(name: BodyName): boolean` in `ChartWheel.tsx`. Render asteroids at `ASTEROID_R = 241` (inner ring), glyph circle radius 10px, amber color `#c4a472`, with "A" superscript. Fix the `?? '☊'` fallback to a proper lookup that fails loudly in development mode.
+## Risk Assessment
 
-**P6 — Data quality:** Use recent JPL Horizons elements for Chiron (epoch within the past year, not J2000). Document the retrieval date as a comment in the code. For main-belt asteroids, J2000 elements are acceptable for 10-year accuracy.
+**Implementation Risk: Very Low**
+The changes are surgical and localized. The data already exists. The function signatures are being widened, not changed. Type safety improves.
 
-**P7 — Scope guard:** Add `isAsteroid` filter before `detectPatterns` call site. One line, prevents asteroid contamination of pattern detection this sprint without touching `detectPatterns` itself.
+**Regression Risk: Very Low**
+All existing classical planet and NorthNode lookups continue to work unchanged. The asteroid path is currently returning `null`; any non-null value is an improvement.
 
-**P8 — Bug fix (cheap):** Fix the `applying` field in `calculateAspects` in `aspects.ts`. Either implement it correctly (delta longitude comparison 24h forward) or drop the field. Emitting meaningless data is worse than emitting no data.
+**Data Completeness Risk: Very Low**
+All 60 asteroid sign entries exist and were verified by grep. All 60 house entries exist. All 5 retrograde entries exist.
 
-**P9 — Bug fix (while touching synastry.ts):** Add Chiron contact detection to `identifyKeyThemes`. Chiron-personal-planet aspects are among the most clinically significant synastry contacts. The code is already structured for this — it's a 10-line addition.
+---
 
-**P10 — Rendering correctness:** Add `planet.house > 0` guard to `PlanetTooltip` at line 93 of `ChartWheel.tsx` before displaying house number. Prevents "House 0" display for any planet computed before house assignment completes.
+## Conclusion
 
+The asteroid interpretation system is **architecturally sound but administratively blocked**. The data layer is complete and correct. The minimum viable fix requires:
+1. Two type signature changes (5 minutes)
+2. Simplification of `assembleReading()` retrograde logic (5 minutes)
+3. Removal of guards from `PlanetTooltip` (5 minutes)
+4. Creation and placement of `AsteroidSection` component (30 minutes)
+
+The entire feature can be unblocked and shipped in under one hour of focused work. The code quality will improve in the process — fewer unnecessary guards, more honest types, clearer intent.

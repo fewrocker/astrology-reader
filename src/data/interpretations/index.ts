@@ -16,11 +16,11 @@ import { NATAL_RETROGRADE, getRetrogradeSummary } from './retrogrades'
 
 // ---------- lookup helpers ----------
 
-export function getPlanetInSignInterpretation(planet: PlanetName | 'NorthNode', sign: ZodiacSign): InterpretationEntry | null {
+export function getPlanetInSignInterpretation(planet: BodyName, sign: ZodiacSign): InterpretationEntry | null {
   return PLANET_IN_SIGN[`${planet}_${sign}`] ?? null
 }
 
-export function getPlanetInHouseInterpretation(planet: PlanetName | 'NorthNode', house: number): InterpretationEntry | null {
+export function getPlanetInHouseInterpretation(planet: BodyName, house: number): InterpretationEntry | null {
   return PLANET_IN_HOUSE[`${planet}_H${house}`] ?? null
 }
 
@@ -135,10 +135,10 @@ export interface FullReading {
 export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?: FocusArea): FullReading {
   const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
     planet: p,
-    signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign) : null,
-    houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as PlanetName | 'NorthNode', p.house),
+    signInterpretation: getPlanetInSignInterpretation(p.name as BodyName, p.sign),
+    houseInterpretation: chart.unknownTime ? null : getPlanetInHouseInterpretation(p.name as BodyName, p.house),
     dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
-    retrogradeInterpretation: (p.retrograde && !isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+    retrogradeInterpretation: (p.retrograde && p.name !== 'NorthNode') ? (NATAL_RETROGRADE[p.name] ?? null) : null,
   }))
 
   // Filter asteroid-to-asteroid aspects beyond 3° orb — keep asteroid-to-planet aspects

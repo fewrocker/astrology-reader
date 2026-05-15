@@ -1,5 +1,12 @@
 # Done Proposals
 
+## Sprint 0015 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [code-asteroid-interpretation-wire-up](code-asteroid-interpretation-wire-up.md) | Code Enhancement | merged sprint-0015 |
+| [feat-asteroid-reading-section](feat-asteroid-reading-section.md) | Feature | merged sprint-0015 |
+
 ## Sprint 0013 — Completed
 
 | Proposal | Type | Delivered |

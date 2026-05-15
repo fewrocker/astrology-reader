@@ -1,5 +1,5 @@
 import { normalizeAngle, longitudeToZodiac } from './zodiac'
-import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
+import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, Element, Modality } from './types'
 import { PLANET_NAMES, ASTEROID_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES, isAsteroid } from './types'
 import { getHouseForLongitude } from './ephemeris'
 import type { AspectType } from './aspects'
