@@ -109,3 +109,4 @@ Server running on http://localhost:3002
 [0mPOST /api/analytics/event [32m200[0m 0.786 ms - 11[0m
 [0mPOST /api/analytics/event [32m200[0m 0.487 ms - 11[0m
 [0mPOST /api/analytics/event [32m200[0m 1.030 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.779 ms - 11[0m
