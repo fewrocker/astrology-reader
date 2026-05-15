@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
 
@@ -11,8 +11,8 @@ function formatTimelineDate(date: Date): string {
 function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expanded: boolean; onToggle: () => void }) {
   const typeInfo = EVENT_TYPE_INFO[event.type] ?? { icon: '•', color: 'text-mystic-muted', label: event.type }
 
-  const planetGlyph = event.planet ? (PLANET_GLYPHS[event.planet as PlanetName] ?? '☊') : ''
-  const secondGlyph = event.secondPlanet ? (PLANET_GLYPHS[event.secondPlanet as PlanetName] ?? '☊') : ''
+  const planetGlyph = event.planet ? getBodyGlyph(event.planet) : ''
+  const secondGlyph = event.secondPlanet ? getBodyGlyph(event.secondPlanet) : ''
 
   // Determine background based on nature
   let bgClass = 'bg-mystic-surface/50 border-mystic-border/30'

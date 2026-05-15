@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FullReading, PlanetReading, AspectReading, ElementBalance, ModalityBalance, FocusReading, PatternReading } from '../../data/interpretations'
 import type { ChartData, PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 import { dignityScore } from '../../data/interpretations/dignities'
@@ -152,8 +152,8 @@ export function PlanetSection({ reading, showHouse }: { reading: FullReading; sh
 
 function AspectRow({ ar }: { ar: AspectReading }) {
   const [expanded, setExpanded] = useState(false)
-  const g1 = PLANET_GLYPHS[ar.aspect.planet1 as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[ar.aspect.planet2 as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(ar.aspect.planet1)
+  const g2 = getBodyGlyph(ar.aspect.planet2)
   const natureColor = ar.aspect.nature === 'harmonious' ? 'text-green-400' : ar.aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
   return (
@@ -283,7 +283,7 @@ function PatternCard({ pr }: { pr: PatternReading }) {
             <div className="flex flex-wrap gap-2 mt-1">
               {pr.planetSigns.map((ps) => (
                 <span key={ps.name} className="text-mystic-text text-sm">
-                  {PLANET_GLYPHS[ps.name as PlanetName] ?? '☊'}{' '}
+                  {getBodyGlyph(ps.name)}{' '}
                   {ps.name} in {ZODIAC_GLYPHS[ps.sign]} {ps.sign}
                 </span>
               ))}
@@ -335,7 +335,7 @@ export function FocusSection({ focus }: { focus: FocusReading }) {
           {focus.relevantPlanets.map(pr => (
             <div key={pr.planet.name} className="mb-3 pl-3 border-l-2 border-mystic-gold/30">
               <div className="text-mystic-text font-medium text-sm">
-                {PLANET_GLYPHS[pr.planet.name as PlanetName] ?? '☊'} {pr.planet.name} in {ZODIAC_GLYPHS[pr.planet.sign]} {pr.planet.sign}
+                {getBodyGlyph(pr.planet.name)} {pr.planet.name} in {ZODIAC_GLYPHS[pr.planet.sign]} {pr.planet.sign}
               </div>
               {pr.signInterpretation && <p className="text-mystic-muted text-sm mt-1">{pr.signInterpretation.detail}</p>}
               {pr.houseInterpretation && <p className="text-mystic-muted text-sm mt-1">{pr.houseInterpretation.detail}</p>}
@@ -414,7 +414,7 @@ export function HousesOverview({ chart }: { chart: ChartData }) {
   const planetsByHouse: Record<number, { name: string; glyph: string }[]> = {}
   for (let i = 1; i <= 12; i++) planetsByHouse[i] = []
   for (const p of chart.planets) {
-    const glyph = PLANET_GLYPHS[p.name as PlanetName] ?? '☊'
+    const glyph = getBodyGlyph(p.name)
     planetsByHouse[p.house]?.push({ name: p.name, glyph })
   }
 
@@ -444,7 +444,7 @@ export function HousesOverview({ chart }: { chart: ChartData }) {
 
 function StrengthBar({ planet, score, dignity }: { planet: PlanetReading; score: number; dignity: PlanetReading['dignity'] }) {
   const name = planet.planet.name as PlanetName
-  const glyph = PLANET_GLYPHS[name] ?? '☊'
+  const glyph = getBodyGlyph(name)
   // Map score (-4 to +5) to visual width (0-100%), centered at ~44%
   const pct = Math.round(((score + 4) / 9) * 100)
   const barColor = score > 0 ? 'bg-yellow-400/70' : score < 0 ? 'bg-red-400/50' : 'bg-gray-500/40'
@@ -470,8 +470,8 @@ function StrengthBar({ planet, score, dignity }: { planet: PlanetReading; score:
 }
 
 function MutualReceptionCard({ mr }: { mr: MutualReception }) {
-  const g1 = PLANET_GLYPHS[mr.planet1] ?? '☊'
-  const g2 = PLANET_GLYPHS[mr.planet2] ?? '☊'
+  const g1 = getBodyGlyph(mr.planet1)
+  const g2 = getBodyGlyph(mr.planet2)
 
   return (
     <div className="border border-mystic-purple/20 bg-mystic-purple/5 rounded-lg p-4 mb-3">
@@ -586,7 +586,7 @@ export function RetrogradeSummarySection({ reading }: { reading: FullReading }) 
         <RetrogradePlanetCard
           key={pr.planet.name}
           name={pr.planet.name}
-          glyph={PLANET_GLYPHS[pr.planet.name as PlanetName] ?? '☊'}
+          glyph={getBodyGlyph(pr.planet.name)}
           sign={pr.planet.sign}
           interpretation={pr.retrogradeInterpretation!}
         />
