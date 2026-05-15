@@ -324,15 +324,15 @@ export async function getSolarReturnInterpretation(targetYear: number): Promise<
 }
 
 export async function getSynastryInterpretation(
-  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
-  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
 ): Promise<string> {
   return callProxy('synastry-interpretation', { person1, person2 }) as Promise<string>
 }
 
 export async function getCoupleTransitInterpretation(
-  person1: { date: string; time: string | null; lat: number; lng: number; tz: string },
-  person2: { date: string; time: string | null; lat: number; lng: number; tz: string },
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
   period: string,
   targetMonth?: string,
 ): Promise<string> {

@@ -1,5 +1,15 @@
 # Done Proposals
 
+## Sprint 0016 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-synastry-cache-version](issue-synastry-cache-version.md) | Issue Fix | merged sprint-0016 |
+| [code-chartwheel-tick-optimization](code-chartwheel-tick-optimization.md) | Code Enhancement | merged sprint-0016 |
+| [feat-synastry-bi-wheel](feat-synastry-bi-wheel.md) | Feature | merged sprint-0016 |
+| [feat-synastry-couple-profile](feat-synastry-couple-profile.md) | Feature | merged sprint-0016 |
+| [feat-synastry-personalized-names](feat-synastry-personalized-names.md) | Feature | merged sprint-0016 |
+
 ## Sprint 0015 — Completed
 
 | Proposal | Type | Delivered |

@@ -1,18 +1,22 @@
-import type { ChartData, ZodiacSign, PlanetName, BodyName, AsteroidName } from '../../engine/types'
+import type { ChartData, ZodiacSign, PlanetName, BodyName, AsteroidName, PlanetPosition } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
+import type { SynastryAspect } from '../../engine/synastry'
 import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_GLYPHS, ASTEROID_ARCHETYPES, isAsteroid, getBodyGlyph } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 import { NATAL_RETROGRADE } from '../../data/interpretations/retrogrades'
+import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
 
 interface ChartWheelProps {
   chartData: ChartData
   aspects: Aspect[]
   transitPlanets?: TransitPosition[]
   transitAspects?: TransitAspect[]
+  synastryPlanets?: PlanetPosition[]
+  synastryAspects?: SynastryAspect[]
 }
 
 const SIZE = 700
@@ -24,6 +28,8 @@ const INNER_R = SIGN_R - 70
 const PLANET_R = INNER_R + 35
 const ASTEROID_R = 240
 const TRANSIT_PLANET_R = 288 // between natal planets (263) and zodiac ring inner (298)
+const SYNASTRY_PLANET_R = 288 // same zone as TRANSIT_PLANET_R — only one is active at a time
+const SYNASTRY_COLOR = '#c084fc' // warm lilac-purple, distinct from natal gold and transit teal
 
 type HoverState =
   | { kind: 'planet'; name: string }
@@ -31,6 +37,8 @@ type HoverState =
   | { kind: 'aspect'; index: number }
   | { kind: 'transitAspect'; index: number }
   | { kind: 'house'; house: number }
+  | { kind: 'synastry'; name: string }
+  | { kind: 'synastryAspect'; index: number }
   | null
 
 function polarToXY(cx: number, cy: number, r: number, angleDeg: number) {
@@ -289,7 +297,92 @@ function TransitAspectTooltip({ aspect }: { aspect: TransitAspect }) {
   )
 }
 
-export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects }: ChartWheelProps) {
+/* ─── Synastry Tooltip Components ─── */
+
+function SynastryPlanetTooltip({ planet, synastryAspects }: {
+  planet: PlanetPosition
+  synastryAspects?: SynastryAspect[]
+}) {
+  const glyph = getBodyGlyph(planet.name as BodyName)
+  const relatedAspects = synastryAspects?.filter(a => a.person2Planet === planet.name) ?? []
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xl">{glyph}</span>
+        <span style={{ color: SYNASTRY_COLOR }} className="font-heading text-base font-semibold">
+          {planet.name === 'NorthNode' ? 'North Node' : planet.name}
+        </span>
+        <span className="text-xs border rounded px-1.5 py-0.5" style={{ borderColor: `${SYNASTRY_COLOR}40`, color: `${SYNASTRY_COLOR}cc`, backgroundColor: `${SYNASTRY_COLOR}18` }}>
+          Partner
+        </span>
+        {planet.retrograde && planet.name !== 'NorthNode' && (
+          <span className="text-mystic-muted text-xs border border-mystic-muted/30 rounded px-1">Rx</span>
+        )}
+      </div>
+      <div className="text-mystic-muted text-xs">
+        {planet.degree}°{planet.minute}' {ZODIAC_GLYPHS[planet.sign]} {planet.sign}
+        {planet.house > 0 && ` — House ${planet.house}`}
+      </div>
+      {relatedAspects.length > 0 && (
+        <div className="border-t pt-2" style={{ borderColor: `${SYNASTRY_COLOR}22` }}>
+          <div className="font-medium text-xs uppercase tracking-wider mb-1" style={{ color: `${SYNASTRY_COLOR}cc` }}>
+            Cross-Aspects to Person 1
+          </div>
+          <div className="space-y-1">
+            {relatedAspects.map((a, i) => {
+              const g1 = getBodyGlyph(a.person1Planet as BodyName)
+              const natureColor = a.nature === 'harmonious' ? 'text-green-400' : a.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
+              return (
+                <div key={i} className="flex items-center gap-1.5 text-xs">
+                  <span className={natureColor}>{a.symbol}</span>
+                  <span className="text-mystic-text">{g1} {a.person1Planet}</span>
+                  <span className="text-mystic-muted">({a.orb}° orb)</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SynastryAspectTooltip({ aspect }: { aspect: SynastryAspect }) {
+  const g1 = getBodyGlyph(aspect.person1Planet as BodyName)
+  const g2 = getBodyGlyph(aspect.person2Planet as BodyName)
+  const aspectName = aspect.type.charAt(0).toUpperCase() + aspect.type.slice(1)
+  const natureColor = aspect.nature === 'harmonious' ? 'text-green-400' : aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
+  const brief = computeSynastryAspectBrief(
+    aspect.person1Planet as (PlanetName | 'NorthNode'),
+    aspect.type,
+    aspect.person2Planet as (PlanetName | 'NorthNode'),
+    aspect.nature,
+  )
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-mystic-gold">{g1}</span>
+        <span className={`${natureColor} text-lg`}>{aspect.symbol}</span>
+        <span style={{ color: SYNASTRY_COLOR }}>{g2}</span>
+        <span className="text-mystic-text font-heading text-sm font-semibold flex-1">
+          {aspect.person1Planet} {aspectName} {aspect.person2Planet}
+        </span>
+      </div>
+      <div className="text-mystic-muted text-xs">
+        Orb {aspect.orb.toFixed(1)}° · {getAspectNatureLabel(aspect.nature)} · Cross-chart
+      </div>
+      {brief && (
+        <div className="border-t border-mystic-gold/10 pt-2">
+          <p className="text-mystic-text/90 text-sm leading-relaxed italic">{brief}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects, synastryPlanets, synastryAspects }: ChartWheelProps) {
   const [hover, setHover] = useState<HoverState>(null)
   const [tapped, setTapped] = useState(false)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -308,11 +401,23 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
 
   const hoveredPlanet = hover?.kind === 'planet' ? hover.name : null
   const hoveredTransit = hover?.kind === 'transit' ? hover.name : null
+  const hoveredSynastry = hover?.kind === 'synastry' ? hover.name : null
 
   const filteredAspects = useMemo(() =>
     aspects.filter(a =>
       ['conjunction', 'sextile', 'square', 'trine', 'opposition'].includes(a.type)
     ), [aspects])
+
+  const filteredSynastryAspects = useMemo(() => {
+    if (!synastryAspects) return []
+    const majorTypes = ['conjunction', 'sextile', 'square', 'trine', 'opposition']
+    return synastryAspects
+      .map((sa, origIdx) => ({ sa, origIdx }))
+      .filter(({ sa }) => majorTypes.includes(sa.type))
+  }, [synastryAspects])
+
+  // Synastry mode: active when synastryPlanets provided and non-empty; takes precedence over transit mode
+  const isSynastryMode = !!(synastryPlanets && synastryPlanets.length > 0)
 
   // ─── Interaction handlers ───
 
@@ -343,7 +448,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
          (hover.kind === 'transit' && state.kind === 'transit' && hover.name === state.name) ||
          (hover.kind === 'aspect' && state.kind === 'aspect' && hover.index === state.index) ||
          (hover.kind === 'transitAspect' && state.kind === 'transitAspect' && hover.index === state.index) ||
-         (hover.kind === 'house' && state.kind === 'house' && hover.house === state.house))
+         (hover.kind === 'house' && state.kind === 'house' && hover.house === state.house) ||
+         (hover.kind === 'synastry' && state.kind === 'synastry' && hover.name === state.name) ||
+         (hover.kind === 'synastryAspect' && state.kind === 'synastryAspect' && hover.index === state.index))
     ) {
       setHover(null)
       setTapped(false)
@@ -377,8 +484,9 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
     // Clamp right edge
     if (left + tooltipW > rect.width) left = mousePos.x - tooltipW - 16
     if (left < 0) left = 8
-    // Clamp bottom edge — nudge up if off-screen
-    if (top + 200 > rect.height) top = mousePos.y - 200 - 16
+    // Clamp bottom edge — nudge up if off-screen (synastry tooltips are taller)
+    const tooltipH = (hover?.kind === 'synastry' || hover?.kind === 'synastryAspect') ? 300 : 200
+    if (top + tooltipH > rect.height) top = mousePos.y - tooltipH - 16
     if (top < 0) top = 8
     return {
       position: 'absolute',
@@ -394,12 +502,17 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
     if (!hover) return '#c9a84c'
     if (hover.kind === 'house') return '#7c5cbf'
     if (hover.kind === 'transit' || hover.kind === 'transitAspect') return '#5ec4c4'
+    if (hover.kind === 'synastry') return SYNASTRY_COLOR
+    if (hover.kind === 'synastryAspect') {
+      const entry = filteredSynastryAspects.find(({ origIdx }) => origIdx === hover.index)
+      return entry ? getAspectColor(entry.sa.nature) : SYNASTRY_COLOR
+    }
     if (hover.kind === 'aspect') {
       const a = filteredAspects[hover.index]
       return a ? getAspectColor(a.nature) : '#c9a84c'
     }
     return '#c9a84c'
-  }, [hover, filteredAspects])
+  }, [hover, filteredAspects, filteredSynastryAspects])
 
   return (
     <div
@@ -412,7 +525,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         className="w-full mx-auto chart-svg"
         role="img"
-        aria-label="Natal birth chart wheel"
+        aria-label={isSynastryMode ? "Synastry bi-wheel chart" : "Natal birth chart wheel"}
         onClick={dismiss}
       >
         <defs>
@@ -483,29 +596,42 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+
+          {/* Synastry planet glow filter (lilac-purple) */}
+          <filter id="synastryGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feFlood floodColor={SYNASTRY_COLOR} floodOpacity="0.35" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         {/* Background */}
         <circle cx={CX} cy={CY} r={OUTER_R} fill="url(#chartBg)" stroke="#3a3a50" strokeWidth="1.2" className="chart-outer-ring" />
 
-        {/* Degree tick marks on outer ring */}
-        {Array.from({ length: 360 }, (_, deg) => {
-          const angle = offset(deg)
-          const isMajor = deg % 10 === 0
-          const outerTick = polarToXY(CX, CY, OUTER_R, angle)
-          const innerTick = polarToXY(CX, CY, OUTER_R - (isMajor ? 5 : 2.5), angle)
+        {/* Degree tick marks on outer ring — path-optimised (2 elements vs 360 lines) */}
+        {(() => {
+          let majorD = ''
+          let minorD = ''
+          for (let deg = 0; deg < 360; deg++) {
+            const angle = offset(deg)
+            const isMajor = deg % 10 === 0
+            const outer = polarToXY(CX, CY, OUTER_R, angle)
+            const inner = polarToXY(CX, CY, OUTER_R - (isMajor ? 5 : 2.5), angle)
+            const segment = `M${outer.x.toFixed(2)},${outer.y.toFixed(2)}L${inner.x.toFixed(2)},${inner.y.toFixed(2)}`
+            if (isMajor) majorD += segment
+            else minorD += segment
+          }
           return (
-            <line
-              key={`tick-${deg}`}
-              x1={outerTick.x}
-              y1={outerTick.y}
-              x2={innerTick.x}
-              y2={innerTick.y}
-              stroke={isMajor ? '#3a3a50' : '#2a2a3a'}
-              strokeWidth={isMajor ? 0.8 : 0.4}
-            />
+            <>
+              <path d={majorD} stroke="#3a3a50" strokeWidth={0.8} fill="none" />
+              <path d={minorD} stroke="#2a2a3a" strokeWidth={0.4} fill="none" />
+            </>
           )
-        })}
+        })()}
 
         {/* Zodiac sign segments */}
         {ZODIAC_SIGNS.map((sign, i) => {
@@ -570,9 +696,11 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         {/* Inner circle */}
         <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="#3a3a50" strokeWidth="1" />
 
-        {/* Bi-wheel divider — separates natal planets (inner) from transit planets (outer) */}
-        {transitPlanets && transitPlanets.length > 0 && (
-          <circle cx={CX} cy={CY} r={276} fill="none" stroke="#3a5050" strokeWidth="1" strokeDasharray="4 3" opacity={0.85} />
+        {/* Bi-wheel divider — separates natal planets (inner) from outer ring planets */}
+        {((transitPlanets && transitPlanets.length > 0) || isSynastryMode) && (
+          <circle cx={CX} cy={CY} r={276} fill="none"
+            stroke={isSynastryMode ? '#3a3050' : '#3a5050'}
+            strokeWidth="1" strokeDasharray="4 3" opacity={0.85} />
         )}
 
         {/* House cusps */}
@@ -881,8 +1009,67 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           )
         })()}
 
-        {/* Transit planets (outer ring) */}
-        {transitPlanets && transitPlanets.map((tp, idx) => {
+        {/* Synastry cross-aspect lines — always visible at rest, no hover gate */}
+        {isSynastryMode && filteredSynastryAspects.length > 0 && (
+          <g className="chart-synastry-aspects-group">
+            {filteredSynastryAspects.map(({ sa, origIdx }) => {
+              const p1 = chartData.planets.find(p => p.name === sa.person1Planet)
+              const p2 = synastryPlanets!.find(p => p.name === sa.person2Planet)
+              if (!p1 || !p2) return null
+
+              const natalR = isAsteroid(p1.name as BodyName) ? ASTEROID_R : PLANET_R
+              const from = polarToXY(CX, CY, natalR, offset(p1.longitude))
+              const to = polarToXY(CX, CY, SYNASTRY_PLANET_R, offset(p2.longitude))
+              const color = getAspectColor(sa.nature)
+
+              const isSAHovered = hover?.kind === 'synastryAspect' && hover.index === origIdx
+              const isConnectedToHoveredSynastry = hoveredSynastry
+                ? (sa.person2Planet === hoveredSynastry)
+                : true
+              const isConnectedToHoveredPlanet = hoveredPlanet
+                ? (sa.person1Planet === hoveredPlanet)
+                : true
+
+              let opacity: number
+              if (isSAHovered) {
+                opacity = 1.0
+              } else if (hoveredSynastry) {
+                opacity = isConnectedToHoveredSynastry ? 0.8 : 0.06
+              } else if (hoveredPlanet) {
+                opacity = isConnectedToHoveredPlanet ? 0.7 : 0.06
+              } else {
+                opacity = 0.3
+              }
+
+              return (
+                <g key={`syn-asp-${origIdx}`}>
+                  <line
+                    x1={from.x} y1={from.y}
+                    x2={to.x} y2={to.y}
+                    stroke={isSAHovered ? '#e8e6e3' : color}
+                    strokeWidth={isSAHovered ? 2.2 : sa.orb < 2 ? 0.9 : 0.6}
+                    strokeDasharray="6 4"
+                    opacity={opacity}
+                    style={{ transition: 'opacity 300ms ease, stroke-width 200ms ease, stroke 200ms ease' }}
+                  />
+                  <line
+                    x1={from.x} y1={from.y}
+                    x2={to.x} y2={to.y}
+                    stroke="transparent"
+                    strokeWidth="12"
+                    className="cursor-pointer"
+                    onMouseEnter={() => handleHoverEnter({ kind: 'synastryAspect', index: origIdx })}
+                    onMouseLeave={handleHoverLeave}
+                    onClick={(e) => handleTap({ kind: 'synastryAspect', index: origIdx }, e)}
+                  />
+                </g>
+              )
+            })}
+          </g>
+        )}
+
+        {/* Transit planets (outer ring) — only when NOT in synastry mode */}
+        {!isSynastryMode && transitPlanets && transitPlanets.map((tp, idx) => {
           // Nudge outward if within 8° of a natal planet to avoid overlap
           let r = TRANSIT_PLANET_R
           const tooClose = chartData.planets.some(np => {
@@ -965,6 +1152,82 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           )
         })}
 
+        {/* Synastry planets (outer ring) — Person 2's planets in lilac-purple */}
+        {isSynastryMode && synastryPlanets!.map((sp, idx) => {
+          const pos = polarToXY(CX, CY, SYNASTRY_PLANET_R, offset(sp.longitude))
+          const isHovered = hoveredSynastry === sp.name
+          const glyph = getBodyGlyph(sp.name as BodyName)
+
+          return (
+            <g
+              key={`synastry-${sp.name}-${idx}`}
+              aria-label={`${sp.name === 'NorthNode' ? 'North Node' : sp.name} in ${sp.sign} — Partner planet`}
+              onMouseEnter={() => handleHoverEnter({ kind: 'synastry', name: sp.name })}
+              onMouseLeave={handleHoverLeave}
+              onClick={(e) => handleTap({ kind: 'synastry', name: sp.name }, e)}
+              className="chart-synastry-planet cursor-pointer"
+              style={{ animationDelay: `${0.5 + idx * 0.07}s` }}
+            >
+              {/* Glow */}
+              <circle
+                cx={pos.x} cy={pos.y}
+                r={isHovered ? 16 : 12}
+                fill={SYNASTRY_COLOR}
+                filter="url(#synastryGlow)"
+                opacity={isHovered ? 0.6 : 0.15}
+                style={{ transition: 'r 200ms ease, opacity 200ms ease' }}
+              />
+              {/* Circle */}
+              <circle
+                cx={pos.x} cy={pos.y}
+                r={isHovered ? 14 : 11}
+                fill="#0a0a0f"
+                stroke={isHovered ? SYNASTRY_COLOR : '#2a1a3a'}
+                strokeWidth={isHovered ? 1.5 : 0.7}
+                style={{ transition: 'r 200ms ease, stroke 200ms ease, stroke-width 200ms ease' }}
+              />
+              {/* Glyph */}
+              <text
+                x={pos.x} y={pos.y}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill={isHovered ? SYNASTRY_COLOR : '#d8b8f8'}
+                fontSize={isHovered ? 14 : 12}
+                fontFamily="serif"
+                style={{ transition: 'fill 200ms ease, font-size 200ms ease' }}
+              >
+                {glyph}
+              </text>
+              {/* "2" superscript marker distinguishing Person 2's planets */}
+              <text
+                x={pos.x + 10} y={pos.y - 8}
+                fill={SYNASTRY_COLOR}
+                fontSize="7"
+                fontFamily="sans-serif"
+                opacity={0.7}
+              >
+                2
+              </text>
+              {sp.retrograde && sp.name !== 'NorthNode' && (
+                <text
+                  x={pos.x + 10} y={pos.y + 2}
+                  fill="#b54a4a"
+                  fontSize="7"
+                  fontFamily="sans-serif"
+                >
+                  R
+                </text>
+              )}
+              {/* Larger touch target */}
+              <circle
+                cx={pos.x} cy={pos.y}
+                r={16}
+                fill="transparent"
+              />
+            </g>
+          )
+        })}
+
         {/* ASC/DSC/MC/IC labels */}
         {[
           { label: 'ASC', pos: chartData.angles.ascendant },
@@ -1024,6 +1287,16 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             {hover.kind === 'house' && (
               <HouseTooltip houseNum={hover.house} chartData={chartData} />
             )}
+            {hover.kind === 'synastry' && (() => {
+              const sp = synastryPlanets?.find(p => p.name === hover.name)
+              if (!sp) return null
+              return <SynastryPlanetTooltip planet={sp} synastryAspects={synastryAspects} />
+            })()}
+            {hover.kind === 'synastryAspect' && (() => {
+              const entry = filteredSynastryAspects.find(({ origIdx }) => origIdx === hover.index)
+              if (!entry) return null
+              return <SynastryAspectTooltip aspect={entry.sa} />
+            })()}
           </div>
         </div>
       )}
@@ -1081,6 +1354,16 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 {hover.kind === 'house' && (
                   <HouseTooltip houseNum={hover.house} chartData={chartData} />
                 )}
+                {hover.kind === 'synastry' && (() => {
+                  const sp = synastryPlanets?.find(p => p.name === hover.name)
+                  if (!sp) return null
+                  return <SynastryPlanetTooltip planet={sp} synastryAspects={synastryAspects} />
+                })()}
+                {hover.kind === 'synastryAspect' && (() => {
+                  const entry = filteredSynastryAspects.find(({ origIdx }) => origIdx === hover.index)
+                  if (!entry) return null
+                  return <SynastryAspectTooltip aspect={entry.sa} />
+                })()}
               </div>
             </div>
           </div>

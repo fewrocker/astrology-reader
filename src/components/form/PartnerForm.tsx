@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import CityAutocomplete from './CityAutocomplete'
+import { resolvePersonLabel } from '../../context/appState'
 import type { City } from '../../data/cityTypes'
 
 export default function PartnerForm() {
@@ -9,6 +10,7 @@ export default function PartnerForm() {
   const [errors, setErrors] = useState<string[]>([])
 
   const person1City = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const person1Label = resolvePersonLabel(birthData)
 
   const handleSubmit = () => {
     const errs: string[] = []
@@ -25,14 +27,31 @@ export default function PartnerForm() {
       <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 mb-6">
         {/* Header showing Person 1 */}
         <div className="mb-6 pb-4 border-b border-mystic-border">
-          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-1">Person 1</p>
+          <p className="text-mystic-muted text-xs uppercase tracking-widest mb-1">Your details</p>
           <p className="text-mystic-gold font-heading text-lg">
-            {birthData.date} — {person1City}
+            {person1Label}
           </p>
+          <p className="text-mystic-muted text-sm">{birthData.date} — {person1City}</p>
         </div>
 
-        <p className="text-mystic-muted text-xs uppercase tracking-widest mb-2">Person 2</p>
+        <p className="text-mystic-muted text-xs uppercase tracking-widest mb-2">Partner's details</p>
         <h2 className="font-heading text-2xl text-mystic-gold mb-6">Partner's Birth Details</h2>
+
+        {/* Partner name */}
+        <div className="mb-5">
+          <label htmlFor="partner-name" className="block text-mystic-muted text-xs uppercase tracking-wider mb-2">
+            Name (optional)
+          </label>
+          <input
+            id="partner-name"
+            type="text"
+            placeholder="e.g., Michael or Partner"
+            value={partnerBirthData.userName ?? ''}
+            onChange={e => dispatch({ type: 'UPDATE_PARTNER_DATA', data: { userName: e.target.value } })}
+            className="w-full px-4 py-3 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text focus:border-mystic-gold/50 focus:outline-none"
+            maxLength={40}
+          />
+        </div>
 
         {/* Date */}
         <div className="mb-5">

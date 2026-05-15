@@ -1,86 +1,102 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { resolvePersonLabel } from '../../context/appState'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
-import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
+import type { SynastryData, SynastryAspect, HouseOverlayEntry, CoupleProfile, DimensionValue } from '../../engine/synastry'
 import AspectRow from '../reading/AspectRow'
 import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
 import { getSynastryHouseOverlayBrief } from '../../data/interpretations/synastryHouseOverlayBriefs'
 import ChartWheel from '../chart/ChartWheel'
 import DiscussModal from '../discuss/DiscussModal'
-import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSynastryInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import CollapsibleSection from '../ui/CollapsibleSection'
 
-function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
+function DimensionAxis({ dim, axisKey }: { dim: DimensionValue; axisKey: string }) {
+  const pct = ((dim.value + 1) / 2) * 100
+  const lowConf = dim.confidence < 0.4
+  const [tooltipOpen, setTooltipOpen] = useState(false)
+
+  // Derive axis label from key
+  const axisLabel = axisKey.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())
+
   return (
-    <div className="flex items-center gap-3 mb-3">
-      <span className="text-mystic-text text-sm w-32 shrink-0">{label}</span>
-      <div className="flex-1 h-2 bg-mystic-surface rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ${color}`}
-          style={{ width: `${value}%` }}
-        />
+    <div className={lowConf ? 'opacity-60' : ''}>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-mystic-text text-sm font-medium">
+          {axisLabel}
+          {lowConf && <span className="text-mystic-muted text-xs ml-2">(limited data)</span>}
+        </span>
+        <span className="text-amber-300/80 text-xs">{dim.label}</span>
       </div>
-      <span className="text-mystic-muted text-xs w-8 text-right">{value}%</span>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-mystic-muted text-xs w-20 text-right shrink-0">{dim.leftPole}</span>
+        <div className="relative flex-1 h-1 bg-mystic-gold/20 rounded-full">
+          <div className="absolute top-0 left-0 right-0 bottom-0 rounded-full border border-mystic-gold/10" />
+          <button
+            type="button"
+            className="absolute w-3 h-3 rounded-full bg-amber-400 border-2 border-amber-200 -top-1 transform -translate-x-1/2 hover:scale-125 transition-transform cursor-pointer focus:outline-none"
+            style={{ left: `${pct}%` }}
+            aria-label={`${axisLabel}: ${dim.label} — ${dim.sentence}`}
+            onClick={() => setTooltipOpen(v => !v)}
+            title={dim.sentence}
+          />
+        </div>
+        <span className="text-mystic-muted text-xs w-20 shrink-0">{dim.rightPole}</span>
+      </div>
+      {lowConf ? (
+        <p className="text-xs text-mystic-muted/60 leading-relaxed mt-1">
+          Not enough cross-chart contacts to characterize this dimension precisely.
+        </p>
+      ) : (
+        <p className={`text-xs text-mystic-text/70 leading-relaxed transition-all ${tooltipOpen ? 'block' : 'hidden sm:block'}`}>
+          {dim.sentence}
+        </p>
+      )}
     </div>
   )
 }
 
-function CompatibilitySection({ synastryData }: { synastryData: SynastryData }) {
-  const { compatibility } = synastryData
+function CoupleProfileSection({ synastryData }: { synastryData: SynastryData }) {
+  const { coupleProfile, keyThemes, elementCompatibility, modalityCompatibility } = synastryData
+  const axes: { key: keyof CoupleProfile; }[] = [
+    { key: 'intensity' },
+    { key: 'emotionalFlow' },
+    { key: 'communicationStyle' },
+    { key: 'intimacyRhythm' },
+    { key: 'growthDynamic' },
+    { key: 'sexualChemistry' },
+    { key: 'lifePace' },
+  ]
+
   return (
     <div className="mb-8">
-      <h2 className="font-heading text-2xl text-mystic-gold mb-4">✦ Compatibility Overview</h2>
+      <h2 className="font-heading text-2xl text-mystic-gold mb-1">✦ Your Couple Profile</h2>
+      <p className="text-mystic-muted text-xs mb-4">Seven dimensions of how you move together — not scores, just shape.</p>
       <div className="bg-mystic-gold/5 rounded-lg p-6 border border-mystic-gold/20">
-        {/* Overall score */}
-        <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full border-2 border-mystic-gold/40 mb-2">
-            <span className="font-heading text-3xl text-mystic-gold">{compatibility.overall}</span>
-          </div>
-          <p className="text-mystic-muted text-xs uppercase tracking-wider">Overall Resonance</p>
-        </div>
-
-        {/* Score bars */}
-        <ScoreBar label="Romantic ♡" value={compatibility.romantic} color="bg-pink-500" />
-        <ScoreBar label="Emotional ☽" value={compatibility.emotional} color="bg-blue-400" />
-        <ScoreBar label="Communication ☿" value={compatibility.communication} color="bg-yellow-400" />
-        <ScoreBar label="Growth ♃" value={compatibility.growth} color="bg-green-400" />
-        <ScoreBar label="Challenge ♄" value={compatibility.challenge} color="bg-red-400" />
-
-        {/* Aspect counts */}
-        <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-mystic-gold/10">
-          <div className="text-center">
-            <span className="text-green-400 font-heading text-lg">{compatibility.harmoniousCount}</span>
-            <p className="text-mystic-muted text-xs">Harmonious</p>
-          </div>
-          <div className="text-center">
-            <span className="text-mystic-gold font-heading text-lg">{compatibility.neutralCount}</span>
-            <p className="text-mystic-muted text-xs">Neutral</p>
-          </div>
-          <div className="text-center">
-            <span className="text-red-400 font-heading text-lg">{compatibility.challengingCount}</span>
-            <p className="text-mystic-muted text-xs">Challenging</p>
-          </div>
+        <div className="space-y-5">
+          {axes.map(({ key }) => (
+            <DimensionAxis key={key} dim={coupleProfile[key]} axisKey={key} />
+          ))}
         </div>
 
         {/* Element & modality */}
-        <div className="mt-4 pt-4 border-t border-mystic-gold/10 space-y-2 text-sm">
-          <p className="text-mystic-text"><span className="text-mystic-purple">Elements:</span> {compatibility.elementCompatibility}</p>
-          <p className="text-mystic-text"><span className="text-mystic-purple">Modalities:</span> {compatibility.modalityCompatibility}</p>
+        <div className="mt-6 pt-5 border-t border-mystic-gold/10 space-y-2 text-sm">
+          <p className="text-mystic-text"><span className="text-mystic-purple">Elements:</span> {elementCompatibility}</p>
+          <p className="text-mystic-text"><span className="text-mystic-purple">Modalities:</span> {modalityCompatibility}</p>
         </div>
 
         {/* Key themes */}
-        {compatibility.keyThemes.length > 0 && (
+        {keyThemes.length > 0 && (
           <div className="mt-4 pt-4 border-t border-mystic-gold/10">
             <p className="text-mystic-muted text-xs uppercase tracking-wider mb-2">Key Themes</p>
             <ul className="space-y-1.5">
-              {compatibility.keyThemes.map((theme, i) => (
+              {keyThemes.map((theme, i) => (
                 <li key={i} className="text-mystic-text/90 text-sm flex gap-2">
                   <span className="text-mystic-gold">✦</span> {theme}
                 </li>
@@ -107,12 +123,12 @@ function InterpretationSection({ text }: { text: string }) {
   )
 }
 
-function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
+function SynastryAspectsSection({ aspects, label1, label2 }: { aspects: SynastryAspect[]; label1: string; label2: string }) {
   if (aspects.length === 0) return null
 
   return (
-    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen>
-      <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
+    <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen={false}>
+      <p className="text-mystic-muted text-xs mb-3">Aspects between {label1}'s planets and {label2}'s planets</p>
       <div>
         {aspects.map((a, i) => (
           <AspectRow
@@ -125,7 +141,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
             orb={a.orb}
             applying={false}
             showApplyingBadge={false}
-            labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
+            labelOverride={`${label1}'s ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} ${label2}'s ${a.person2Planet}`}
             brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
           />
         ))}
@@ -278,13 +294,14 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
   )
 }
 
-function IndividualChartSection({ title, chartData, aspects }: {
+function IndividualChartSection({ title, chartData, aspects, defaultOpen }: {
   title: string
   chartData: import('../../engine/types').ChartData
   aspects: import('../../engine/aspects').Aspect[]
+  defaultOpen?: boolean
 }) {
   return (
-    <CollapsibleSection title={title}>
+    <CollapsibleSection title={title} defaultOpen={defaultOpen}>
       <div className="flex justify-center mb-4">
         <div className="w-full max-w-md">
           <ChartWheel chartData={chartData} aspects={aspects} />
@@ -332,8 +349,8 @@ export default function SynastryPage() {
     if (!birthData.city || !partnerBirthData.city) return
     setRetrying(true)
     const interpretation = await getSynastryInterpretation(
-      { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city.lat, lng: birthData.city.lng, tz: birthData.city.tz },
-      { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city.lat, lng: partnerBirthData.city.lng, tz: partnerBirthData.city.tz },
+      { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city.lat, lng: birthData.city.lng, tz: birthData.city.tz, name: birthData.userName?.trim() || undefined },
+      { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city.lat, lng: partnerBirthData.city.lng, tz: partnerBirthData.city.tz, name: partnerBirthData.userName?.trim() || undefined },
     )
     dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
     setRetrying(false)
@@ -341,8 +358,10 @@ export default function SynastryPage() {
 
   if (!chartData || !partnerChartData || !synastryData) return null
 
-  const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
-  const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+  const label1 = resolvePersonLabel(birthData)
+  const label2 = resolvePersonLabel(partnerBirthData)
+  const person1City = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const person2City = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
   return (
     <div className="w-full max-w-5xl mx-auto">
@@ -351,31 +370,45 @@ export default function SynastryPage() {
         <div className="inline-block px-4 py-1 rounded-full bg-pink-900/30 border border-pink-500/30 text-pink-400 text-xs uppercase tracking-widest mb-3">
           Couple Synastry
         </div>
-        <h2 className="font-heading text-3xl text-mystic-gold mb-2">Compatibility Reading</h2>
+        <h2 className="font-heading text-3xl text-mystic-gold mb-2">{label1} & {label2}</h2>
         <div className="flex flex-col sm:flex-row gap-2 justify-center text-mystic-muted text-sm">
-          <span>Person 1: {birthData.date} — {person1Label}</span>
+          <span>{birthData.date}{person1City ? ` — ${person1City}` : ''}</span>
           <span className="hidden sm:inline text-mystic-gold">✦</span>
-          <span>Person 2: {partnerBirthData.date} — {person2Label}</span>
+          <span>{partnerBirthData.date}{person2City ? ` — ${person2City}` : ''}</span>
         </div>
       </div>
 
-      {/* Side-by-side chart wheels */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="text-center">
-          <p className="text-mystic-muted text-xs uppercase tracking-wider mb-2">Person 1</p>
-          <ChartWheel chartData={chartData} aspects={aspects} />
+      {/* Bi-wheel — Person 1 inner, Person 2 outer */}
+      <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center text-xs text-center mb-3">
+          <span className="text-mystic-muted">
+            <span style={{ color: '#c9a84c' }} className="mr-1">●</span>
+            <span className="font-medium text-mystic-text/80">{label1} (inner)</span>
+            {' · '}{birthData.date}
+          </span>
+          <span className="text-mystic-muted">
+            <span style={{ color: '#c084fc' }} className="mr-1">●</span>
+            <span className="font-medium text-mystic-text/80">{label2} (outer)</span>
+            {' · '}{partnerBirthData.date}
+          </span>
         </div>
-        <div className="text-center">
-          <p className="text-mystic-muted text-xs uppercase tracking-wider mb-2">Person 2</p>
-          <ChartWheel chartData={partnerChartData} aspects={partnerAspects} />
+        <div className="w-full max-w-2xl">
+          <ChartWheel
+            chartData={chartData}
+            aspects={aspects}
+            synastryPlanets={partnerChartData.planets}
+            synastryAspects={synastryData.synastryAspects}
+          />
+        </div>
+        <div className="flex flex-wrap gap-4 text-xs text-center justify-center mt-2 text-mystic-muted">
+          <span><span style={{ color: '#4a7fb5' }}>—</span> Harmonious</span>
+          <span><span style={{ color: '#b54a4a' }}>—</span> Challenging</span>
+          <span><span style={{ color: '#c9a84c' }}>—</span> Neutral</span>
         </div>
       </div>
 
-      {/* Compatibility overview */}
-      <CompatibilitySection synastryData={synastryData} />
-
-      {/* current moon phase */}
-      <CurrentMoonWidget date={new Date()} />
+      {/* Couple profile */}
+      <CoupleProfileSection synastryData={synastryData} />
 
       {/* GPT interpretation */}
       {synastryInterpretation === null || retrying ? (
@@ -396,19 +429,19 @@ export default function SynastryPage() {
       )}
 
       {/* Synastry aspects */}
-      <SynastryAspectsSection aspects={synastryData.synastryAspects} />
+      <SynastryAspectsSection aspects={synastryData.synastryAspects} label1={label1} label2={label2} />
 
       {/* House overlays */}
       {synastryData.houseOverlay.person1InPerson2Houses.length > 0 && (
         <HouseOverlaySection
           entries={synastryData.houseOverlay.person1InPerson2Houses}
-          label="Person 1's Planets in Person 2's Houses"
+          label={`${label1}'s Planets in ${label2}'s Houses`}
         />
       )}
       {synastryData.houseOverlay.person2InPerson1Houses.length > 0 && (
         <HouseOverlaySection
           entries={synastryData.houseOverlay.person2InPerson1Houses}
-          label="Person 2's Planets in Person 1's Houses"
+          label={`${label2}'s Planets in ${label1}'s Houses`}
         />
       )}
 
@@ -416,8 +449,8 @@ export default function SynastryPage() {
       <CompositeSection synastryData={synastryData} />
 
       {/* Individual charts */}
-      <IndividualChartSection title="Person 1 — Birth Chart" chartData={chartData} aspects={aspects} />
-      <IndividualChartSection title="Person 2 — Birth Chart" chartData={partnerChartData} aspects={partnerAspects} />
+      <IndividualChartSection title={`${label1} — Birth Chart`} chartData={chartData} aspects={aspects} defaultOpen={false} />
+      <IndividualChartSection title={`${label2} — Birth Chart`} chartData={partnerChartData} aspects={partnerAspects} defaultOpen={false} />
 
       {/* Action buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8 mb-12">
