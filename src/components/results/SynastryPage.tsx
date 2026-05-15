@@ -17,44 +17,84 @@ import { getSynastryInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import CollapsibleSection from '../ui/CollapsibleSection'
 
-function DimensionAxis({ dim, axisKey }: { dim: DimensionValue; axisKey: string }) {
-  const pct = ((dim.value + 1) / 2) * 100
-  const lowConf = dim.confidence < 0.4
-  const [tooltipOpen, setTooltipOpen] = useState(false)
+const DIMENSION_CONFIG: Record<string, {
+  label: string
+  icon: string
+  fillColor: string
+  trackColor: string
+  accentClass: string
+}> = {
+  intensity:          { label: 'Intensity',           icon: '🔥', fillColor: 'bg-orange-400', trackColor: 'bg-orange-400/15', accentClass: 'text-orange-300' },
+  emotionalFlow:      { label: 'Emotional Flow',      icon: '💧', fillColor: 'bg-sky-400',    trackColor: 'bg-sky-400/15',    accentClass: 'text-sky-300'    },
+  communicationStyle: { label: 'Communication Style', icon: '💬', fillColor: 'bg-violet-400', trackColor: 'bg-violet-400/15', accentClass: 'text-violet-300' },
+  intimacyRhythm:     { label: 'Intimacy Rhythm',     icon: '🌿', fillColor: 'bg-teal-400',   trackColor: 'bg-teal-400/15',   accentClass: 'text-teal-300'   },
+  growthDynamic:      { label: 'Growth Dynamic',      icon: '🌱', fillColor: 'bg-emerald-400',trackColor: 'bg-emerald-400/15',accentClass: 'text-emerald-300'},
+  sexualChemistry:    { label: 'Sexual Chemistry',    icon: '✨', fillColor: 'bg-rose-400',   trackColor: 'bg-rose-400/15',   accentClass: 'text-rose-300'   },
+  lifePace:           { label: 'Life Pace',           icon: '⚡', fillColor: 'bg-amber-400',  trackColor: 'bg-amber-400/15',  accentClass: 'text-amber-300'  },
+}
 
-  // Derive axis label from key
-  const axisLabel = axisKey.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase())
+function DimensionAxis({ dim, axisKey }: { dim: DimensionValue; axisKey: string }) {
+  const config = DIMENSION_CONFIG[axisKey] ?? {
+    label: axisKey.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
+    icon: '◆',
+    fillColor: 'bg-mystic-gold',
+    trackColor: 'bg-mystic-gold/15',
+    accentClass: 'text-mystic-gold',
+  }
+
+  const veryLowConf = dim.confidence < 0.2
+  const weakSignal = dim.confidence >= 0.2 && dim.confidence < 0.4
+  const fillOpacity = dim.confidence < 0.4 ? 'opacity-40' : 'opacity-80'
+  const showFill = Math.abs(dim.value) >= 0.02 && !veryLowConf
+  const fillWidth = `${Math.max(Math.abs(dim.value) * 50, 3)}%`
 
   return (
-    <div className={lowConf ? 'opacity-60' : ''}>
-      <div className="flex justify-between items-center mb-1">
+    <div className="rounded-lg p-4 border border-white/10 bg-white/[0.03]">
+      {/* Top row: icon + label on left, qualitative label on right */}
+      <div className="flex justify-between items-center mb-2">
         <span className="text-mystic-text text-sm font-medium">
-          {axisLabel}
-          {lowConf && <span className="text-mystic-muted text-xs ml-2">(limited data)</span>}
+          <span className="mr-1.5">{config.icon}</span>
+          {config.label}
         </span>
-        <span className="text-amber-300/80 text-xs">{dim.label}</span>
+        <span className={`text-xs font-medium ${config.accentClass}`}>{dim.label}</span>
       </div>
-      <div className="flex items-center gap-2 mb-1.5">
+
+      {/* Bar row */}
+      <div className="flex items-center gap-2 mb-2">
         <span className="text-mystic-muted text-xs w-20 text-right shrink-0">{dim.leftPole}</span>
-        <div className="relative flex-1 h-1 bg-mystic-gold/20 rounded-full">
-          <div className="absolute top-0 left-0 right-0 bottom-0 rounded-full border border-mystic-gold/10" />
-          <button
-            type="button"
-            className="absolute w-3 h-3 rounded-full bg-amber-400 border-2 border-amber-200 -top-1 transform -translate-x-1/2 hover:scale-125 transition-transform cursor-pointer focus:outline-none"
-            style={{ left: `${pct}%` }}
-            aria-label={`${axisLabel}: ${dim.label} — ${dim.sentence}`}
-            onClick={() => setTooltipOpen(v => !v)}
-            title={dim.sentence}
-          />
+        <div className={`relative flex-1 h-2 rounded-full overflow-hidden ${config.trackColor}`}>
+          {/* Center divider */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0 w-px bg-white/40 z-10" />
+          {/* Directional fill bar */}
+          {showFill && (
+            dim.value > 0 ? (
+              <div
+                className={`absolute top-0 bottom-0 ${config.fillColor} ${fillOpacity}`}
+                style={{ left: '50%', width: fillWidth }}
+              />
+            ) : (
+              <div
+                className={`absolute top-0 bottom-0 ${config.fillColor} ${fillOpacity}`}
+                style={{ right: '50%', width: fillWidth }}
+              />
+            )
+          )}
         </div>
         <span className="text-mystic-muted text-xs w-20 shrink-0">{dim.rightPole}</span>
       </div>
-      {lowConf ? (
-        <p className="text-xs text-mystic-muted/60 leading-relaxed mt-1">
+
+      {/* Weak signal note */}
+      {weakSignal && (
+        <p className="text-xs text-mystic-muted/60 leading-relaxed mb-1">weak signal</p>
+      )}
+
+      {/* Sentence or low-confidence message */}
+      {veryLowConf ? (
+        <p className="text-xs text-mystic-muted/60 leading-relaxed">
           Not enough cross-chart contacts to characterize this dimension precisely.
         </p>
       ) : (
-        <p className={`text-xs text-mystic-text/70 leading-relaxed transition-all ${tooltipOpen ? 'block' : 'hidden sm:block'}`}>
+        <p className="text-xs text-mystic-text/70 leading-relaxed">
           {dim.sentence}
         </p>
       )}
@@ -64,24 +104,15 @@ function DimensionAxis({ dim, axisKey }: { dim: DimensionValue; axisKey: string 
 
 function CoupleProfileSection({ synastryData }: { synastryData: SynastryData }) {
   const { coupleProfile, keyThemes, elementCompatibility, modalityCompatibility } = synastryData
-  const axes: { key: keyof CoupleProfile; }[] = [
-    { key: 'intensity' },
-    { key: 'emotionalFlow' },
-    { key: 'communicationStyle' },
-    { key: 'intimacyRhythm' },
-    { key: 'growthDynamic' },
-    { key: 'sexualChemistry' },
-    { key: 'lifePace' },
-  ]
 
   return (
     <div className="mb-8">
       <h2 className="font-heading text-2xl text-mystic-gold mb-1">✦ Your Couple Profile</h2>
       <p className="text-mystic-muted text-xs mb-4">Seven dimensions of how you move together — not scores, just shape.</p>
       <div className="bg-mystic-gold/5 rounded-lg p-6 border border-mystic-gold/20">
-        <div className="space-y-5">
-          {axes.map(({ key }) => (
-            <DimensionAxis key={key} dim={coupleProfile[key]} axisKey={key} />
+        <div className="space-y-3">
+          {(Object.entries(coupleProfile) as [keyof CoupleProfile, DimensionValue][]).map(([key, dim]) => (
+            <DimensionAxis key={key} dim={dim} axisKey={key} />
           ))}
         </div>
 
@@ -341,6 +372,7 @@ export default function SynastryPage() {
   const { chartData, aspects, birthData, partnerBirthData, partnerChartData, partnerAspects, synastryData, synastryInterpretation } = state
   const [discussOpen, setDiscussOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [viewMode, setViewMode] = useState<'charts' | 'connections'>('charts')
 
   useEffect(() => { track('reading_viewed', { reading_type: 'synastry' }) }, [])
 
@@ -392,12 +424,37 @@ export default function SynastryPage() {
             {' · '}{partnerBirthData.date}
           </span>
         </div>
+        <div className="flex justify-center mb-3">
+          <div className="inline-flex rounded-full border border-mystic-gold/20 bg-mystic-gold/5 p-0.5 gap-0.5">
+            <button
+              onClick={() => setViewMode('charts')}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                viewMode === 'charts'
+                  ? 'bg-mystic-gold/20 text-mystic-gold'
+                  : 'text-mystic-muted hover:text-mystic-text'
+              }`}
+            >
+              Show charts
+            </button>
+            <button
+              onClick={() => setViewMode('connections')}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                viewMode === 'connections'
+                  ? 'bg-[#c084fc]/20 text-[#c084fc]'
+                  : 'text-mystic-muted hover:text-mystic-text'
+              }`}
+            >
+              Show connections
+            </button>
+          </div>
+        </div>
         <div className="w-full max-w-2xl">
           <ChartWheel
             chartData={chartData}
             aspects={aspects}
             synastryPlanets={partnerChartData.planets}
             synastryAspects={synastryData.synastryAspects}
+            synastryViewMode={viewMode}
           />
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-center justify-center mt-2 text-mystic-muted">

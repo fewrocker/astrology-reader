@@ -1,5 +1,13 @@
 # Done Proposals
 
+## Sprint 0017 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-synastry-gpt-failure](issue-synastry-gpt-failure.md) | Issue Fix | merged sprint-0017 |
+| [feat-biwheel-visual-parity](feat-biwheel-visual-parity.md) | Feature | merged sprint-0017 |
+| [feat-couple-profile-visual-identity](feat-couple-profile-visual-identity.md) | Feature | merged sprint-0017 |
+
 ## Sprint 0016 — Completed
 
 | Proposal | Type | Delivered |

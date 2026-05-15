@@ -327,7 +327,13 @@ export async function getSynastryInterpretation(
   person1: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
   person2: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string },
 ): Promise<string> {
-  return callProxy('synastry-interpretation', { person1, person2 }) as Promise<string>
+  try {
+    const result = await callProxy('synastry-interpretation', { person1, person2 })
+    return (result as string) || 'Unable to generate synastry interpretation.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
 }
 
 export async function getCoupleTransitInterpretation(
@@ -336,5 +342,11 @@ export async function getCoupleTransitInterpretation(
   period: string,
   targetMonth?: string,
 ): Promise<string> {
-  return callProxy('couple-transit-interpretation', { person1, person2, period, targetMonth }) as Promise<string>
+  try {
+    const result = await callProxy('couple-transit-interpretation', { person1, person2, period, targetMonth })
+    return (result as string) || 'Unable to generate synastry interpretation.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
 }
