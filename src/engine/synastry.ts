@@ -86,7 +86,9 @@ export function calculateSynastryAspects(
         const maxOrb = def.orb * orbScale
 
         if (orb <= maxOrb) {
-          const applying = orb < maxOrb * 0.5
+          // Two static natal charts have no directional motion; applying is meaningless here.
+          // SynastryPage.tsx already renders this field as false — this makes it correct at source.
+          const applying = false
 
           aspects.push({
             person1Planet: p1.name,

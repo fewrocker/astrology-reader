@@ -71,9 +71,17 @@ export function calculateAspects(planets: PlanetPosition[]): Aspect[] {
       for (const def of ASPECT_DEFINITIONS) {
         const orb = Math.abs(diff - def.angle)
         if (orb <= def.orb) {
-          // Determine if applying or separating
-          // Use simple heuristic: if orb is decreasing, it's applying
-          const applying = orb < def.orb * 0.5
+          // Determine if applying or separating by comparing current orb to future orb.
+          // If both planets have dailyMotion, simulate positions 24h later and check
+          // whether the orb shrinks (applying) or grows (separating).
+          let applying: boolean
+          if (p1.dailyMotion !== undefined && p2.dailyMotion !== undefined) {
+            const futureDiff = angleDiff(p1.longitude + p1.dailyMotion, p2.longitude + p2.dailyMotion)
+            const futureOrb = Math.abs(futureDiff - def.angle)
+            applying = futureOrb < orb
+          } else {
+            applying = orb < def.orb * 0.5
+          }
 
           aspects.push({
             planet1: p1.name,

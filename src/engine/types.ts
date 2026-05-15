@@ -39,6 +39,7 @@ export interface PlanetPosition extends ZodiacPosition {
   name: PlanetName | 'NorthNode'
   retrograde: boolean
   house: number        // 1-12
+  dailyMotion?: number // degrees per day; positive = direct, negative = retrograde
 }
 
 export interface HouseCusp {
