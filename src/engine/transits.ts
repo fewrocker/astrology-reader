@@ -71,6 +71,23 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
 }
 
 /**
+ * Per-planet station velocity thresholds (°/day).
+ * A planet is classified as "Stationing" only when its absolute daily motion
+ * falls below this value — calibrated to each body's actual station velocity,
+ * not a single value suited only to Mercury.
+ */
+const STATION_THRESHOLD: Partial<Record<PlanetName, number>> = {
+  Mercury: 0.020,
+  Venus:   0.050,
+  Mars:    0.030,
+  Jupiter: 0.015,
+  Saturn:  0.010,
+  Uranus:  0.008,
+  Neptune: 0.006,
+  Pluto:   0.005,
+}
+
+/**
  * Calculate current planetary positions for transit reading.
  */
 export function calculateCurrentPositions(date: Date): TransitPosition[] {
@@ -234,8 +251,9 @@ export function getRetrogradeStatus(date: Date): { planet: PlanetName; isRetro: 
     const motion = getDailyMotion(body, time)
     const isRetro = motion < 0
 
-    // Check if recently stationed (very slow motion)
-    const isStationing = Math.abs(motion) < 0.02
+    // Check if recently stationed (very slow motion) — use per-planet threshold
+    const threshold = STATION_THRESHOLD[name] ?? 0.020
+    const isStationing = Math.abs(motion) < threshold
     let status = isRetro ? 'Retrograde' : 'Direct'
     if (isStationing) status = isRetro ? 'Stationing retrograde' : 'Stationing direct'
 
