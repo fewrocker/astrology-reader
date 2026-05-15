@@ -177,7 +177,7 @@ function preCalculateSnapshots(
 
     if (period === 'monthly') {
       // Use proper month arithmetic to avoid drift
-      targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate())
+      targetDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12, 0, 0)
     } else {
       targetDate = new Date(baseDate.getTime() + i * config.msPerStep)
     }
