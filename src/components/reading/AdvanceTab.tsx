@@ -73,6 +73,14 @@ const CATEGORY_LABELS: Record<MarkerCategory, string> = {
   neutral:     '',
 }
 
+/** Halo box-shadow value per category — drives the CSS variable --thumb-halo (task-0005). */
+const CATEGORY_HALO: Record<Exclude<MarkerCategory, 'neutral'>, string> = {
+  power:       '0 0 10px 3px rgba(201,168,76,0.35), 0 0 20px 6px rgba(201,168,76,0.20)',
+  favorable:   '0 0 10px 3px rgba(52,211,153,0.35), 0 0 20px 6px rgba(52,211,153,0.20)',
+  challenging: '0 0 10px 3px rgba(248,113,113,0.35), 0 0 20px 6px rgba(248,113,113,0.20)',
+  shift:       '0 0 10px 3px rgba(96,165,250,0.35), 0 0 20px 6px rgba(96,165,250,0.20)',
+}
+
 // ─── Orb Thresholds ──────────────────────────────────────────────────────────
 
 const ORB_THRESHOLDS: Record<TransitPeriod, {
@@ -833,6 +841,12 @@ export default function AdvanceTab({
     ? '[&::-webkit-slider-thumb]:shadow-[0_0_12px_rgba(201,168,76,0.8)]'
     : '[&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(201,168,76,0.5)]'
 
+  // Thumb halo CSS variable (task-0005): drives the has-thumb-halo class shadow via CSS var
+  const currentMarker = markers.find(m => m.offset === offset) ?? null
+  const thumbHaloValue = currentMarker && currentMarker.score.category !== 'neutral'
+    ? CATEGORY_HALO[currentMarker.score.category]
+    : undefined
+
   // Aspect list header suffix (spec 8.1)
   const aspectHeaderSuffix = snapshot ? (
     snapshot.score.category === 'favorable' ? ' — Favorable window' :
@@ -932,7 +946,8 @@ export default function AdvanceTab({
               [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-mystic-gold
               [&::-webkit-slider-thumb]:cursor-pointer
               [&::-webkit-slider-track]:bg-mystic-border [&::-webkit-slider-track]:rounded-lg
-              ${thumbShadowClass}`}
+              ${thumbShadowClass}${currentMarker ? ' has-thumb-halo' : ''}`}
+            style={thumbHaloValue ? ({ '--thumb-halo': thumbHaloValue } as React.CSSProperties) : undefined}
           />
 
           {/* Marker dot overlay — pointer-events-none so slider drag works (spec 3.1) */}
