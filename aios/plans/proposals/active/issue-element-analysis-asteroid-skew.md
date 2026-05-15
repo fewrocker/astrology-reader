@@ -64,11 +64,3 @@ const elementAnalysis = analyzeElements(classicalPlanets)
 Alternatively, `analyzeElements` and `analyzeModalities` can accept an optional filter parameter so the filtering is explicit at the function signature level rather than at every call site. Either approach makes the astrological judgment explicit: asteroids are excluded from element/modality balance by design, not by accident.
 
 NorthNode is already present in `chart.planets` (as `PlanetName | 'NorthNode'`) and contributes one sign count today. Whether NorthNode should be included is a separate astrological judgment; the immediate fix addresses the five-body asteroid skew introduced by the sprint.
-
-## Outcome
-
-Fixed 2026-05-15. Added `PLANET_NAMES` import to `src/data/interpretations/index.ts` and inserted a `classicalPlanets` filter at both call sites:
-- `assembleReading()` in `src/data/interpretations/index.ts` (lines 144–146)
-- `buildTransitPrompt()` in `src/engine/transits.ts` (line 361)
-
-Both sites now filter `chart.planets` / `natalChart.planets` to only the ten classical bodies before calling `analyzeElements` / `analyzeModalities`. TypeScript check and production build pass clean. Committed as `d530f94`.

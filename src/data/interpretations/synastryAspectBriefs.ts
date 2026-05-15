@@ -1,4 +1,3 @@
-import type { PlanetName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
 
 // ─── Primary brief table ─────────────────────────────────────────────────────
@@ -235,9 +234,9 @@ function buildKey(p1: string, p2: string, aspectType: string): string {
 // ─── Public compute function ─────────────────────────────────────────────────
 
 export function computeSynastryAspectBrief(
-  person1Planet: PlanetName | 'NorthNode',
+  person1Planet: string,
   aspectType: AspectType,
-  person2Planet: PlanetName | 'NorthNode',
+  person2Planet: string,
   _nature: 'harmonious' | 'challenging' | 'neutral',
 ): string {
   try {

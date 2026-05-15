@@ -1,172 +1,259 @@
-# John Carmack — Voice Analysis: Sprint 0013
+# John Carmack — Sprint 0014 Voice
 
-Sprint 0012 moved the computation to the server and established a trust boundary. Sprint 0013 is about the commercial layer: limits, tracking, and conversion. Different domain, same standard. You ship it right or you ship it lying to yourself.
-
-I have read the key files: `src/context/AuthContext.tsx`, `src/services/gptInterpretation.ts`, `src/services/analytics.ts`, `server/routes/analytics.ts`, `server/db.ts`, `src/App.tsx` (SessionBadge), `src/components/subscription/UpgradeModal.tsx`, `src/components/auth/AuthModal.tsx`, `src/components/home/HomeScreen.tsx`, `index.html`. Here is what I actually see in the code.
+Files read: `src/engine/astronomy.ts`, `src/engine/types.ts`, `src/engine/aspects.ts`, `src/engine/transits.ts`, `src/engine/transitTimeline.ts`, `src/engine/synastry.ts`, `server/engine/astroCore.ts`, `src/components/chart/ChartWheel.tsx`, `src/data/interpretations/planetInSign.ts`, `src/data/interpretations/retrogrades.ts`, `src/data/interpretations/dignities.ts`, `src/data/interpretations/index.ts`, `src/data/interpretations/transitAspectBriefs.ts`, `src/data/interpretations/natalPlanetContext.ts`, `node_modules/astronomia/lib/elliptic.cjs`, `package.json`.
 
 ---
 
-## The `todayUsed` Staleness Problem
+## Executive Summary
 
-This is the most technically concrete bug in the sprint and also the easiest to fix. Let me describe what actually happens.
-
-`AuthContext.tsx` line 96–101: `fetchUsage()` calls `getUsage()` and calls `setTodayUsed(result.data.todayUsed)`. This function is called in two places only: after session restore (line 160) and after `login()` (line 208). That is it. `register()` never calls `fetchUsage()`. Post-registration `todayUsed` is whatever the initial `useState(0)` gave you — it stays at zero until the user logs out and back in.
-
-More concretely: `gptInterpretation.ts` line 93 fires `track('gpt_request_made', ...)` after every successful GPT call, and `_sessionCalls` is incremented at line 92. But there is no corresponding `setTodayUsed(prev => prev + 1)` anywhere in the client. Every successful GPT call goes to the server, the server increments `gpt_usage`, and the client's `todayUsed` is not updated.
-
-The consequence: `SessionBadge` in `App.tsx` line 79 computes `remaining = (tierLimits[tier] ?? 3) - todayUsed`. If `todayUsed` never increments, `remaining` stays stuck at 3 (for a free user) regardless of how many readings they actually did this session. The user sees "3 readings left today" right up until the server returns 429 and `RateLimitError` fires.
-
-The `HomeScreen.tsx` nudge logic at lines 129–155 is entirely driven by `todayUsed`. At `todayUsed <= 1`: no nudge. At `todayUsed === 2`: "1 reading left today ✦ Upgrade for more." At `todayUsed >= 3`: "Daily limit reached ✦ Upgrade to continue." With `todayUsed` frozen at 0, that nudge never fires in the same session as the readings. The user gets zero warning.
-
-**The fix is one line.** In `gptInterpretation.ts`, after `_sessionCalls++` at line 92, the service has no access to React state — it is not inside the React tree. The cleanest fix is to expose an `onGptSuccess` callback from `AuthContext` and subscribe to it from the calling site. But that is over-engineered. The simpler path: expose an `incrementTodayUsed` function from `AuthContext` and call it at the use sites in `App.tsx` immediately after the `await getGptInterpretation(...)` calls resolve successfully.
-
-`App.tsx` has five GPT call sites — `runTransit` (line ~319), `runSynastry` (line ~376), `runSynastryTransit` (line ~424), `runSolarReturn` (line ~482), and the `loading` view's natal chart computation (no GPT call — the natal calculation is pure local arithmetic, no quota consumed). Each async block that calls a GPT service function should call `incrementTodayUsed()` on success, before dispatching results. Five callsites, two lines each. The context function is `setTodayUsed(prev => prev + 1)` wrapped in a `useCallback`. This is a 20-minute fix.
-
-Do not re-fetch from the server after each reading. A network round-trip to fix a UI counter is the wrong trade. The server-side count is authoritative; the client-side count only needs to be approximately right within a session. Increment locally, accept the risk of off-by-one if tabs are open in parallel. The server will still enforce the limit correctly.
+The asteroid integration task is well-scoped and technically feasible. The vision document is unusually precise — it identifies the right library (`astronomia`), the right class (`elliptic.Elements`), and the right data source (JPL Horizons). That's the good news. The bad news is that the current codebase has a structural flaw that will make this sprint messier than it needs to be: the type system and engine are tightly coupled through hardcoded `BODY_MAP` records that appear in four separate files, none of which are aware of each other. Adding asteroids means touching all four, and there's no central registry to update. You'll also discover that `astronomia` is a devDependency, which means it won't be available in the server build without correction — a silent runtime failure waiting to happen.
 
 ---
 
-## The UpgradeModal Analytics Gap
+## Technical Approach Assessment: Asteroid Calculation
 
-`UpgradeModal.tsx` is 445 lines with zero `track()` calls. This is not a judgment about code quality — it is a measurement gap. The modal has a `useEffect` at line 69 that fires when `isOpen` changes to true. That is where `track('upgrade_modal_seen', { currentTier, authenticated, intendedTier })` goes. One line.
+### The `elliptic.Elements` API and what it actually does
 
-The two CTA buttons both call `handleCheckout(priceId, tier)`. That function is at line 112. Add `track('upgrade_cta_clicked', { tier, currentTier, authenticated })` as the first line of `handleCheckout`. One line.
+The vision correctly identifies `astronomia`'s `elliptic.Elements.position(jde, earth)` as the calculation path. I've read the source at `node_modules/astronomia/lib/elliptic.cjs`. Here's what happens at runtime:
 
-The close button at line 200 calls `onClose`. The dismiss button at line 393 also calls `onClose`. Neither fires analytics. You need a `handleClose` wrapper that calls `track('upgrade_dismissed', { currentTier, authenticated })` and then `onClose()`. Replace both `onClick={onClose}` calls with the wrapper.
+1. It solves Kepler's equation iteratively (up to 15 iterations via `kepler2b`) to get eccentric anomaly E from mean anomaly M.
+2. It computes the true anomaly ν from E, then the heliocentric distance r.
+3. It projects into 3D heliocentric equatorial J2000 coordinates using the orbital elements (inclination, node, argument of perihelion).
+4. It calls `astrometricJ2000`, which fetches Earth's heliocentric position from `solarxyz.positionJ2000(earth, jde)`, applies light-travel-time correction (one extra solve), and returns geocentric equatorial coordinates.
 
-One correctness point: the `isOpen` `useEffect` at line 69 also calls `setCheckoutState('idle')` and focuses the first button. Do not fire `upgrade_modal_seen` inside that same effect — it will re-fire on every open/close cycle as long as the component stays mounted. Fire it once in a separate `useEffect` with `[isOpen]` dependency that guards on `if (!isOpen) return`. Same hook, different responsibility.
+**Critical issue the vision glosses over:** the return type is a `base.Coord` object with `.ra` and `.dec` in radians — not ecliptic longitude. The existing `getPlanetLongitude` functions throughout the codebase all return ecliptic degrees (0–360). You need to convert RA/Dec → ecliptic longitude using the obliquity of the ecliptic. The formula is:
 
-The `AuthModal` gap is shallower. Add `track('auth_modal_seen', { initialTab })` in the `useEffect` at line 47 that already runs when `isOpen` becomes true. The `handleClose` at line 97 already exists — add `track('auth_modal_dismissed', { tab })` there, guarded by `if (!result?.ok)` so it does not fire when the user successfully completes auth (that fires `login_completed` / `signup_completed` instead). The tab-switch buttons at line 135 already call `setTab(t)` — add `track('auth_tab_switched', { to: t })` inline.
-
----
-
-## The Analytics Server Endpoint Architecture
-
-`server/routes/analytics.ts` is 55 lines — a single `POST /event` writer with best-effort user ID resolution from JWT. No read path exists.
-
-The funnel query the vision wants (`GET /api/analytics/funnel`) is a straightforward aggregation. The `events` table has an `event` column, a `created_at` column, and the indices `idx_events_user_event` (on `user_id, event, created_at`) and `idx_events_created_at` (on `created_at`). An index on just the `event` column plus `created_at` range would be the fastest path for the funnel query, but the composite `idx_events_user_event` index will satisfy a query of the form `WHERE event = ? AND created_at >= ? AND created_at < ?` if SQLite uses the index for the `event` predicate first. Verify the query plan with `EXPLAIN QUERY PLAN` before calling it done.
-
-The cleanest implementation:
-
-```typescript
-router.get('/funnel', (req, res) => {
-  const secret = process.env.ANALYTICS_ADMIN_SECRET
-  if (!secret || req.headers['x-analytics-secret'] !== secret) {
-    res.status(401).json({ error: 'unauthorized' })
-    return
-  }
-
-  const { from, to } = req.query
-  const fromDate = typeof from === 'string' ? from : new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
-  const toDate = typeof to === 'string' ? to : new Date().toISOString().slice(0, 10)
-
-  const FUNNEL_EVENTS = [
-    'page_view',
-    'form_started',
-    'form_completed',
-    'gpt_request_made',
-    'gpt_limit_hit',
-    'upgrade_modal_seen',
-    'upgrade_cta_clicked',
-    'upgrade_dismissed',
-    'auth_modal_seen',
-    'auth_nudge_seen',
-    'auth_nudge_clicked',
-    'signup_completed',
-    'login_completed',
-  ]
-
-  const db = getDb()
-  const counts: Record<string, number> = {}
-  for (const event of FUNNEL_EVENTS) {
-    const row = db.prepare(
-      `SELECT COUNT(*) as n FROM events WHERE event = ? AND created_at >= ? AND created_at < ?`
-    ).get(event, fromDate, toDate + 'T23:59:59') as { n: number }
-    counts[event] = row.n
-  }
-
-  res.json({ from: fromDate, to: toDate, counts })
-})
+```
+λ = atan2(sin(α)·cos(ε) + tan(δ)·sin(ε), cos(α))
 ```
 
-This is synchronous SQLite via better-sqlite3 — no async needed. The loop over 13 events runs 13 indexed queries. Each query touches at most the rows matching one event name in the date range. For a product at early scale this is instant. Do not try to do it in one SQL GROUP BY query to be clever — the loop is clearer, easier to extend with per-event properties, and SQLite's query planner handles it fine.
+where ε is the mean obliquity at the observation date (available from `Astronomy.e_tilt(time).mobl` in astronomy-engine, already used for house calculation). Failing to do this will place every asteroid at the wrong longitude by an amount that varies from 0° to ~23° depending on position. This is not a rounding error — it's a completely wrong answer. Add a `raDecToEclipticLon(ra: number, dec: number, obliquityRad: number): number` utility to `src/engine/astronomy.ts` and verify it against a known asteroid position before writing any interpretation text.
 
-One missing index worth adding: `CREATE INDEX IF NOT EXISTS idx_events_event_created ON events(event, created_at)`. The existing `idx_events_user_event` starts with `user_id`, making it useless for queries that do not filter by user. The existing `idx_events_created_at` is a single-column index that cannot satisfy the `event = ?` predicate efficiently. Add the two-column index. This is a one-line change to `db.ts` in the `CREATE INDEX IF NOT EXISTS` block.
+### The `earth` argument problem
 
----
+`elliptic.Elements.position(jde, earth)` requires a VSOP87 `V87Planet` object for Earth — it needs the VSOP87 series data loaded. Looking at `node_modules/astronomia/data/`, we have `vsop87Bearth.js`. The import looks like:
 
-## SessionBadge: The Click-to-See Problem
+```typescript
+import { data, planetposition } from 'astronomia'
+const earth = new planetposition.Planet(data.vsop87Bearth)
+```
 
-`App.tsx` line 81: `readingsLabel` is assigned a string for free-tier users. Lines 110–119: it is rendered inside the open dropdown, behind the `{open && (...)}` guard. A free user who has used 2 of 3 readings will never see "1 reading left today" unless they click the star icon.
+This import from a CJS package in an ES module project (`"type": "module"` in `package.json`) requires Vite to handle CJS interop. Vite handles this for client-side bundles, but the server is compiled separately with `tsx`/`tsconfig.server.json`. Verify the import path works in both build contexts before committing to this API. If the server import fails at runtime you'll get a silent `undefined` for `earth` and incorrect positions with no error message.
 
-The fix the vision asks for is correct and technically simple: render an inline count in the button itself (lines 85–94) when `tier === 'free'` and `remaining <= 1`. The button is currently just a `✦` glyph. Add a text span adjacent to it: `{tier === 'free' && remaining <= 1 && <span style={{...}}>1 left</span>}`. This does not change the layout meaningfully — it is a small text fragment to the left of the glyph.
+### Accuracy assessment
 
-The threshold matters. Showing the count when `remaining <= 2` (i.e., from the start) would be fine; the vision says `≤1`. Either is defensible. The important thing is that it is visible without interaction. Pick one and be consistent with what `HomeScreen.tsx` shows.
+For Ceres, Pallas, Juno, and Vesta (main-belt asteroids, semi-major axes 2.1–3.4 AU, eccentricities 0.07–0.23), fixed-epoch Keplerian elements from JPL with no perturbation corrections give roughly 0.1–0.5° accuracy over a decade, degrading to ~1–2° over a century. The vision's claim of "~1 arcminute accuracy" is optimistic for hardcoded elements — that precision requires full numerical integration. However, 0.1–0.5° is **astrologically sufficient**: a 1° error doesn't change the sign or house in most cases, and aspect orb calculations stay valid.
 
----
+**Chiron is the exception.** Chiron (2060) is a centaur object with a highly eccentric orbit (e=0.379) in a chaotic dynamical environment — it has multiple close encounters with Saturn over its ~50-year orbital period. Pure Keplerian propagation from fixed J2000 elements degrades faster for Chiron than for main-belt asteroids. Expect 0.5–3° errors depending on date. The vision acknowledges "periodic perturbation corrections for Chiron" but doesn't specify what those corrections are. The practical solution: use JPL Horizons' current best-fit elements from an epoch as close to the present date as possible (not J2000), which automatically incorporates integrated perturbations up to that epoch. This reduces Chiron error from ~3° to ~0.5° for dates within ±20 years of the element epoch. Document the epoch date as a comment in the code and plan to update it every 10 years.
 
-## HomeScreen Nudge Threshold Inconsistency
+### Retrograde detection for asteroids
 
-`HomeScreen.tsx` line 129: `if (todayUsed <= 1)` — no nudge. This means a free authenticated user who has used 0 or 1 readings sees no remaining-reads signal at all. The nudge only appears at `todayUsed === 2` (one reading left). Combined with the `todayUsed` staleness bug above, this means in practice the nudge never fires in session.
-
-Even once `todayUsed` is fixed to increment locally, a user who opens the home screen after 1 reading has no signal. The vision says "a first-time free user should always know how many readings they have left." That means the signal should be present from the start — not deferred until the last reading.
-
-The fix is a simple copy change. For `todayUsed <= 1` when authenticated and free, instead of returning a spacer `<div className="mb-6" />`, show "3 readings free today" or "X readings left today" as static text (not a button). This is informational, not an upgrade CTA, and matches what the SessionBadge should also show.
-
----
-
-## UpgradeModal: The `AuthModal` Inside a Modal Problem
-
-`UpgradeModal.tsx` line 62: `const [authModalOpen, setAuthModalOpen] = useState(false)`. When an unauthenticated user clicks a CTA in the UpgradeModal, it opens an `AuthModal` rendered at line 232 — inside the UpgradeModal's return. The UpgradeModal's `if (!isOpen && !authModalOpen) return null` guard at line 107 is what keeps both portals from unmounting each other.
-
-This is fragile. The auth flow is: user clicks CTA → `handleCheckout` → `setAuthModalOpen(true)` → `AuthModal` renders inside UpgradeModal → user completes auth → `handleAuthComplete` fires → waits 300ms → calls `handleCheckout` again → Stripe redirect.
-
-The 300ms wait at line 167 (`await new Promise(r => setTimeout(r, 300))`) is a race condition disguised as a ceremony. It is waiting for the `AuthContext` state to settle after `login()` / `register()` sets the JWT. But `login()` in `AuthContext.tsx` line 182 already calls `fetchUsage()` and returns. By the time `handleAuthComplete` runs its 300ms wait, the auth state should already be settled. The 300ms is cargo-culted. It might mask a real timing issue — if `auth.token` is checked inside `handleCheckout` via `localStorage.getItem('astral-auth-token')`, the token should be set synchronously by `localStorage.setItem(AUTH_TOKEN_KEY, jwt)` at line 186. There is no async race.
-
-Additionally: `handleCheckout` checks `if (!authenticated)` where `authenticated` comes from the `UpgradeModal` prop — which is `isAuthenticated` from `AppContent`. This prop is stale by the time `handleAuthComplete` calls `handleCheckout` because the component did not re-render with the new auth state before the 300ms timer fires. The `authenticated` closure is the value from the previous render. This is a real bug — after OAuth or email login completes inside the UpgradeModal, `handleCheckout` may still see `authenticated = false` and loop back into the auth flow.
-
-The fix: `handleCheckout` should read auth state from a ref (`useRef`) or call a callback that reads from the current context value, not from the prop closure. Alternatively, after `handleAuthComplete` resolves, do not call `handleCheckout` at all — instead, close both modals and let the user click the CTA again with fresh state. This is slightly less smooth UX but eliminates the race entirely. Given that the existing 300ms band-aid suggests this was already noticed, the simpler path is likely correct.
+The current retrograde check in `astronomy.ts` (lines 47–61) compares geocentric longitudes 1 day apart and handles 360° wraparound. This algorithm works correctly for asteroid retrograde detection without modification. Chiron's retrograde period is ~5 months per year; main-belt asteroids retrograde for ~2–4 months. The 1-day delta catches all of them cleanly.
 
 ---
 
-## Analytics `track()` Function: Fire-and-Forget Is Right, But There Are Latent Issues
+## Architecture Concerns
 
-`analytics.ts` line 5: `track()` reads `JWT_KEY = 'astral-auth-token'` from localStorage. `gptInterpretation.ts` line 29: `JWT_STORAGE_KEY = 'astral-chart-jwt'`. These are two different strings. One of them is wrong. Either the analytics service is sending tokens that the analytics endpoint never validates (it does — analytics endpoint tries to resolve userId from the Authorization header), or the GPT service is sending tokens under a different key than analytics uses.
+### BODY_MAP duplication — four files, zero coordination
 
-Check `authService.ts` for what `AUTH_TOKEN_KEY` is. If it is `'astral-auth-token'`, then analytics is right and gptInterpretation is wrong. If it is `'astral-chart-jwt'`, analytics is wrong. Either way, these two files should reference the same constant, not hardcode the string independently.
+There are **four** separate `BODY_MAP` declarations in the codebase:
 
-This means analytics events from authenticated users are not being correlated to `user_id` in the `events` table. The analytics endpoint does best-effort JWT verification; if the token key is wrong, the Authorization header is never sent, `userId` stays null, and all events land as anonymous. The funnel query will show correct event counts but zero user-attributed events. This silently undermines any user-level cohort analysis.
+- `src/engine/astronomy.ts` (line 13)
+- `src/engine/transits.ts` (line 47)
+- `src/engine/transitTimeline.ts` (line 48)
+- `server/engine/astroCore.ts` (line 25)
+
+All four are `Record<PlanetName, Astronomy.Body>` and are manually kept in sync. When you add asteroids, you need a parallel `ASTEROID_ORBITAL_ELEMENTS` map in each location — or you can fix the architecture first. The better design: create `src/engine/bodies.ts` that exports:
+
+```typescript
+export const PLANET_BODY_MAP: Record<PlanetName, Astronomy.Body> = { ... }
+export const ASTEROID_ORBITAL_ELEMENTS: Record<AsteroidName, KeplerianElements> = { ... }
+export function getAsteroidGeocentricLongitude(name: AsteroidName, time: AstroTime): number
+```
+
+All four current `BODY_MAP` declarations get replaced with a single import. This is the right time to do this consolidation because you're adding a second map type regardless.
+
+### The `astronomia` devDependency problem
+
+`astronomia` is listed as a `devDependency` in `package.json` (line 42). The client-side Vite build bundles devDependencies correctly. But `server/engine/astroCore.ts` is compiled separately and runs in Node.js where it resolves `require('astronomia')` from `node_modules` at runtime. If `astronomia` is in `devDependencies` and the production deployment strips devDependencies (standard `npm install --production`), the server silently fails to calculate asteroids. Move `astronomia` to `dependencies`.
+
+### Type union inflation — fix it before writing code
+
+Every interface that references a body uses `PlanetName | 'NorthNode'`. For 16 bodies this becomes `PlanetName | 'NorthNode' | AsteroidName` — unwieldy and prone to missed update sites. Define a single `BodyName` type:
+
+```typescript
+export type AsteroidName = 'Chiron' | 'Ceres' | 'Pallas' | 'Juno' | 'Vesta'
+export type BodyName = PlanetName | 'NorthNode' | AsteroidName
+```
+
+Then update: `PlanetPosition.name`, `Aspect.planet1`, `Aspect.planet2`, `TransitAspect.transitPlanet`, `TransitAspect.natalPlanet`, `SynastryAspect.person1Planet`, `SynastryAspect.person2Planet`, `HouseOverlayEntry.planet`, `TimelineEvent.planet`, `TimelineEvent.secondPlanet` — all of these currently typed `PlanetName | 'NorthNode'` — become `BodyName`. This is a find-replace, not a re-architecture. Do it first so the compiler catches any missed call sites when you add the asteroid names.
+
+Critically: do **not** add asteroids to `PLANET_NAMES`. That constant drives the `BODY_MAP` lookup loops in `calculateCurrentPositions`, `detectIngresses`, `getRetrogradeStatus`, `findStations`, and `calculateCompositeChart`. Asteroids use a different calculation path. Keep `PLANET_NAMES` as the astronomy-engine bodies; add a separate `ASTEROID_NAMES: AsteroidName[]` constant for the Keplerian bodies.
+
+### Duplicated utility functions — four copies each
+
+These functions are copied verbatim (or near-verbatim) across the codebase:
+
+- `getMeanNodeLongitude`: `astronomy.ts:66`, `transits.ts:67`, `transitTimeline.ts:68`, `astroCore.ts:140`
+- `getPlanetLongitude`: `astronomy.ts:31`, `transits.ts:60`, `transitTimeline.ts:61`, `astroCore.ts:134`
+- `getHouseForLongitude`: `astronomy.ts:230` (exported), `synastry.ts:113` (private), `astroCore.ts:161`
+- `getDailyMotion`: `transits.ts:73`, `transitTimeline.ts:79`, `astroCore.ts:151`
+
+This is four separate bug surfaces for the same four algorithms. The asteroid calculation will be a fifth consumer of some of these. Consolidate into a shared utility module before the asteroid code is written. `src/engine/ephemeris.ts` is a reasonable name — not `utils.ts` (too vague). The server version in `astroCore.ts` can import from the same place if it's pure TypeScript math with no browser-specific deps.
 
 ---
 
-## SEO: The Minimum Bar Is Low, The Current State Is Below It
+## Aspects Engine: What Breaks and What Doesn't
 
-`index.html` has a `<title>`, a `vite.svg` favicon (the default Vite project favicon — not something you ship to real users), and no meta tags beyond charset and viewport. No description. No OG tags. No Twitter card. When a user pastes the URL into iMessage, they get a blank preview.
+### `calculateAspects` in `aspects.ts` — no structural changes needed, but orbs need a config layer
 
-The fix is ten lines of HTML. There is no technical complexity here — it is just not done. The one thing worth flagging: the `og:image` tag requires an actual image file or a data URI. For a quick fix, a 1200×630 dark SVG with the Astral Chart glyph is sufficient. Do not block the other meta tags on having a perfect OG image. Ship description, og:title, og:description, og:type, og:url, twitter:card now. Add og:image when there is an asset to point at.
+The function at line 62 iterates all planets and cross-joins them. When asteroids are in `chartData.planets`, they participate automatically. The vision is correct that no structural change is needed. However, `ASPECT_DEFINITIONS` has global orb values applied to all pairs. The vision calls for tighter orbs for asteroid-to-asteroid aspects (≤3° major). The cleanest implementation: calculate everything with existing orbs, then post-filter asteroid-to-asteroid aspects with a tighter threshold:
 
-The favicon is more noticeable than most people realize. Replace `/vite.svg` with a simple inline SVG or a base64 data URI of a star glyph before any real traffic hits. A missing favicon is a 404 in the browser's network tab and looks unfinished.
+```typescript
+export function filterAsteroidAspects(aspects: Aspect[], maxAsteroidOrb = 3): Aspect[] {
+  return aspects.filter(a => {
+    const bothAsteroids = ASTEROID_NAMES.includes(a.planet1 as AsteroidName) &&
+                          ASTEROID_NAMES.includes(a.planet2 as AsteroidName)
+    return !bothAsteroids || a.orb <= maxAsteroidOrb
+  })
+}
+```
+
+Call this at the display/GPT assembly layer, not inside `calculateAspects` itself — keep the engine function pure.
+
+### The applying/separating heuristic in `calculateAspects` is wrong
+
+Line 76 in `aspects.ts`:
+```typescript
+const applying = orb < def.orb * 0.5
+```
+
+This says "tight aspects are applying." That's not how applying/separating works. A planet is applying when it is moving toward exact aspect, regardless of current orb. The correct test requires a future-moment comparison — the same logic used correctly in `isRetrograde()`. For natal charts the field is displayed in the tooltip but carries no physical meaning when computed this way. Either implement it properly (delta longitude comparison, similar to `isRetrograde`) or stop emitting it in the natal aspect objects. The transit code in `transits.ts` lines 145–149 does it correctly using `dailyMotion` and direction. The natal code should be consistent.
+
+### `detectPatterns` — asteroid contamination and an existing bug
+
+**Asteroid contamination:** filter asteroid aspects before calling `detectPatterns`. One line at the call site — no changes to the function itself. This is the sprint-scope decision.
+
+**Existing Grand Cross bug (line 155 in `aspects.ts`):**
+```typescript
+const hasAllSquares = hasPair(squares[0]!, opp1.planet1, opp2.planet1) || (
+  squares.filter(s => ...).length >= 4
+)
+```
+
+`squares[0]!` with the `!` non-null assertion will be `undefined` if `squares.length === 0`, and the `||` short-circuit means the second condition is evaluated only sometimes. The second condition itself is wrong: it counts any square involving any of the 4 planets but doesn't verify the specific cross topology (that all 4 adjacent pairs are squared). This can produce false positive Grand Cross detections. Not a sprint-0014 blocker, but worth fixing since you'll be touching this file.
 
 ---
 
-## What Is Over-Engineered
+## Rendering Concerns
 
-**Nothing in this sprint is at risk of over-engineering.** The features are modest: add `track()` calls, add a GET endpoint, fix a counter, add meta tags. The risk is the opposite — under-engineering by tracking events that cannot be queried, or querying events that are never tracked.
+### ChartWheel planet collision — existing problem made much worse
 
-The one thing to watch: the `getHeading()` function in `UpgradeModal.tsx` lines 34–52 has four cases. When analytics events are added, the `upgrade_modal_seen` property `heading` could carry the actual heading string for segmentation. This is not over-engineering — it is the minimum context needed to understand which modal variant converts better. Pass it.
+`ChartWheel.tsx` places all natal planets at `PLANET_R = INNER_R + 35 = 263` (line 24). Planet glyph circles have radius 13px (line 693). At 700px SVG size, the PLANET_R circumference is ~1650px. 16 bodies at the same radius averages ~103px spacing — fine in aggregate, but stelliums (multiple planets within 15°) will stack glyphs completely at ~38px total spacing for 3 conjunct bodies.
+
+The vision's approach (second ring for asteroids) is correct. Put asteroids at an inner ring: `ASTEROID_R = PLANET_R - 22 = 241`. This creates a clear visual hierarchy without conflicting with the transit ring at 288. The transit overlap nudge at lines 783–789 offsets by +12px when within 8° of a natal planet; a symmetric asteroid collision nudge at ±8px will handle crowded natal-asteroid conjunctions.
+
+The existing transit planet rendering (lines 780–860) is a template for asteroid rendering. Copy the pattern with: smaller glyph circle (10px vs 11px for transit vs 13px for natal), amber color (`#c4a472`, distinct from natal gold `#c9a84c` and transit teal `#5ec4c4`), no "T" superscript, an "A" superscript instead to mark as asteroid.
+
+### The `?? '☊'` fallback is silent corruption
+
+In `ChartWheel.tsx` at lines 141, 202, 236, 254:
+```typescript
+PLANET_GLYPHS[name as PlanetName] ?? '☊'
+```
+
+When `name` is an asteroid not yet in `PLANET_GLYPHS`, this silently renders the North Node glyph. Add asteroid entries to `PLANET_GLYPHS` (or replace the record with a `BodyName`-keyed version), and replace this pattern with a function that throws in development mode when a glyph is missing.
+
+### `PlanetTooltip` will render "House 0" for planets with house assignment deferred
+
+In `PlanetTooltip` at line 93:
+```typescript
+{planet.degree}°{planet.minute}' {ZODIAC_GLYPHS[planet.sign]} {planet.sign} — House {planet.house}
+```
+
+There's no guard on `planet.house > 0`. Asteroids computed before house assignment (house initialized to 0 in `calculateChart`) will show "House 0" in the tooltip. This same bug exists for planets during the brief window before `getHouseForLongitude` runs — it's not new, but the asteroid addition makes it more likely to be seen. Guard: `{planet.house > 0 ? ` — House ${planet.house}` : ''}`.
 
 ---
 
-## What Is Under-Engineered
+## Performance Considerations
 
-**The analytics event schema has no type definitions.** `track()` accepts `event: string` and `properties?: Record<string, unknown>`. There is nothing stopping a developer from calling `track('upgrade_modal_seen', { Tier: 'Basic' })` in one place and `track('upgrade_modal_seen', { tier: 'basic' })` in another. The properties are different key names and different casing — they will not aggregate. For a small team, the fix is not a type system — it is a comment block in `analytics.ts` that documents the canonical event names and their expected property shapes. Five minutes of documentation prevents six months of mismatched data.
+Aspect calculation is O(n²): 11 bodies → 55 pairs; 16 bodies → 120 pairs. Each pair checks 7 aspect definitions. 840 comparisons vs 385. This runs in microseconds. Not a concern.
 
-**`register()` in `AuthContext.tsx` line 216 never calls `fetchUsage()`.** `login()` calls it at line 208. After registration, `todayUsed` stays at 0. A newly registered user's `SessionBadge` will show "3 readings left today" accurately (because they have used 0), but this is by accident — it happens to be correct because new users start at 0. If a user registers after already using some IP-based quota and the server knows their pre-auth usage, `todayUsed` would be wrong. Add `await fetchUsage()` to `register()` after the profile fetch, to match the pattern in `login()`.
+Orbital element calculation: `elliptic.Elements.position()` calls `kepler2b` (up to 15 iterations) plus one light-travel-time correction. For 5 asteroids: 10 kepler solves. Each solve is ~15 iterations of simple arithmetic. Total additional cost per chart: negligible.
+
+Bundle size is the actual concern. The VSOP87 Earth data file (`data/vsop87Bearth.js`) is a large polynomial series. If Vite includes it in the client bundle, measure the size impact. If it's above ~100KB gzipped, consider dynamic import for the asteroid calculation module so it's lazy-loaded when a chart is first requested, not on initial page load.
 
 ---
 
-## The Single Most Important Observation
+## Code Quality Issues Spotted While Exploring
 
-The staleness of `todayUsed` is the thread that runs through every UX failure in this sprint. The `SessionBadge` is invisible about limits because `todayUsed` never increments. The `HomeScreen` nudge never fires in session because `todayUsed` never increments. The "1 reading left" warning never appears because `todayUsed` never increments. Fix that one counter and three separate UX defects close simultaneously. It is the highest-leverage change in the sprint and it is a twenty-minute implementation.
+### `analyzeElements` is duplicated between client and server
 
-The analytics gaps are real and the funnel endpoint is necessary, but neither of them blocks anything. The `todayUsed` bug actively undermines the user experience right now.
+`src/data/interpretations/index.ts` (line 52) and `server/engine/astroCore.ts` (line 100) both implement `analyzeElements` identically. The comment in `astroCore.ts` says "ported from src/data/interpretations/index.ts — keep in sync with frontend." This is the kind of comment you write when you know you have a problem but haven't fixed it. Any math shared between client and server belongs in a `shared/` directory. The asteroid orbital element calculator belongs there too.
+
+### `calculateCompositeChart` in `synastry.ts` silently drops non-iterated bodies
+
+Lines 195–208:
+```typescript
+for (const name of [...PLANET_NAMES, 'NorthNode' as const]) {
+  const p1 = chart1.planets.find(p => p.name === name)
+  const p2 = chart2.planets.find(p => p.name === name)
+  if (!p1 || !p2) continue
+```
+
+When asteroids are in both charts' `planets` arrays, the composite chart silently omits them because the iteration only covers `PLANET_NAMES + NorthNode`. Add asteroid names to this iteration, or use a data-driven approach: iterate over names that appear in both charts rather than a hardcoded list.
+
+### `identifyKeyThemes` in `synastry.ts` — missing Chiron detection
+
+Lines 308–353 check for named planet pairs in synastry using string comparisons. There's no Chiron contact detection. The vision explicitly calls out "Person 1's Chiron conjuncts Person 2's Sun — that is one of the most significant synastry contacts in depth psychology." Add Chiron to this function. The check is one block:
+
+```typescript
+const chironAspects = aspects.filter(a => a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron')
+if (chironAspects.length > 0) {
+  const sunMoon = chironAspects.find(a =>
+    (a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron') &&
+    ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person1Planet) ||
+    ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person2Planet)
+  )
+  if (sunMoon) {
+    themes.push("Chiron contacts personal planets — this relationship carries a wound-and-healing dynamic that runs through its core")
+  }
+}
+```
+
+### `retrogradeSummary` will include asteroid names in narrative text correctly
+
+`index.ts` line 190 filters out `NorthNode` from retrograde planets. When asteroids are retrograde and added to `chartData.planets`, they'll appear in `retrogradePlanets`. The `getRetrogradeSummary` function in `retrogrades.ts` just inserts names as strings — it'll work without changes. But `NATAL_RETROGRADE[p.name] ?? null` at line 136 will return `null` for asteroids until you add their entries. That's the correct fallback behavior — no retrograde block shown, no crash.
+
+### `resolveToUTC` has a DST edge case
+
+`astronomy.ts` line 435: the function uses `Intl.DateTimeFormat` to resolve local time to UTC. It fails silently for birth times in the "spring forward" gap (e.g., 2:30 AM during DST transition — a time that doesn't exist). The function returns an incorrect UTC time without any error. This is an existing bug, not a sprint-0014 concern, but it affects birth chart accuracy for people born during DST transitions.
+
+### `buildTransitPrompt` skips NorthNode but will include asteroids
+
+`transits.ts` line 329: `if (p.name === 'NorthNode') continue` intentionally excludes the Node from the GPT transit position list. When asteroids are added to `currentPlanets`, they'll flow through this loop into the GPT prompt automatically. That's the desired behavior. Asteroid daily motions are slow (Chiron ~0.005°/day, main-belt ~0.01–0.02°/day vs Moon ~13°/day) — include a note in the prompt that these bodies move slowly so GPT doesn't hallucinate dramatic transit effects.
+
+---
+
+## Specific Proposals
+
+**P1 — Critical, blocks calculation:** Add `raDecToEclipticLon(ra: number, dec: number, oblRad: number): number` to `src/engine/astronomy.ts`. Test against at least three known asteroid positions from a published ephemeris before writing any interpretation entries. This is the most likely implementation error.
+
+**P2 — Critical, blocks server:** Move `astronomia` from `devDependencies` to `dependencies` in `package.json`. Verify server build can import and use `elliptic.Elements`.
+
+**P3 — Architecture, do during sprint:** Consolidate the 4x-duplicated utility functions (`getMeanNodeLongitude`, `getHouseForLongitude`, `getPlanetLongitude`, `getDailyMotion`) into `src/engine/ephemeris.ts`. The asteroid calculation module will be a fifth consumer — fix the duplication before adding a sixth copy.
+
+**P4 — Type system, do before writing asteroid code:** Define `AsteroidName` and `BodyName` in `src/engine/types.ts`. Update all interfaces. Verify the TypeScript compiler catches all missed sites before adding any runtime code.
+
+**P5 — Rendering, required for legibility:** Implement `isAsteroid(name: BodyName): boolean` in `ChartWheel.tsx`. Render asteroids at `ASTEROID_R = 241` (inner ring), glyph circle radius 10px, amber color `#c4a472`, with "A" superscript. Fix the `?? '☊'` fallback to a proper lookup that fails loudly in development mode.
+
+**P6 — Data quality:** Use recent JPL Horizons elements for Chiron (epoch within the past year, not J2000). Document the retrieval date as a comment in the code. For main-belt asteroids, J2000 elements are acceptable for 10-year accuracy.
+
+**P7 — Scope guard:** Add `isAsteroid` filter before `detectPatterns` call site. One line, prevents asteroid contamination of pattern detection this sprint without touching `detectPatterns` itself.
+
+**P8 — Bug fix (cheap):** Fix the `applying` field in `calculateAspects` in `aspects.ts`. Either implement it correctly (delta longitude comparison 24h forward) or drop the field. Emitting meaningless data is worse than emitting no data.
+
+**P9 — Bug fix (while touching synastry.ts):** Add Chiron contact detection to `identifyKeyThemes`. Chiron-personal-planet aspects are among the most clinically significant synastry contacts. The code is already structured for this — it's a 10-line addition.
+
+**P10 — Rendering correctness:** Add `planet.house > 0` guard to `PlanetTooltip` at line 93 of `ChartWheel.tsx` before displaying house number. Prevents "House 0" display for any planet computed before house assignment completes.
+

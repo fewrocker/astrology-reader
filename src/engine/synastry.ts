@@ -1,6 +1,6 @@
 import { normalizeAngle, longitudeToZodiac } from './zodiac'
-import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, Element, Modality } from './types'
-import { PLANET_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES } from './types'
+import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
+import { PLANET_NAMES, ASTEROID_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES, isAsteroid } from './types'
 import { getHouseForLongitude } from './ephemeris'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
@@ -179,7 +179,7 @@ export function calculateCompositeChart(
 ): CompositeChart {
   const compositePlanets: PlanetPosition[] = []
 
-  for (const name of [...PLANET_NAMES, 'NorthNode' as const]) {
+  for (const name of ([...PLANET_NAMES, 'NorthNode', ...ASTEROID_NAMES] as BodyName[])) {
     const p1 = chart1.planets.find(p => p.name === name)
     const p2 = chart2.planets.find(p => p.name === name)
     if (!p1 || !p2) continue
@@ -245,8 +245,8 @@ function elementCompat(chart1: ChartData, chart2: ChartData): string {
   const count1: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
   const count2: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
 
-  for (const p of chart1.planets) count1[SIGN_ELEMENTS[p.sign]]++
-  for (const p of chart2.planets) count2[SIGN_ELEMENTS[p.sign]]++
+  for (const p of chart1.planets.filter(p => !isAsteroid(p.name as BodyName))) count1[SIGN_ELEMENTS[p.sign]]++
+  for (const p of chart2.planets.filter(p => !isAsteroid(p.name as BodyName))) count2[SIGN_ELEMENTS[p.sign]]++
 
   const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count1[b] - count1[a])[0]
   const dom2 = (Object.keys(count2) as Element[]).sort((a, b) => count2[b] - count2[a])[0]
@@ -266,8 +266,8 @@ function modalityCompat(chart1: ChartData, chart2: ChartData): string {
   const count1: Record<Modality, number> = { Cardinal: 0, Fixed: 0, Mutable: 0 }
   const count2: Record<Modality, number> = { Cardinal: 0, Fixed: 0, Mutable: 0 }
 
-  for (const p of chart1.planets) count1[SIGN_MODALITIES[p.sign]]++
-  for (const p of chart2.planets) count2[SIGN_MODALITIES[p.sign]]++
+  for (const p of chart1.planets.filter(p => !isAsteroid(p.name as BodyName))) count1[SIGN_MODALITIES[p.sign]]++
+  for (const p of chart2.planets.filter(p => !isAsteroid(p.name as BodyName))) count2[SIGN_MODALITIES[p.sign]]++
 
   const dom1 = (Object.keys(count1) as Modality[]).sort((a, b) => count1[b] - count1[a])[0]
   const dom2 = (Object.keys(count2) as Modality[]).sort((a, b) => count2[b] - count2[a])[0]
@@ -333,25 +333,21 @@ function identifyKeyThemes(aspects: SynastryAspect[]): string[] {
     themes.push('North Node contacts point to a fated, karmically significant relationship')
   }
 
-  // Chiron contacts = wound and healing
-  const personalPlanets = ['Sun', 'Moon', 'Venus', 'Mars']
-  const chironAspects = aspects.filter(a =>
-    (a.person1Planet as string) === 'Chiron' || (a.person2Planet as string) === 'Chiron'
+  // Chiron contacts to personal planets — wound-and-healing dynamic
+  const chironToPersonal = aspects.filter(a =>
+    (a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron') &&
+    (
+      ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person1Planet as string) ||
+      ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person2Planet as string)
+    )
   )
-  const chironPersonalAspects = chironAspects.filter(a => {
-    const other = (a.person1Planet as string) === 'Chiron' ? a.person2Planet : a.person1Planet
-    return personalPlanets.includes(other as string)
-  })
-  if (chironPersonalAspects.length > 0) {
-    const a = chironPersonalAspects[0]
-    themes.push(a.nature === 'challenging'
-      ? "One of you carries a wound the other's presence reopens — Chiron contacts this chart's personal planets, and the dynamic may defy easy explanation"
-      : "A healer-and-healed thread runs through this connection — Chiron touching a personal planet brings depth and the possibility of mutual transformation")
-  }
-
-  // Chiron-to-Chiron = generational resonance
-  if (hasAspect('Chiron', 'Chiron')) {
-    themes.push("Your Chirons are in close contact — two people whose wounds speak the same language, mirroring each other's unhealed patterns")
+  if (chironToPersonal.length > 0) {
+    const tightest = chironToPersonal.sort((a, b) => a.orb - b.orb)[0]
+    const isHarsh = tightest.nature === 'challenging'
+    themes.push(isHarsh
+      ? 'Chiron contacts a personal planet — this relationship carries a wound-and-healing dynamic at its core; the Chiron person\'s wound is activated by the other\'s identity or feeling'
+      : 'Chiron contacts a personal planet — this relationship has a healing dimension; one person\'s wound becomes a source of growth and care for the other'
+    )
   }
 
   if (themes.length === 0) {

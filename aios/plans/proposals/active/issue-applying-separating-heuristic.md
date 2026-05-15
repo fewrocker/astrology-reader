@@ -30,11 +30,3 @@ The correct implementation computes the same aspect orb 24 hours later and compa
 `calculateAspects()` in `aspects.ts` currently takes only `planets: PlanetPosition[]` with no time parameter. To compute applying/separating correctly, it needs either: (a) a second `PlanetPosition[]` snapshot computed 24 hours later passed alongside the first, or (b) a `date: Date` parameter so it can call the position functions internally. The `PlanetPosition` interface in `types.ts` already carries `retrograde: boolean` and `longitude: number`; adding a `dailyMotion?: number` field analogous to `TransitPosition.dailyMotion` would allow the caller to supply motion data without changing the function signature semantics.
 
 The same fix must be applied to `synastry.ts` line 89, which carries an identical incorrect heuristic. Synastry aspects between two static natal charts have no time-of-calculation motion to compare, so the correct behavior there is to drop the `applying` field from `SynastryAspect` — the field has no meaningful value when both charts are fixed snapshots. This aligns with `SynastryPage.tsx` line 126, which already hard-codes `applying={false}` when rendering synastry aspect rows, indicating the value was already known to be unreliable.
-
-## Outcome
-
-- Added `dailyMotion?: number` to `PlanetPosition` in `types.ts`.
-- Added `getDailyMotion()` helper in `astronomy.ts`; `calculateChart()` now populates `dailyMotion` for every planet (including North Node via formula diff).
-- Fixed `calculateAspects()` in `aspects.ts`: applying/separating is now determined by simulating each planet's position 24 hours later using `dailyMotion` and checking whether the orb shrinks (applying) or grows (separating). Falls back to the old threshold only when `dailyMotion` is unavailable.
-- Fixed `calculateSynastryAspects()` in `synastry.ts`: `applying` is now always `false` since two static natal charts have no directional motion — consistent with `SynastryPage.tsx` which already hard-coded `applying={false}` when rendering synastry rows.
-- Transit applying/separating logic in `transits.ts` was left untouched — it was already correct.

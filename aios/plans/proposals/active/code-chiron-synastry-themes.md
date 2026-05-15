@@ -57,15 +57,3 @@ The interpretation text for `Chiron_Conjunction_Chiron` should not be a house-fr
 This check belongs at the top of the `try` block in `computeTransitAspectBrief()`, before the `natalHouse` guard — because the Chiron Return is significant regardless of which house natal Chiron occupies.
 
 The same brief mechanism, once in place, can later accommodate other self-conjunctions (Saturn Return, Jupiter Return) as named event interpretations rather than relying on the house-template path for those transits as well.
-
-## Outcome
-
-**Completed 2026-05-15.** All three changes implemented and committed (`62dbfea`).
-
-- **Change 1 (synastry.ts):** Added Chiron contact detection block in `identifyKeyThemes()` after the NorthNode block. Detects Chiron-to-personal-planet aspects (Sun/Moon/Venus/Mars) and branches on harmonious vs challenging nature for the theme string. Also detects Chiron-to-Chiron contact and pushes a generational resonance theme. String casts (`as string`) used safely to avoid type errors since `'Chiron'` is not yet in `PlanetName`.
-
-- **Change 2 (transitAspectBriefs.ts):** Added `Chiron` entry to `TRANSIT_PLANET_PHRASES` with wound-archetype verb phrases: surfacing/having surfaced (harmonious), reopening/having reopened (challenging), activating/having passed through (neutral).
-
-- **Change 3 (transitAspectBriefs.ts):** Added Chiron Return early-return at the top of the `try` block in `computeTransitAspectBrief()`. When both `transitPlanet` and `natalPlanet` are `'Chiron'`, returns: "Chiron is returning to where it stood at your birth — the wound teacher comes full circle. This is your Chiron Return — one of the most significant transits of a human life, occurring around age 49–51."
-
-TypeScript: zero errors. Build: clean.

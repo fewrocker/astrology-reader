@@ -1,10 +1,5 @@
 **Type:** Code Enhancement
 **Originated by:** Carmack, Taleb
-**Status:** Done
-
-## Outcome
-
-Created `src/engine/ephemeris.ts` exporting `getPlanetLongitude`, `getMeanNodeLongitude`, `getDailyMotion`, and `getHouseForLongitude` as the single authoritative implementations. Removed all local duplicates from `astronomy.ts`, `transits.ts`, `transitTimeline.ts`, and `server/engine/astroCore.ts`. The server module re-exports the four functions for backward compatibility with `chartEngine.ts`, `transitEngine.ts`, and `synastryEngine.ts`. Reconciled `synastry.ts`'s private `HouseCusp[]`-typed variant: callers now extract `.longitude` values and delegate to the shared canonical function. TypeScript and Vite build both pass cleanly (6 files changed, +76/-162 lines).
 
 ## Problem / Opportunity
 

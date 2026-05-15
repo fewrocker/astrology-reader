@@ -1,5 +1,6 @@
 import { normalizeAngle } from './zodiac'
 import type { PlanetPosition, BodyName } from './types'
+import { isAsteroid } from './types'
 
 export type AspectType =
   | 'conjunction'
@@ -44,7 +45,7 @@ export type AspectPatternType = 'Grand Trine' | 'T-Square' | 'Grand Cross' | 'Yo
 
 export interface AspectPattern {
   type: AspectPatternType
-  planets: (BodyName)[]
+  planets: BodyName[]
 }
 
 /**
@@ -193,8 +194,20 @@ export function detectPatterns(aspects: Aspect[]): AspectPattern[] {
   return patterns
 }
 
+/**
+ * Filter asteroid-to-asteroid aspects beyond the given maximum orb.
+ * Asteroid-to-planet aspects are always kept.
+ * Call at the display assembly layer, not inside calculateAspects().
+ */
+export function filterAsteroidAspects(aspects: Aspect[], maxAsteroidOrb = 3): Aspect[] {
+  return aspects.filter(a => {
+    const bothAsteroids = isAsteroid(a.planet1 as BodyName) && isAsteroid(a.planet2 as BodyName)
+    return !bothAsteroids || a.orb <= maxAsteroidOrb
+  })
+}
+
 // Helpers
-function findSharedPlanet(a1: Aspect, a2: Aspect): (BodyName) | null {
+function findSharedPlanet(a1: Aspect, a2: Aspect): BodyName | null {
   if (a1.planet1 === a2.planet1 || a1.planet1 === a2.planet2) return a1.planet1
   if (a1.planet2 === a2.planet1 || a1.planet2 === a2.planet2) return a1.planet2
   return null

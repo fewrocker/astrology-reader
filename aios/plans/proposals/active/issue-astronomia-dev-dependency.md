@@ -12,7 +12,3 @@ This bug is latent today and becomes an active runtime failure the moment astero
 ## Expected behavior
 
 `astronomia` should be listed under `dependencies` so that it is present in every deployment context, including production environments that install only production dependencies. A production server build must be able to import and use `elliptic.Elements` without any additional installation steps.
-
-## Outcome
-
-Moved `astronomia@^4.2.0` from `devDependencies` to `dependencies` in `package.json`, placing it alphabetically between `astronomy-engine` and `bcryptjs`. Updated `package-lock.json` via `npm install`. Build verified clean (`✓ built in 9.89s`). The package is now present in production installs and will not fail when asteroid calculation code ships.

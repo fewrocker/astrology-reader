@@ -88,13 +88,3 @@ The following interfaces are updated from `PlanetName | 'NorthNode'` to `BodyNam
 The intended outcome of completing these changes before any asteroid runtime code is written: the TypeScript compiler surfaces every `as PlanetName` cast that now requires re-examination, every `Record<PlanetName, ...>` that cannot accept an asteroid key, and every component that performs a glyph lookup without a fallback. The compiler is the exhaustive finder of missed sites. Running it against a codebase where `BodyName` replaces `PlanetName | 'NorthNode'` everywhere it should, with asteroid names now valid members of `BodyName`, reveals the complete list of sites that need updating before a single asteroid position can be rendered.
 
 `PLANET_GLYPHS` should additionally include an `ASTEROID_ARCHETYPES` companion map (one archetype label per asteroid) noted in the Miyazaki voice as appropriate for tooltip rendering — `{ Chiron: 'Wounded Healer', Ceres: 'Nourisher', Pallas: 'Strategist', Juno: 'Devoted Partner', Vesta: 'Sacred Flame' }`. This belongs in `src/engine/types.ts` alongside the other body constants, not in a component file, so it can be imported wherever the archetype label is needed without creating coupling between `ChartWheel` and tooltip rendering.
-
-## Outcome
-
-**Completed — commit `8145732` on `sprint-0014-task-0006-code-asteroid-type-system`.**
-
-Added to `src/engine/types.ts`: `AsteroidName`, `ASTEROID_NAMES`, `BodyName`, `ASTEROID_GLYPHS`, `ASTEROID_ARCHETYPES`, `isAsteroid()`. Updated `PlanetPosition.name` to `BodyName`.
-
-Updated all specified interfaces to `BodyName`: `Aspect.planet1/2`, `AspectPattern.planets`, the three helper signatures in `aspects.ts`; `TransitAspect.transitPlanet/natalPlanet` in `transits.ts`; `TimelineEvent.planet/secondPlanet`, `getLongitudeForName`, `findAspectPerfection`, `transitNames` in `transitTimeline.ts`; `SynastryAspect.person1/2Planet`, `HouseOverlayEntry.planet` in `synastry.ts`; `AspectRowProps.transitPlanet/natalPlanet` in `AspectRow.tsx`.
-
-BODY_MAP guard added in `transitTimeline.ts` `getLongitudeForName` (asteroid returns 0, pending calculation path). Dignity and retrograde lookup guards updated from `!== 'NorthNode'` to `!isAsteroid() && !== 'NorthNode'` in `ChartWheel.tsx` and `data/interpretations/index.ts`. Compiler-surfaced errors in `ChartWheel.tsx`, `TransitTimeline.tsx`, `TodayPage.tsx`, `AdvanceTab.tsx`, `SynastryPage.tsx`, `TransitReadingPage.tsx`, and `data/interpretations/index.ts` all resolved. `npx tsc --noEmit -p tsconfig.app.json` and `npm run build` both pass with zero errors.

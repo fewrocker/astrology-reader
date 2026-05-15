@@ -1,25 +1,6 @@
 **Type:** Feature
 **Originated by:** Jobs, Carmack, Taleb, Miyazaki
 **User guidance:** Add asteroids to the charts. All of them; birth charts, synastry, transits. They have to look nice and mean something. Focus on the main ones.
-**Status:** ✅ Complete — 2026-05-15
-
----
-
-## Outcome
-
-All 15 specifications implemented and building cleanly. 18 files changed, 684 insertions.
-
-**Engine:** `calculateAsteroidPosition()` + `isAsteroidRetrograde()` in `astronomy.ts` using `astronomia` Keplerian mechanics (`elliptic.Elements`) with proper RA/Dec → ecliptic longitude conversion (Meeus Ch. 13). Earth VSOP87 singleton via lazy `getEarth()`. JDE computed from `time.tt`. Shared orbital elements in `src/engine/asteroidElements.ts` (JPL Horizons values). Server-side `astroCore.ts` duplicates inline due to `rootDir: ./server` constraint (documented).
-
-**Type system:** `AsteroidName`, `BodyName` union, `isAsteroid()`, `getBodyGlyph()`, `ASTEROID_GLYPHS`, `ASTEROID_ARCHETYPES` added to `types.ts`. `PlanetPosition.name` widened to `BodyName`. Cascade fixed across aspects.ts, synastry.ts, transits.ts, transitTimeline.ts, interpretations/index.ts, and 6 component files.
-
-**Chart rendering:** Amber inner ring at `ASTEROID_R = 240` (vs `PLANET_R = 263`), 10px glyph circles, amber glow filter (#d97706), angular de-collision for asteroids within 5°. `PlanetTooltip` shows archetype badge + italic archetype note for asteroid bodies; dignity/retrograde guarded for classical planets only.
-
-**Filtering:** `filterAsteroidAspects()` added to `aspects.ts`. Classical-planet-only element/modality analysis in `index.ts`, `astroCore.ts`, `synastry.ts`. `computeEnergyRating()` excludes asteroid aspects. `buildTransitPrompt()` has slow-body framing instruction and skips asteroid aspects for tightest-applying priority. Chiron detection added to `identifyKeyThemes()` in synastry.
-
-**Dependency:** `astronomia` moved from devDependencies → dependencies in package.json.
-
-**Not done (out of scope):** Interpretation data (120 sign/house entries), validation script against JPL Horizons, `buildSynastryPrompt()` archetype context lines.
 
 ---
 

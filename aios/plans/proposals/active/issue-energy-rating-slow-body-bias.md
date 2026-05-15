@@ -66,9 +66,3 @@ const classical = aspects.filter(a => !isAsteroid(a.transitPlanet))
 The excluded asteroid aspects are not discarded entirely. Callers that need to surface prominent slow-body transits — such as a banner warning when Chiron is within 1° of natal Chiron (the Chiron Return), or a contextual note in the transit reading — should draw from the full unsorted `aspects` array directly, not from the top-8 slice used for the score. This preserves the energy rating's daily-weather semantics while allowing asteroid transits to be presented as what they are: extended background themes surfaced through dedicated UI treatment, not as daily vote contributions.
 
 No changes are needed to `calculateTransitAspects()`, `getTopActiveTransits()`, or the callers. The filter belongs inside `computeEnergyRating()` so the fix is in one place regardless of how many surfaces display the rating.
-
-## Outcome
-
-**Status: Complete** (2026-05-15)
-
-Added an inline `ASTEROID_NAMES_SET` filter before `slice(0, 8)` in `computeEnergyRating()` (`src/engine/transits.ts:454`). Asteroid transit aspects (Chiron, Ceres, Pallas, Juno, Vesta) are now excluded from the top-8 classical planet pool that drives the daily energy score. TypeScript check passed with no errors; build succeeded. Committed as `f2ee0ea`.

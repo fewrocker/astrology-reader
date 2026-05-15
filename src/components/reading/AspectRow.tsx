@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { BodyName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
-import { PLANET_GLYPHS, getBodyGlyph } from '../../engine/types'
+import { getBodyGlyph } from '../../engine/types'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 

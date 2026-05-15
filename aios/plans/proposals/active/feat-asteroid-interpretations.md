@@ -4,19 +4,6 @@
 
 ---
 
-## Outcome
-
-**Completed 2026-05-15.** All 126 entries written and committed (`4a79c65`).
-
-- **60 planet-in-sign entries** added to `PLANET_IN_SIGN` in `planetInSign.ts` — Chiron, Ceres, Pallas, Juno, Vesta × 12 signs each.
-- **60 planet-in-house entries** added to `PLANET_IN_HOUSE` in `planetInHouse.ts` — same 5 × 12 houses.
-- **5 natal retrograde entries** added to `NATAL_RETROGRADE` in `retrogrades.ts`.
-- **1 Chiron Return override** added as `TRANSIT_ASPECT_OVERRIDES` record in `transitAspectBriefs.ts`, keyed `Chiron_Conjunction_Chiron`, with dedicated language per Specification 8.
-
-All entries pass the seven quality gates. TypeScript clean (`npx tsc --noEmit` zero errors). Build clean (`npm run build` succeeded).
-
----
-
 ## Problem / Opportunity
 
 The product currently renders eleven bodies in the natal chart — ten classical planets plus the North Node. When sprint 0014 adds Chiron, Ceres, Pallas, Juno, and Vesta to the chart wheel, those five bodies will appear on-screen with no interpretation behind them.

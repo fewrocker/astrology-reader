@@ -1,10 +1,5 @@
 **Type:** Issue Fix
 **Originated by:** Jobs, Miyazaki, Carmack, Taleb
-**Status:** Done
-
-## Outcome
-
-Added `AsteroidName`, `ASTEROID_GLYPHS`, and `getBodyGlyph(name: string): string` to `src/engine/types.ts`. The helper checks `PLANET_GLYPHS` then `ASTEROID_GLYPHS`, falls back to `'?'` (with a dev-mode `console.warn`), and never returns the North Node glyph for unknown bodies. Replaced all 31 explicit `PLANET_GLYPHS[... as PlanetName] ?? '☊'` patterns across 10 files (ChartWheel.tsx, SolarReturnBiWheel.tsx, ReadingDisplay.tsx, AspectRow.tsx, TransitTimeline.tsx, AdvanceTab.tsx, SynastryTransitPage.tsx, TransitReadingPage.tsx, SynastryPage.tsx, ResultsPage.tsx) with `getBodyGlyph(name)`. Also fixed the no-fallback site at ChartWheel.tsx line 661 (`PLANET_GLYPHS[planet.name]` → `getBodyGlyph(planet.name)`). TypeScript clean; build passes.
 
 ## Problem
 

@@ -1,11 +1,12 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetName, BodyName, ChartData } from './types'
-import { PLANET_NAMES, isAsteroid } from './types'
+import type { PlanetName, ChartData, BodyName, AsteroidName } from './types'
+import { PLANET_NAMES, ASTEROID_NAMES, isAsteroid } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import type { TransitPeriod } from './transits'
 import { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion } from './ephemeris'
+import { calculateAsteroidPosition } from './astronomy'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,12 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
   Pluto: Astronomy.Body.Pluto,
 }
 
-function getLongitudeForName(name: BodyName, time: Astronomy.AstroTime): number {
+function getLongitudeForName(name: BodyName, time: Astronomy.AstroTime, obliquityRad?: number): number {
   if (name === 'NorthNode') return getMeanNodeLongitude(time)
-  if (isAsteroid(name)) return 0 // asteroid calculation path pending
+  if (isAsteroid(name as AsteroidName)) {
+    const obl = obliquityRad ?? Astronomy.e_tilt(time).mobl * Astronomy.DEG2RAD
+    return calculateAsteroidPosition(name as AsteroidName, time, obl).longitude
+  }
   return getPlanetLongitude(BODY_MAP[name as PlanetName], time)
 }
 
@@ -157,8 +161,8 @@ function findAspectPerfections(
   const events: TimelineEvent[] = []
   const { planets: natalPlanets, unknownTime } = natalChart
 
-  // Only track meaningful transit planets (skip Sun for daily since it barely moves)
-  const transitNames: BodyName[] = [...PLANET_NAMES]
+  // Track classical planets plus asteroids as transit bodies
+  const transitNames: BodyName[] = [...PLANET_NAMES, ...ASTEROID_NAMES]
 
   // Wider orb window for scanning
   const orbScale = period === 'daily' ? 0.5 : period === 'weekly' ? 0.8 : 1.0
@@ -266,25 +270,61 @@ function findStations(startDate: Date, endDate: Date): TimelineEvent[] {
   const dayMs = 86400000
   const days = Math.ceil((endDate.getTime() - startDate.getTime()) / dayMs)
 
-  // Only outer planets station (not Sun/Moon)
-  const stationPlanets: PlanetName[] = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto']
+  // Outer planets + asteroids (not Sun/Moon — they don't station)
+  const stationPlanets: BodyName[] = [
+    'Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto',
+    ...ASTEROID_NAMES,
+  ]
 
   for (const name of stationPlanets) {
-    const body = BODY_MAP[name]
-    let prevMotion = getDailyMotion(body, Astronomy.MakeTime(startDate))
+    const isAst = isAsteroid(name as AsteroidName)
+    let prevMotion: number
+
+    if (isAst) {
+      const t0 = Astronomy.MakeTime(startDate)
+      const obl0 = Astronomy.e_tilt(t0).mobl * Astronomy.DEG2RAD
+      const lon0 = calculateAsteroidPosition(name as AsteroidName, t0, obl0).longitude
+      const t0p = Astronomy.MakeTime(new Date(startDate.getTime() + dayMs))
+      const lon0p = calculateAsteroidPosition(name as AsteroidName, t0p, obl0).longitude
+      let d0 = lon0p - lon0
+      if (d0 > 180) d0 -= 360
+      if (d0 < -180) d0 += 360
+      prevMotion = d0
+    } else {
+      prevMotion = getDailyMotion(BODY_MAP[name as PlanetName], Astronomy.MakeTime(startDate))
+    }
 
     for (let d = 1; d <= days; d++) {
       const checkDate = new Date(startDate.getTime() + d * dayMs)
       if (checkDate > endDate) break
 
       const t = Astronomy.MakeTime(checkDate)
-      const motion = getDailyMotion(body, t)
+      let motion: number
+
+      if (isAst) {
+        const obl = Astronomy.e_tilt(t).mobl * Astronomy.DEG2RAD
+        const lon = calculateAsteroidPosition(name as AsteroidName, t, obl).longitude
+        const tp = Astronomy.MakeTime(new Date(checkDate.getTime() + dayMs))
+        const lonP = calculateAsteroidPosition(name as AsteroidName, tp, obl).longitude
+        let diff = lonP - lon
+        if (diff > 180) diff -= 360
+        if (diff < -180) diff += 360
+        motion = diff
+      } else {
+        motion = getDailyMotion(BODY_MAP[name as PlanetName], t)
+      }
 
       // Detect direction change
       if ((prevMotion >= 0 && motion < 0) || (prevMotion < 0 && motion >= 0)) {
         const stationType = motion < 0 ? 'retrograde' : 'direct'
         const dateStr = checkDate.toISOString().split('T')[0]
-        const sign = longitudeToZodiac(getPlanetLongitude(body, t)).sign
+        let sign: string
+        if (isAst) {
+          const obl = Astronomy.e_tilt(t).mobl * Astronomy.DEG2RAD
+          sign = calculateAsteroidPosition(name as AsteroidName, t, obl).sign
+        } else {
+          sign = longitudeToZodiac(getPlanetLongitude(BODY_MAP[name as PlanetName], t)).sign
+        }
 
         events.push({
           id: `station-${name}-${stationType}-${dateStr}`,
