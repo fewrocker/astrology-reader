@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../../context/AppContext'
-import type { ChartData } from '../../engine/types'
+import type { ChartData, PlanetName } from '../../engine/types'
 import { ZODIAC_GLYPHS } from '../../engine/types'
 import { calculateCurrentPositions, calculateTransitAspects, getTopActiveTransits, computeEnergyRating } from '../../engine/transits'
 import type { TransitAspect, EnergyRating } from '../../engine/transits'
@@ -171,7 +171,7 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
                   symbol={a.symbol}
                   orb={a.orb}
                   applying={a.applying}
-                  brief={computeTransitAspectBrief(a.transitPlanet, a.type, a.natalPlanet, a.natalHouse, a.nature, a.applying)}
+                  brief={computeTransitAspectBrief(a.transitPlanet as (PlanetName | 'NorthNode'), a.type, a.natalPlanet as (PlanetName | 'NorthNode'), a.natalHouse, a.nature, a.applying)}
                 />
               ))}
             </>

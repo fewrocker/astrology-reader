@@ -457,7 +457,7 @@ const HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE: Record<string, string> = {
  */
 export function getPersonalizedEventBrief(
   aspectType: AspectType,
-  natalPlanet: PlanetName | 'NorthNode',
+  natalPlanet: string,
   natalHouse: number | null,
 ): string {
   // For NorthNode or unknown/invalid house, skip the personalized table
@@ -474,7 +474,7 @@ export function getPersonalizedEventBrief(
 
 export function getAspectPerfectionBrief(
   aspectType: AspectType,
-  natalPlanet: PlanetName | 'NorthNode',
+  natalPlanet: string,
 ): string {
   const briefs = ASPECT_BRIEFS[aspectType]
   if (!briefs) return ''

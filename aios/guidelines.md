@@ -1,3 +1,1 @@
-SPRINT NAME: PRODUCTION-READYNESS
-
-The main goal of this sprint is to check if the app is production ready to receive users, allow them to have a good experience, clearly show the reading limits and stuff, upgrade the users to paying users, and track the users processes throughout the app so we can see the conversion metrics of the app. We can also add more in depth tools that would help us do Growth Engineering on the app by making sure we can measure and increase the flow and conversion of the users arriving on the app on their lifecycle
+The goal of this sprint is very simple but needs to be well done: add asteroids to the charts. All of them; birth charts, synastry, transits. They have to look nice and mean something. Focus on the main ones 

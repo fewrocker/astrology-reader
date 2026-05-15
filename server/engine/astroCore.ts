@@ -1,4 +1,7 @@
 import * as Astronomy from 'astronomy-engine'
+export { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion, getHouseForLongitude } from '../../src/engine/ephemeris'
+import { elliptic, planetposition } from 'astronomia'
+import vsop87Bearth from 'astronomia/data/vsop87Bearth'
 
 // ---------- Types ----------
 
@@ -20,6 +23,44 @@ export interface ZodiacPosition {
   signIndex: number
   degree: number
   minute: number
+}
+
+// Asteroid names set — inline to avoid cross-rootDir import from src/engine/types.ts
+const ASTEROID_NAMES_SET = new Set(['Chiron', 'Ceres', 'Pallas', 'Juno', 'Vesta'])
+function isAsteroid(name: string): boolean {
+  return ASTEROID_NAMES_SET.has(name)
+}
+
+// Keplerian elements for asteroid position calculation (mirrors src/engine/asteroidElements.ts)
+// Keep in sync if elements are updated in the client module.
+const D2R = Math.PI / 180
+const ASTEROID_ELEMENTS: Record<string, {
+  axis: number; ecc: number; inc: number; argP: number; node: number; timeP: number
+}> = {
+  Chiron:  { axis: 13.6378, ecc: 0.38259, inc: 6.9302*D2R,  argP: 339.32*D2R, node: 209.07*D2R, timeP: 2450128.3 },
+  Ceres:   { axis: 2.7685,  ecc: 0.07590, inc: 10.5935*D2R, argP: 73.5971*D2R, node: 80.3293*D2R, timeP: 2451096.1 },
+  Pallas:  { axis: 2.7726,  ecc: 0.23026, inc: 34.839*D2R,  argP: 310.17*D2R, node: 173.08*D2R, timeP: 2450411.0 },
+  Juno:    { axis: 2.6696,  ecc: 0.25625, inc: 12.985*D2R,  argP: 248.15*D2R, node: 169.84*D2R, timeP: 2449954.6 },
+  Vesta:   { axis: 2.3619,  ecc: 0.08949, inc: 7.135*D2R,   argP: 149.88*D2R, node: 103.85*D2R, timeP: 2450710.7 },
+}
+
+let _earth: unknown = null
+function getEarth(): unknown {
+  if (!_earth) _earth = new planetposition.Planet(vsop87Bearth)
+  return _earth
+}
+
+function asteroidEclipticLon(name: string, jde: number, obliquityRad: number): number {
+  const elements = ASTEROID_ELEMENTS[name]
+  if (!elements) return 0
+  const elem = new elliptic.Elements(elements)
+  const coord = elem.position(jde, getEarth())
+  const lambda = Math.atan2(
+    Math.sin(coord.ra) * Math.cos(obliquityRad) + Math.tan(coord.dec) * Math.sin(obliquityRad),
+    Math.cos(coord.ra),
+  )
+  const deg = lambda * (180 / Math.PI)
+  return ((deg % 360) + 360) % 360
 }
 
 export const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
@@ -98,8 +139,10 @@ export interface ElementBalance {
 
 // ported from src/data/interpretations/index.ts — keep in sync with frontend
 export function analyzeElements(planets: ZodiacPosition[]): ElementBalance {
+  // Classical element analysis — asteroids excluded to prevent clustering skew
+  const classical = planets.filter(p => !isAsteroid((p as { name?: string }).name ?? ''))
   const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
-  for (const p of planets) {
+  for (const p of classical) {
     counts[SIGN_ELEMENTS[p.sign]] += 1
   }
   const sorted = (Object.entries(counts) as [Element, number][]).sort((a, b) => b[1] - a[1])
@@ -129,42 +172,4 @@ export function longitudeToZodiac(lon: number): ZodiacPosition {
   const degree = Math.floor(degInSign)
   const minute = Math.floor((degInSign - degree) * 60)
   return { longitude: norm, sign: ZODIAC_SIGNS[signIndex], signIndex, degree, minute }
-}
-
-export function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
-  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
-  return Astronomy.Ecliptic(Astronomy.GeoVector(body, time, true)).elon
-}
-
-export function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  const T = time.tt / 36525
-  return normalizeAngle(
-    125.0445479
-    - 1934.1362891 * T
-    + 0.0020754 * T * T
-    + T * T * T / 467441
-    - T * T * T * T / 60616000,
-  )
-}
-
-export function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  const lon1 = getPlanetLongitude(body, time)
-  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
-  const lon2 = getPlanetLongitude(body, timePlus)
-  let diff = lon2 - lon1
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
-  return diff
-}
-
-export function getHouseForLongitude(longitude: number, cusps: number[]): number {
-  for (let i = 0; i < 12; i++) {
-    const start = cusps[i]
-    const end = cusps[(i + 1) % 12]
-    if (start < end ? longitude >= start && longitude < end : longitude >= start || longitude < end) {
-      return i + 1
-    }
-  }
-  return 1
 }

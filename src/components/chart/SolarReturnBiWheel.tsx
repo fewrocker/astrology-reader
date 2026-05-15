@@ -1,5 +1,5 @@
 import type { ChartData, ZodiacSign, PlanetName } from '../../engine/types'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, getBodyGlyph } from '../../engine/types'
 import { useState, useCallback } from 'react'
 
 interface SolarReturnBiWheelProps {
@@ -193,7 +193,7 @@ export default function SolarReturnBiWheel({ natalChart, srChart }: SolarReturnB
         {srChart.planets.map((p) => {
           const pos = polarToXY(CX, CY, SR_PLANET_R, offset(p.longitude))
           const isHovered = hoveredSR === p.name
-          const glyph = PLANET_GLYPHS[p.name as PlanetName] ?? '☊'
+          const glyph = getBodyGlyph(p.name)
           return (
             <g key={`sr-${p.name}`}
               onMouseEnter={() => setHoveredSR(p.name)}
@@ -222,7 +222,7 @@ export default function SolarReturnBiWheel({ natalChart, srChart }: SolarReturnB
         {natalChart.planets.map((p) => {
           const pos = polarToXY(CX, CY, NATAL_PLANET_R, offset(p.longitude))
           const isHovered = hoveredNatal === p.name
-          const glyph = PLANET_GLYPHS[p.name as PlanetName] ?? '☊'
+          const glyph = getBodyGlyph(p.name)
           return (
             <g key={`natal-${p.name}`}
               onMouseEnter={() => setHoveredNatal(p.name)}
@@ -274,7 +274,7 @@ export default function SolarReturnBiWheel({ natalChart, srChart }: SolarReturnB
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-mystic-surface border border-mystic-gold/30 rounded-lg px-4 py-3 text-xs shadow-xl z-10 pointer-events-none min-w-48">
             <div className="flex items-center gap-2 mb-1">
               <span style={{ color: isNatal ? NATAL_COLOR : SR_COLOR }} className="text-base">
-                {PLANET_GLYPHS[planet.name as PlanetName] ?? '☊'}
+                {getBodyGlyph(planet.name)}
               </span>
               <span className="font-heading text-sm" style={{ color: isNatal ? NATAL_COLOR : SR_COLOR }}>
                 {isNatal ? 'Natal' : 'SR'} {planet.name === 'NorthNode' ? 'North Node' : planet.name}

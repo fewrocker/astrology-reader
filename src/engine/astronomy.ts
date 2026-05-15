@@ -1,13 +1,20 @@
 import * as Astronomy from 'astronomy-engine'
+import { elliptic, planetposition } from 'astronomia'
+import vsop87Bearth from 'astronomia/data/vsop87Bearth'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
 import {
   PLANET_NAMES,
+  ASTEROID_NAMES,
+  type AsteroidName,
   type PlanetPosition,
   type PlanetName,
+  type ZodiacPosition,
   type HouseCusp,
   type ChartAngles,
   type ChartData,
 } from './types'
+import { getPlanetLongitude, getMeanNodeLongitude, getHouseForLongitude } from './ephemeris'
+import { ASTEROID_ORBITAL_ELEMENTS } from './asteroidElements'
 
 /** Map our planet names to astronomy-engine Body enum */
 const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
@@ -21,24 +28,6 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
   Uranus: Astronomy.Body.Uranus,
   Neptune: Astronomy.Body.Neptune,
   Pluto: Astronomy.Body.Pluto,
-}
-
-/**
- * Get geocentric ecliptic longitude for a planet at a given time.
- * Uses GeoVector (geocentric equatorial J2000) → Ecliptic conversion.
- * EclipticLongitude() is heliocentric and wrong for natal charts.
- */
-function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) {
-    return Astronomy.SunPosition(time).elon
-  }
-
-  if (body === Astronomy.Body.Moon) {
-    return Astronomy.EclipticGeoMoon(time).lon
-  }
-
-  const geo = Astronomy.GeoVector(body, time, true)
-  return Astronomy.Ecliptic(geo).elon
 }
 
 /**
@@ -61,21 +50,72 @@ function isRetrograde(body: Astronomy.Body, time: Astronomy.AstroTime): boolean 
 }
 
 /**
- * Calculate Mean Lunar Node (North Node).
+ * Convert J2000 equatorial (RA/Dec in radians) to ecliptic longitude in degrees.
+ * Formula from Meeus Ch. 13. Obliquity must be in radians.
+ * Silent ~23° error if RA is mistakenly used as ecliptic longitude — this function prevents that.
  */
-function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  // Mean Lunar Node formula
-  // T is centuries from J2000.0
-  const T = time.tt / 36525
+function raDecToEclipticLon(ra: number, dec: number, obliquityRad: number): number {
+  const lambda = Math.atan2(
+    Math.sin(ra) * Math.cos(obliquityRad) + Math.tan(dec) * Math.sin(obliquityRad),
+    Math.cos(ra),
+  )
+  return normalizeAngle(lambda * Astronomy.RAD2DEG)
+}
 
-  // Mean longitude of ascending node (in degrees)
-  let omega = 125.0445479
-    - 1934.1362891 * T
-    + 0.0020754 * T * T
-    + T * T * T / 467441
-    - T * T * T * T / 60616000
+/** Lazily-initialized Earth VSOP87 planet — shared across all calls. */
+let _earth: unknown = null
+function getEarth(): unknown {
+  if (!_earth) _earth = new planetposition.Planet(vsop87Bearth)
+  return _earth
+}
 
-  return normalizeAngle(omega)
+/**
+ * Calculate geocentric ecliptic longitude of an asteroid using Keplerian elements.
+ * Uses astronomia's elliptic.Elements.position() which returns J2000 equatorial (ra, dec).
+ * Converts to ecliptic using obliquity at the target JDE.
+ */
+export function calculateAsteroidPosition(
+  name: AsteroidName,
+  time: Astronomy.AstroTime,
+  obliquityRad: number,
+): ZodiacPosition {
+  const elements = ASTEROID_ORBITAL_ELEMENTS[name]
+  const elem = new elliptic.Elements(elements)
+  const jde = 2451545.0 + time.tt
+  const coord = elem.position(jde, getEarth())
+  const lon = raDecToEclipticLon(coord.ra, coord.dec, obliquityRad)
+  return longitudeToZodiac(lon)
+}
+
+/**
+ * Detect retrograde by comparing longitude 1 day later.
+ * Mirrors isRetrograde() logic for consistency.
+ */
+export function isAsteroidRetrograde(
+  name: AsteroidName,
+  time: Astronomy.AstroTime,
+  obliquityRad: number,
+): boolean {
+  const lon1 = calculateAsteroidPosition(name, time, obliquityRad).longitude
+  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const lon2 = calculateAsteroidPosition(name, timePlus, obliquityRad).longitude
+  let diff = lon2 - lon1
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff < 0
+}
+
+/**
+ * Compute daily motion for a planet (degrees per day; positive = direct, negative = retrograde).
+ */
+function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  const lon1 = getPlanetLongitude(body, time)
+  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const lon2 = getPlanetLongitude(body, timePlus)
+  let diff = lon2 - lon1
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
 }
 
 /**
@@ -225,25 +265,6 @@ function eclipticLongFromRA(raRad: number, oblRad: number): number {
 }
 
 /**
- * Determine which house a planet is in based on house cusps.
- */
-export function getHouseForLongitude(longitude: number, cusps: number[]): number {
-  for (let i = 0; i < 12; i++) {
-    const nextI = (i + 1) % 12
-    const start = cusps[i]
-    const end = cusps[nextI]
-
-    if (start < end) {
-      if (longitude >= start && longitude < end) return i + 1
-    } else {
-      // Wraps around 360°
-      if (longitude >= start || longitude < end) return i + 1
-    }
-  }
-  return 1 // fallback
-}
-
-/**
  * Main function: calculate the full natal chart.
  */
 export function calculateChart(
@@ -262,6 +283,10 @@ export function calculateChart(
   const utcDate = resolveToUTC(year, month, day, hour, minute, timezone)
   const time = Astronomy.MakeTime(utcDate)
 
+  // Obliquity needed for both Ascendant/MC and asteroid calculations
+  const obliquity = Astronomy.e_tilt(time).mobl
+  const obliquityRad = obliquity * Astronomy.DEG2RAD
+
   // Calculate planet positions
   const planets: PlanetPosition[] = []
 
@@ -270,28 +295,47 @@ export function calculateChart(
     const lon = getPlanetLongitude(body, time)
     const zodiac = longitudeToZodiac(lon)
     const retro = isRetrograde(body, time)
+    const motion = getDailyMotion(body, time)
 
     planets.push({
       ...zodiac,
       name,
       retrograde: retro,
       house: 0, // assigned after house calculation
+      dailyMotion: motion,
     })
   }
 
-  // North Node
+  // North Node — mean node moves retrograde at ~0.053°/day
   const nodeLon = getMeanNodeLongitude(time)
   const nodeZodiac = longitudeToZodiac(nodeLon)
+  const timePlus1d = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const nodeLonPlus = getMeanNodeLongitude(timePlus1d)
+  let nodeDailyMotion = nodeLonPlus - nodeLon
+  if (nodeDailyMotion > 180) nodeDailyMotion -= 360
+  if (nodeDailyMotion < -180) nodeDailyMotion += 360
   planets.push({
     ...nodeZodiac,
     name: 'NorthNode',
     retrograde: true, // North Node is always retrograde in mean motion
     house: 0,
+    dailyMotion: nodeDailyMotion,
   })
+
+  // Asteroid positions via astronomia elliptic.Elements — separate calculation path from BODY_MAP
+  for (const asteroidName of ASTEROID_NAMES) {
+    const zodiac = calculateAsteroidPosition(asteroidName, time, obliquityRad)
+    const retro = isAsteroidRetrograde(asteroidName, time, obliquityRad)
+    planets.push({
+      ...zodiac,
+      name: asteroidName,
+      retrograde: retro,
+      house: 0, // assigned in the house assignment loop below
+    })
+  }
 
   // Calculate LST, ASC, MC with dynamic obliquity
   const lst = localSiderealTime(time, lng)
-  const obliquity = Astronomy.e_tilt(time).mobl
   const ascLon = calculateAscendant(lst, lat, obliquity)
   const mcLon = calculateMidheaven(lst, obliquity)
   const dscLon = normalizeAngle(ascLon + 180)

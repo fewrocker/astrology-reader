@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
-import type { PlanetName, ZodiacSign } from '../../engine/types'
+import { ZODIAC_GLYPHS, getBodyGlyph, isAsteroid } from '../../engine/types'
+import type { BodyName, PlanetName, ZodiacSign } from '../../engine/types'
 import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
 
 function formatTimelineDate(date: Date): string {
@@ -11,8 +11,8 @@ function formatTimelineDate(date: Date): string {
 function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expanded: boolean; onToggle: () => void }) {
   const typeInfo = EVENT_TYPE_INFO[event.type] ?? { icon: '•', color: 'text-mystic-muted', label: event.type }
 
-  const planetGlyph = event.planet ? (PLANET_GLYPHS[event.planet as PlanetName] ?? '☊') : ''
-  const secondGlyph = event.secondPlanet ? (PLANET_GLYPHS[event.secondPlanet as PlanetName] ?? '☊') : ''
+  const planetGlyph = event.planet ? getBodyGlyph(event.planet as BodyName) : ''
+  const secondGlyph = event.secondPlanet ? getBodyGlyph(event.secondPlanet as BodyName) : ''
 
   // Determine background based on nature
   let bgClass = 'bg-mystic-surface/50 border-mystic-border/30'
@@ -31,11 +31,11 @@ function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expand
   // Get enriched interpretation
   let detailText = ''
   if (event.type === 'aspect-perfection' && event.aspectType && event.secondPlanet) {
-    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet, event.natalHouse ?? null)
-  } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && event.toSign) {
-    detailText = getIngressBrief(event.planet, event.toSign)
-  } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && event.stationType) {
-    detailText = getStationBrief(event.planet, event.stationType)
+    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet as (PlanetName | 'NorthNode'), event.natalHouse ?? null)
+  } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet as BodyName) && event.toSign) {
+    detailText = getIngressBrief(event.planet as PlanetName, event.toSign)
+  } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet as BodyName) && event.stationType) {
+    detailText = getStationBrief(event.planet as PlanetName, event.stationType)
   }
 
   return (

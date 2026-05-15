@@ -1,6 +1,7 @@
 import { normalizeAngle, longitudeToZodiac } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
-import { PLANET_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES } from './types'
+import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
+import { PLANET_NAMES, ASTEROID_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES, isAsteroid } from './types'
+import { getHouseForLongitude } from './ephemeris'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import { analyzeElements } from '../data/interpretations/index'
@@ -8,8 +9,8 @@ import { analyzeElements } from '../data/interpretations/index'
 // ── Types ──────────────────────────────────────────────────
 
 export interface SynastryAspect {
-  person1Planet: PlanetName | 'NorthNode'
-  person2Planet: PlanetName | 'NorthNode'
+  person1Planet: BodyName
+  person2Planet: BodyName
   type: AspectType
   orb: number
   exactAngle: number
@@ -19,7 +20,7 @@ export interface SynastryAspect {
 }
 
 export interface HouseOverlayEntry {
-  planet: PlanetName | 'NorthNode'
+  planet: BodyName
   sign: string
   house: number // House in partner's chart
   degree: number
@@ -86,7 +87,9 @@ export function calculateSynastryAspects(
         const maxOrb = def.orb * orbScale
 
         if (orb <= maxOrb) {
-          const applying = orb < maxOrb * 0.5
+          // Two static natal charts have no directional motion; applying is meaningless here.
+          // SynastryPage.tsx already renders this field as false — this makes it correct at source.
+          const applying = false
 
           aspects.push({
             person1Planet: p1.name,
@@ -110,24 +113,6 @@ export function calculateSynastryAspects(
 
 // ── House Overlays ─────────────────────────────────────────
 
-function getHouseForLongitude(longitude: number, houses: HouseCusp[]): number {
-  if (houses.length === 0) return 1
-  const norm = normalizeAngle(longitude)
-
-  for (let i = 0; i < 12; i++) {
-    const cusp = normalizeAngle(houses[i].longitude)
-    const nextCusp = normalizeAngle(houses[(i + 1) % 12].longitude)
-
-    if (nextCusp > cusp) {
-      if (norm >= cusp && norm < nextCusp) return houses[i].house
-    } else {
-      // Wraps around 0°
-      if (norm >= cusp || norm < nextCusp) return houses[i].house
-    }
-  }
-  return 1
-}
-
 /**
  * Calculate where each person's planets fall in the other person's houses.
  */
@@ -139,11 +124,12 @@ export function calculateHouseOverlays(
   const p2InP1: HouseOverlayEntry[] = []
 
   if (!chart1.unknownTime && chart2.houses.length > 0) {
+    const chart2Cusps = chart2.houses.map(h => h.longitude)
     for (const p of chart1.planets) {
       p1InP2.push({
         planet: p.name,
         sign: p.sign,
-        house: getHouseForLongitude(p.longitude, chart2.houses),
+        house: getHouseForLongitude(p.longitude, chart2Cusps),
         degree: p.degree,
         minute: p.minute,
       })
@@ -151,11 +137,12 @@ export function calculateHouseOverlays(
   }
 
   if (!chart2.unknownTime && chart1.houses.length > 0) {
+    const chart1Cusps = chart1.houses.map(h => h.longitude)
     for (const p of chart2.planets) {
       p2InP1.push({
         planet: p.name,
         sign: p.sign,
-        house: getHouseForLongitude(p.longitude, chart1.houses),
+        house: getHouseForLongitude(p.longitude, chart1Cusps),
         degree: p.degree,
         minute: p.minute,
       })
@@ -192,7 +179,7 @@ export function calculateCompositeChart(
 ): CompositeChart {
   const compositePlanets: PlanetPosition[] = []
 
-  for (const name of [...PLANET_NAMES, 'NorthNode' as const]) {
+  for (const name of ([...PLANET_NAMES, 'NorthNode', ...ASTEROID_NAMES] as BodyName[])) {
     const p1 = chart1.planets.find(p => p.name === name)
     const p2 = chart2.planets.find(p => p.name === name)
     if (!p1 || !p2) continue
@@ -258,8 +245,8 @@ function elementCompat(chart1: ChartData, chart2: ChartData): string {
   const count1: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
   const count2: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
 
-  for (const p of chart1.planets) count1[SIGN_ELEMENTS[p.sign]]++
-  for (const p of chart2.planets) count2[SIGN_ELEMENTS[p.sign]]++
+  for (const p of chart1.planets.filter(p => !isAsteroid(p.name as BodyName))) count1[SIGN_ELEMENTS[p.sign]]++
+  for (const p of chart2.planets.filter(p => !isAsteroid(p.name as BodyName))) count2[SIGN_ELEMENTS[p.sign]]++
 
   const dom1 = (Object.keys(count1) as Element[]).sort((a, b) => count1[b] - count1[a])[0]
   const dom2 = (Object.keys(count2) as Element[]).sort((a, b) => count2[b] - count2[a])[0]
@@ -279,8 +266,8 @@ function modalityCompat(chart1: ChartData, chart2: ChartData): string {
   const count1: Record<Modality, number> = { Cardinal: 0, Fixed: 0, Mutable: 0 }
   const count2: Record<Modality, number> = { Cardinal: 0, Fixed: 0, Mutable: 0 }
 
-  for (const p of chart1.planets) count1[SIGN_MODALITIES[p.sign]]++
-  for (const p of chart2.planets) count2[SIGN_MODALITIES[p.sign]]++
+  for (const p of chart1.planets.filter(p => !isAsteroid(p.name as BodyName))) count1[SIGN_MODALITIES[p.sign]]++
+  for (const p of chart2.planets.filter(p => !isAsteroid(p.name as BodyName))) count2[SIGN_MODALITIES[p.sign]]++
 
   const dom1 = (Object.keys(count1) as Modality[]).sort((a, b) => count1[b] - count1[a])[0]
   const dom2 = (Object.keys(count2) as Modality[]).sort((a, b) => count2[b] - count2[a])[0]
@@ -344,6 +331,23 @@ function identifyKeyThemes(aspects: SynastryAspect[]): string[] {
   const nodeAspects = aspects.filter(a => a.person1Planet === 'NorthNode' || a.person2Planet === 'NorthNode')
   if (nodeAspects.length > 0) {
     themes.push('North Node contacts point to a fated, karmically significant relationship')
+  }
+
+  // Chiron contacts to personal planets — wound-and-healing dynamic
+  const chironToPersonal = aspects.filter(a =>
+    (a.person1Planet === 'Chiron' || a.person2Planet === 'Chiron') &&
+    (
+      ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person1Planet as string) ||
+      ['Sun', 'Moon', 'Venus', 'Mars'].includes(a.person2Planet as string)
+    )
+  )
+  if (chironToPersonal.length > 0) {
+    const tightest = chironToPersonal.sort((a, b) => a.orb - b.orb)[0]
+    const isHarsh = tightest.nature === 'challenging'
+    themes.push(isHarsh
+      ? 'Chiron contacts a personal planet — this relationship carries a wound-and-healing dynamic at its core; the Chiron person\'s wound is activated by the other\'s identity or feeling'
+      : 'Chiron contacts a personal planet — this relationship has a healing dimension; one person\'s wound becomes a source of growth and care for the other'
+    )
   }
 
   if (themes.length === 0) {

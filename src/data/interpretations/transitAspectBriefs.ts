@@ -1,8 +1,19 @@
-import type { PlanetName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
+import type { InterpretationEntry } from './types'
 import { getPlanetInHouseInterpretation } from './index'
 import { getHouseTheme } from './houseThemes'
 import { getAspectPerfectionBrief } from './transitEvents'
+
+// ─── Special-case transit aspect overrides ───────────────────────────────────
+// Keyed as `${transitPlanet}_${aspectType}_${natalPlanet}`.
+// These entries take precedence over the computed brief for significant life transits.
+
+export const TRANSIT_ASPECT_OVERRIDES: Record<string, InterpretationEntry> = {
+  Chiron_Conjunction_Chiron: {
+    brief: 'Chiron is returning to where it stood at your birth — the wound teacher comes full circle.',
+    detail: 'This is your Chiron Return — one of the most significant transits of a human life, occurring around age 49–51. Chiron has completed one full orbit and is arriving at the exact place it occupied when you were born. The wound that has shaped your life — the original pattern of not-enough, of early wounding in the area described by Chiron\'s natal sign and house — is now asking to be met consciously rather than carried. This is not a crisis. It is an invitation: from the wound to the wisdom, from the teacher to the healed healer.',
+  },
+}
 
 // ─── Internal planet archetype verb phrase table ─────────────────────────────
 // 10 transit planets × 3 natures (harmonious, challenging, neutral) = 30 entries.
@@ -67,6 +78,11 @@ const TRANSIT_PLANET_PHRASES: Record<string, PlanetPhrases> = {
     challenging: { applying: 'transforming',         separating: 'having transformed' },
     neutral:     { applying: 'intensifying',         separating: 'having intensified' },
   },
+  Chiron: {
+    harmonious: { applying: 'surfacing',             separating: 'having surfaced' },
+    challenging: { applying: 'reopening',            separating: 'having reopened' },
+    neutral:     { applying: 'activating',           separating: 'having passed through' },
+  },
 }
 
 // ─── Brief truncation helper ─────────────────────────────────────────────────
@@ -97,14 +113,19 @@ function truncateToLimit(text: string, limit: number): string {
  * Never throws. Always returns a non-empty string.
  */
 export function computeTransitAspectBrief(
-  transitPlanet: PlanetName | 'NorthNode',
+  transitPlanet: string,
   aspectType: AspectType,
-  natalPlanet: PlanetName | 'NorthNode',
+  natalPlanet: string,
   natalHouse: number | null,
   nature: Nature,
   applying?: boolean,
 ): string {
   try {
+    // Chiron Return — dedicated interpretation regardless of house
+    if ((transitPlanet as string) === 'Chiron' && (natalPlanet as string) === 'Chiron') {
+      return 'Chiron is returning to where it stood at your birth — the wound teacher comes full circle. This is your Chiron Return — one of the most significant transits of a human life, occurring around age 49–51.'
+    }
+
     // Fallback for NorthNode as transit planet — no archetype table entry
     const phrases = TRANSIT_PLANET_PHRASES[transitPlanet as string]
 
@@ -121,8 +142,8 @@ export function computeTransitAspectBrief(
     const phrasePair = phrases[nature]
     const verbPhrase = applying !== false ? phrasePair.applying : phrasePair.separating
 
-    // Optionally use getPlanetInHouseInterpretation for depth
-    const houseInterp = getPlanetInHouseInterpretation(natalPlanet, natalHouse)
+    // Optionally use getPlanetInHouseInterpretation for depth (asteroids return null gracefully)
+    const houseInterp = getPlanetInHouseInterpretation(natalPlanet as Parameters<typeof getPlanetInHouseInterpretation>[0], natalHouse)
     const contextBrief = houseInterp?.brief ?? houseTheme.brief
 
     // Compose the sentence:

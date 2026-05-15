@@ -4,7 +4,7 @@ import type { TransitData, TransitPeriod } from '../../engine/transits'
 import { assignTransitHouses, buildTransitPrompt } from '../../engine/transits'
 import { buildTransitTimeline } from '../../engine/transitTimeline'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import TransitTimeline from '../reading/TransitTimeline'
@@ -83,9 +83,9 @@ function TransitAspectsSection({
           const natalHouse = rawHouse && rawHouse > 0 ? rawHouse : null
 
           const brief = computeTransitAspectBrief(
-            a.transitPlanet,
+            a.transitPlanet as (PlanetName | 'NorthNode'),
             a.type,
-            a.natalPlanet,
+            a.natalPlanet as (PlanetName | 'NorthNode'),
             natalHouse,
             a.nature,
             a.applying,
@@ -182,7 +182,7 @@ function CurrentPlanetsTable({ transitData }: { transitData: TransitData }) {
             {transitData.currentPlanets.filter(p => p.name !== 'NorthNode').map((p) => (
               <tr key={p.name} className="border-b border-mystic-gold/5">
                 <td className="px-3 py-2 text-mystic-text">
-                  <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
+                  <span className="mr-2">{getBodyGlyph(p.name)}</span>
                   {p.name}
                 </td>
                 <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { SynastryData, SynastryAspect, HouseOverlayEntry } from '../../engine/synastry'
 import AspectRow from '../reading/AspectRow'
@@ -126,7 +126,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
             applying={false}
             showApplyingBadge={false}
             labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
-            brief={computeSynastryAspectBrief(a.person1Planet, a.type, a.person2Planet, a.nature)}
+            brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
           />
         ))}
       </div>
@@ -184,7 +184,7 @@ function HouseOverlaySection({ entries, label }: { entries: HouseOverlayEntry[];
       )}
       <div>
         {sorted.map((entry, i) => {
-          const planetGlyph = PLANET_GLYPHS[entry.planet as PlanetName] ?? '☊'
+          const planetGlyph = getBodyGlyph(entry.planet)
           const zodiacGlyph = ZODIAC_GLYPHS[entry.sign as ZodiacSign]
           const highSignal = isHighSignal(entry)
           const invalidHouse = entry.house <= 0 || entry.house > 12
@@ -254,7 +254,7 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
             {compositeChart.planets.map((p) => (
               <tr key={p.name} className="border-b border-mystic-gold/5">
                 <td className="px-3 py-2 text-mystic-text">
-                  <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
+                  <span className="mr-2">{getBodyGlyph(p.name)}</span>
                   {p.name}
                 </td>
                 <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>
@@ -304,7 +304,7 @@ function IndividualChartSection({ title, chartData, aspects }: {
             {chartData.planets.map((p) => (
               <tr key={p.name} className="border-b border-mystic-gold/5">
                 <td className="px-3 py-2 text-mystic-text">
-                  <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
+                  <span className="mr-2">{getBodyGlyph(p.name)}</span>
                   {p.name}
                 </td>
                 <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign as ZodiacSign]} {p.sign}</td>

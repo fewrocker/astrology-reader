@@ -1,13 +1,26 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData, HouseCusp } from './types'
-import { PLANET_NAMES } from './types'
+import type { PlanetPosition, PlanetName, BodyName, ChartData, HouseCusp, AsteroidName } from './types'
+import { PLANET_NAMES, ASTEROID_NAMES, ASTEROID_ARCHETYPES, isAsteroid } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
-import { getHouseForLongitude } from './astronomy'
+import { getPlanetLongitude, getMeanNodeLongitude, getDailyMotion, getHouseForLongitude } from './ephemeris'
+import { calculateAsteroidPosition } from './astronomy'
 import { analyzeElements } from '../data/interpretations/index'
 
 export type TransitPeriod = 'daily' | 'weekly' | 'monthly'
+
+const ASTEROID_GPT_CONTEXT: Record<AsteroidName, string> = {
+  Chiron: 'formative wounds that become sources of wisdom and care for others',
+  Ceres: 'nourishment, cycles of loss and return, the mother wound',
+  Pallas: 'strategic intelligence, pattern recognition, the wisdom that does not fit conventional authority',
+  Juno: 'committed partnership, equality, what we demand and what we cannot forgive in bonds',
+  Vesta: 'sacred dedication, the flame kept at personal cost, devotion as identity',
+}
+
+function getAsteroidGPTContext(name: AsteroidName): string {
+  return ASTEROID_GPT_CONTEXT[name]
+}
 
 export interface TransitPosition extends PlanetPosition {
   /** Daily motion in degrees (positive = direct, negative = retrograde) */
@@ -15,8 +28,8 @@ export interface TransitPosition extends PlanetPosition {
 }
 
 export interface TransitAspect {
-  transitPlanet: PlanetName | 'NorthNode'
-  natalPlanet: PlanetName | 'NorthNode'
+  transitPlanet: BodyName
+  natalPlanet: BodyName
   natalHouse: number | null   // null when chartData.unknownTime is true
   natalSign: string
   type: AspectType
@@ -57,29 +70,6 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
   Pluto: Astronomy.Body.Pluto,
 }
 
-function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) return Astronomy.SunPosition(time).elon
-  if (body === Astronomy.Body.Moon) return Astronomy.EclipticGeoMoon(time).lon
-  const geo = Astronomy.GeoVector(body, time, true)
-  return Astronomy.Ecliptic(geo).elon
-}
-
-function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  const T = time.tt / 36525
-  const omega = 125.0445479 - 1934.1362891 * T + 0.0020754 * T * T + T * T * T / 467441 - T * T * T * T / 60616000
-  return normalizeAngle(omega)
-}
-
-function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  const lon1 = getPlanetLongitude(body, time)
-  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
-  const lon2 = getPlanetLongitude(body, timePlus)
-  let diff = lon2 - lon1
-  if (diff > 180) diff -= 360
-  if (diff < -180) diff += 360
-  return diff
-}
-
 /**
  * Calculate current planetary positions for transit reading.
  */
@@ -112,6 +102,25 @@ export function calculateCurrentPositions(date: Date): TransitPosition[] {
     house: 0,
     dailyMotion: -0.053,
   })
+
+  // Asteroid current positions for transit aspects
+  const obliquityRad = Astronomy.e_tilt(time).mobl * Astronomy.DEG2RAD
+  for (const asteroidName of ASTEROID_NAMES) {
+    const zodiac = calculateAsteroidPosition(asteroidName, time, obliquityRad)
+    const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+    const zodiacPlus = calculateAsteroidPosition(asteroidName, timePlus, obliquityRad)
+    let motionDiff = zodiacPlus.longitude - zodiac.longitude
+    if (motionDiff > 180) motionDiff -= 360
+    if (motionDiff < -180) motionDiff += 360
+
+    positions.push({
+      ...zodiac,
+      name: asteroidName,
+      retrograde: motionDiff < 0,
+      house: 0,
+      dailyMotion: motionDiff,
+    })
+  }
 
   return positions
 }
@@ -317,7 +326,10 @@ export function buildTransitPrompt(
   prompt += `\nNatal planet positions:\n`
   for (const p of natalChart.planets) {
     const houseStr = !natalChart.unknownTime && p.house > 0 ? ` (House ${p.house})` : ''
-    prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${houseStr}${p.retrograde ? ' [Rx]' : ''}\n`
+    const archetypeNote = isAsteroid(p.name as BodyName)
+      ? ` [${ASTEROID_ARCHETYPES[p.name as AsteroidName]} — ${getAsteroidGPTContext(p.name as AsteroidName)}]`
+      : ''
+    prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${houseStr}${p.retrograde ? ' [Rx]' : ''}${archetypeNote}\n`
   }
 
   prompt += `\nNatal Ascendant: ${natalChart.angles.ascendant.degree}°${natalChart.angles.ascendant.minute}' ${natalChart.angles.ascendant.sign}\n`
@@ -327,7 +339,10 @@ export function buildTransitPrompt(
   prompt += `\n## Current Transit Positions (${transitData.dateRange.start})\n`
   for (const p of transitData.currentPlanets) {
     if (p.name === 'NorthNode') continue
-    prompt += `- Transit ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
+    const archetypeNote = isAsteroid(p.name as BodyName)
+      ? ` (${ASTEROID_ARCHETYPES[p.name as AsteroidName]})`
+      : ''
+    prompt += `- Transit ${p.name}${archetypeNote}: ${p.degree}°${p.minute}' ${p.sign}${p.retrograde ? ' [Rx]' : ''}\n`
   }
 
   // Transit aspects to natal — already sorted by orb ascending from calculateTransitAspects
@@ -358,16 +373,27 @@ export function buildTransitPrompt(
   }
 
   // Element profile — gives GPT calibration context for how to frame transits
-  const elementAnalysis = analyzeElements(natalChart.planets)
+  const classicalPlanets = natalChart.planets.filter(p => (PLANET_NAMES as readonly string[]).includes(p.name))
+  const elementAnalysis = analyzeElements(classicalPlanets)
   prompt += `\n## Natal Element Profile\n`
   prompt += `Dominant element: ${elementAnalysis.dominant} — ${elementAnalysis.interpretation.dominant}\n`
 
-  // Find the tightest applying transit aspect — aspects already sorted by orb ascending from calculateTransitAspects
-  const tightestApplying = transitData.transitAspects.find(a => a.applying) ?? transitData.transitAspects[0]
+  // Skip asteroid aspects for daily priority — they are background context
+  const tightestApplying = transitData.transitAspects.find(a =>
+    a.applying &&
+    !isAsteroid(a.transitPlanet as BodyName) &&
+    !isAsteroid(a.natalPlanet as BodyName)
+  ) ?? transitData.transitAspects.find(a =>
+    !isAsteroid(a.transitPlanet as BodyName) &&
+    !isAsteroid(a.natalPlanet as BodyName)
+  )
 
   prompt += `\n## Instructions\n`
 
-  // Priority header — lead with the tightest applying aspect
+  // Slow-body framing instruction — asteroids are background context, not daily weather
+  prompt += `Asteroid body framing: Chiron, Ceres, Pallas, Juno, and Vesta are slow-moving bodies. Their transits to natal planets represent extended themes measured in months, not days. In a daily or weekly reading, mention asteroid transit aspects only as background context — do not lead with them, do not anchor the reading's opening to them, and do not frame them as immediate events. In a monthly reading, an asteroid transit within 2° of exact may be foregrounded as a season-level theme. The daily energy is driven by fast-moving planets (Sun, Moon, Mercury, Venus, Mars).\n\n`
+
+  // Priority header — lead with the tightest applying classical aspect
   if (tightestApplying) {
     const natalPlanetData = natalChart.planets.find(p => p.name === tightestApplying.natalPlanet)
     const natalHouse = natalPlanetData?.house ?? 0
@@ -452,7 +478,12 @@ export interface EnergyRating {
  * Shared utility used by DailySnapshotCard, TodayPage, and JournalEntryCard.
  */
 export function computeEnergyRating(aspects: TransitAspect[]): EnergyRating {
-  const top = aspects.slice(0, 8)
+  // Exclude asteroid transit aspects — they represent multi-month background context,
+  // not daily weather. The energy rating reflects the day's felt quality.
+  const classicalAspects = aspects.filter(a =>
+    !isAsteroid(a.transitPlanet as BodyName) && !isAsteroid(a.natalPlanet as BodyName)
+  )
+  const top = classicalAspects.slice(0, 8)
   const score = top.reduce((acc, a) => {
     if (a.nature === 'harmonious') return acc + 1
     if (a.nature === 'challenging') return acc - 1

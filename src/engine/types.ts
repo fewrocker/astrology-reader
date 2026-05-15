@@ -27,6 +27,42 @@ export const PLANET_GLYPHS: Record<PlanetName | 'NorthNode', string> = {
   NorthNode: '☊',
 }
 
+export type AsteroidName = 'Chiron' | 'Ceres' | 'Pallas' | 'Juno' | 'Vesta'
+
+export const ASTEROID_NAMES: AsteroidName[] = ['Chiron', 'Ceres', 'Pallas', 'Juno', 'Vesta']
+
+export type BodyName = PlanetName | 'NorthNode' | AsteroidName
+
+export const ASTEROID_GLYPHS: Record<AsteroidName, string> = {
+  Chiron: '⚷',
+  Ceres: '⚳',
+  Pallas: '⚴',
+  Juno: '⚵',
+  Vesta: '⚶',
+}
+
+export const ASTEROID_ARCHETYPES: Record<AsteroidName, string> = {
+  Chiron: 'Wounded Healer',
+  Ceres: 'Nourisher',
+  Pallas: 'Strategist',
+  Juno: 'Devoted Partner',
+  Vesta: 'Sacred Flame',
+}
+
+export function isAsteroid(name: BodyName): name is AsteroidName {
+  return (ASTEROID_NAMES as readonly string[]).includes(name)
+}
+
+export function getBodyGlyph(name: string): string {
+  const glyph = (PLANET_GLYPHS as Record<string, string>)[name]
+    ?? (ASTEROID_GLYPHS as Record<string, string>)[name]
+  if (glyph !== undefined) return glyph
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn(`getBodyGlyph: no glyph for "${name}" — using fallback '?'`)
+  }
+  return '?'
+}
+
 export interface ZodiacPosition {
   longitude: number    // 0-360 ecliptic degrees
   sign: ZodiacSign
@@ -35,10 +71,38 @@ export interface ZodiacPosition {
   minute: number       // 0-59 arcminutes
 }
 
+export type AsteroidName = 'Chiron' | 'Ceres' | 'Pallas' | 'Juno' | 'Vesta'
+
+export const ASTEROID_NAMES: AsteroidName[] = ['Chiron', 'Ceres', 'Pallas', 'Juno', 'Vesta']
+
+export type BodyName = PlanetName | 'NorthNode' | AsteroidName
+
+export const ASTEROID_GLYPHS: Record<AsteroidName, string> = {
+  Chiron: '⚷', Ceres: '⚳', Pallas: '⚴', Juno: '⚵', Vesta: '⚶',
+}
+
+export const ASTEROID_ARCHETYPES: Record<AsteroidName, string> = {
+  Chiron: 'Wounded Healer',
+  Ceres: 'Nourisher',
+  Pallas: 'Strategist',
+  Juno: 'Devoted Partner',
+  Vesta: 'Sacred Flame',
+}
+
+export function isAsteroid(name: BodyName): name is AsteroidName {
+  return ASTEROID_NAMES.includes(name as AsteroidName)
+}
+
+export function getBodyGlyph(name: BodyName): string {
+  if (ASTEROID_NAMES.includes(name as AsteroidName)) return ASTEROID_GLYPHS[name as AsteroidName]
+  return PLANET_GLYPHS[name as PlanetName | 'NorthNode'] ?? '?'
+}
+
 export interface PlanetPosition extends ZodiacPosition {
-  name: PlanetName | 'NorthNode'
+  name: BodyName
   retrograde: boolean
   house: number        // 1-12
+  dailyMotion?: number // degrees per day; positive = direct, negative = retrograde
 }
 
 export interface HouseCusp {
