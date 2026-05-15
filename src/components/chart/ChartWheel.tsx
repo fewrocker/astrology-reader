@@ -68,10 +68,10 @@ const ELEMENT_COLORS: Record<string, string> = {
 
 function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/types').PlanetPosition; chartData: ChartData }) {
   const isAsteroidBody = isAsteroid(planet.name as BodyName)
-  const signInterp = !isAsteroidBody ? getPlanetInSignInterpretation(planet.name as PlanetName | 'NorthNode', planet.sign) : null
-  const houseInterp = !chartData.unknownTime && !isAsteroidBody ? getPlanetInHouseInterpretation(planet.name as PlanetName | 'NorthNode', planet.house) : null
+  const signInterp = getPlanetInSignInterpretation(planet.name as BodyName, planet.sign)
+  const houseInterp = !chartData.unknownTime ? getPlanetInHouseInterpretation(planet.name as BodyName, planet.house) : null
   const dignity = !isAsteroidBody && planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
-  const retroInterp = planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
+  const retroInterp = planet.retrograde && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
   const glyph = getBodyGlyph(planet.name as BodyName)
   const archetype = isAsteroidBody ? ASTEROID_ARCHETYPES[planet.name as AsteroidName] : null
 
@@ -88,7 +88,7 @@ function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/typ
             {archetype}
           </span>
         )}
-        {planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' && (
+        {planet.retrograde && planet.name !== 'NorthNode' && (
           <span className="text-mystic-muted text-xs border border-mystic-muted/30 rounded px-1">Rx</span>
         )}
         {dignity && (
