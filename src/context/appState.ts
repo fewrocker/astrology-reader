@@ -218,7 +218,10 @@ export function loadCachedSynastryResults(): CachedSynastryResults | null {
   try {
     const raw = localStorage.getItem(SYNASTRY_RESULTS_CACHE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as CachedSynastryResults
+    const parsed = JSON.parse(raw) as CachedSynastryResults
+    // Version guard: discard old cache that uses deprecated CompatibilityScore shape
+    if (!parsed.synastryData?.coupleProfile) return null
+    return parsed
   } catch {
     return null
   }
