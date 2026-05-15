@@ -1,7 +1,7 @@
 import type { ChartData, ZodiacSign, PlanetName } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, getBodyGlyph } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'
@@ -138,8 +138,8 @@ function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/typ
 
 function AspectTooltip({ aspect }: { aspect: Aspect }) {
   const interp = getAspectInterpretation(aspect)
-  const g1 = PLANET_GLYPHS[aspect.planet1 as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[aspect.planet2 as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(aspect.planet1)
+  const g2 = getBodyGlyph(aspect.planet2)
   const aspectName = aspect.type.charAt(0).toUpperCase() + aspect.type.slice(1)
   const natureColor = aspect.nature === 'harmonious' ? 'text-green-400' : aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
@@ -199,7 +199,7 @@ function HouseTooltip({ houseNum, chartData }: { houseNum: number; chartData: Ch
 /* ─── Transit Tooltip Components ─── */
 
 function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosition; transitAspects?: TransitAspect[] }) {
-  const glyph = PLANET_GLYPHS[planet.name as PlanetName] ?? '☊'
+  const glyph = getBodyGlyph(planet.name)
   const relatedAspects = transitAspects?.filter(a => a.transitPlanet === planet.name) ?? []
 
   return (
@@ -233,7 +233,7 @@ function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosit
           </div>
           <div className="space-y-1">
             {relatedAspects.map((a, i) => {
-              const g2 = PLANET_GLYPHS[a.natalPlanet as PlanetName] ?? '☊'
+              const g2 = getBodyGlyph(a.natalPlanet)
               const natureColor = a.nature === 'harmonious' ? 'text-green-400' : a.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
               return (
                 <div key={i} className="flex items-center gap-1.5 text-xs">
@@ -251,8 +251,8 @@ function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosit
 }
 
 function TransitAspectTooltip({ aspect }: { aspect: TransitAspect }) {
-  const g1 = PLANET_GLYPHS[aspect.transitPlanet as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[aspect.natalPlanet as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(aspect.transitPlanet)
+  const g2 = getBodyGlyph(aspect.natalPlanet)
   const aspectName = aspect.type.charAt(0).toUpperCase() + aspect.type.slice(1)
   const natureColor = aspect.nature === 'harmonious' ? 'text-green-400' : aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
@@ -658,7 +658,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         {chartData.planets.map((planet, idx) => {
           const pos = polarToXY(CX, CY, PLANET_R, offset(planet.longitude))
           const isHovered = hoveredPlanet === planet.name
-          const glyph = PLANET_GLYPHS[planet.name]
+          const glyph = getBodyGlyph(planet.name)
 
           const isSun = planet.name === 'Sun'
           const isMoon = planet.name === 'Moon'
@@ -789,7 +789,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
 
           const pos = polarToXY(CX, CY, r, offset(tp.longitude))
           const isHovered = hoveredTransit === tp.name
-          const glyph = PLANET_GLYPHS[tp.name as PlanetName] ?? '☊'
+          const glyph = getBodyGlyph(tp.name)
 
           return (
             <g

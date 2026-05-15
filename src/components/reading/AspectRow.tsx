@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { PlanetName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
-import { PLANET_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, getBodyGlyph } from '../../engine/types'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -62,8 +62,8 @@ export default function AspectRow({
 }: AspectRowProps) {
   const [expanded, setExpanded] = useState(false)
 
-  const g1 = PLANET_GLYPHS[transitPlanet as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[natalPlanet as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(transitPlanet)
+  const g2 = getBodyGlyph(natalPlanet)
 
   const hasBrief = brief !== null && brief.trim().length > 0
 

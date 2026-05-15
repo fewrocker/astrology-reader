@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import ErrorBoundary from '../ErrorBoundary'
@@ -93,7 +93,7 @@ export default function ResultsPage() {
               {chartData.planets.map((p) => (
                 <tr key={p.name} className="border-b border-mystic-gold/5">
                   <td className="px-5 py-2 text-mystic-text">
-                    <span className="mr-2">{PLANET_GLYPHS[p.name as PlanetName] ?? '☊'}</span>
+                    <span className="mr-2">{getBodyGlyph(p.name)}</span>
                     {p.name}
                   </td>
                   <td className="px-3 py-2 text-mystic-gold">{ZODIAC_GLYPHS[p.sign]} {p.sign}</td>
