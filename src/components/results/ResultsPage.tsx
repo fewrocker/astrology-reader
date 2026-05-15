@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
-import type { PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
+import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import ErrorBoundary from '../ErrorBoundary'
-import { ReadingSummary, PlanetSection, AspectSection, AspectPatternsSection, BalanceSection, FocusSection, HousesOverview, PlanetaryStrengthSection, RetrogradeSummarySection } from '../reading/ReadingDisplay'
+import { ReadingSummary, PlanetSection, AsteroidSection, AspectSection, AspectPatternsSection, BalanceSection, FocusSection, HousesOverview, PlanetaryStrengthSection, RetrogradeSummarySection } from '../reading/ReadingDisplay'
 import { NatalMoonPhaseWidget } from '../reading/MoonPhaseWidget'
 import DailySnapshotCard from '../reading/DailySnapshotCard'
 import DiscussModal from '../discuss/DiscussModal'
@@ -66,6 +65,7 @@ export default function ResultsPage() {
 
       {/* detailed sections */}
       <PlanetSection reading={reading} showHouse={!chartData.unknownTime} />
+      <AsteroidSection reading={reading} showHouse={!chartData.unknownTime} />
       <AspectSection reading={reading} />
       <AspectPatternsSection patterns={reading.patterns} />
       <BalanceSection elements={reading.elements} modalities={reading.modalities} />

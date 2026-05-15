@@ -1,7 +1,7 @@
 import type { ChartData, ZodiacSign, PlanetName, BodyName, AsteroidName } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_ARCHETYPES, isAsteroid, getBodyGlyph } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_ARCHETYPES, ASTEROID_GLYPHS, isAsteroid, getBodyGlyph } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'
@@ -68,10 +68,10 @@ const ELEMENT_COLORS: Record<string, string> = {
 
 function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/types').PlanetPosition; chartData: ChartData }) {
   const isAsteroidBody = isAsteroid(planet.name as BodyName)
-  const signInterp = !isAsteroidBody ? getPlanetInSignInterpretation(planet.name as PlanetName | 'NorthNode', planet.sign) : null
-  const houseInterp = !chartData.unknownTime && !isAsteroidBody ? getPlanetInHouseInterpretation(planet.name as PlanetName | 'NorthNode', planet.house) : null
+  const signInterp = getPlanetInSignInterpretation(planet.name as BodyName, planet.sign)
+  const houseInterp = !chartData.unknownTime ? getPlanetInHouseInterpretation(planet.name as BodyName, planet.house) : null
   const dignity = !isAsteroidBody && planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
-  const retroInterp = planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
+  const retroInterp = planet.retrograde && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
   const glyph = getBodyGlyph(planet.name as BodyName)
   const archetype = isAsteroidBody ? ASTEROID_ARCHETYPES[planet.name as AsteroidName] : null
 
@@ -88,7 +88,7 @@ function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/typ
             {archetype}
           </span>
         )}
-        {planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' && (
+        {planet.retrograde && planet.name !== 'NorthNode' && (
           <span className="text-mystic-muted text-xs border border-mystic-muted/30 rounded px-1">Rx</span>
         )}
         {dignity && (
