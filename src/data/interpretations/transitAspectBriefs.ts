@@ -1,4 +1,3 @@
-import type { PlanetName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
 import { getPlanetInHouseInterpretation } from './index'
 import { getHouseTheme } from './houseThemes'
@@ -97,9 +96,9 @@ function truncateToLimit(text: string, limit: number): string {
  * Never throws. Always returns a non-empty string.
  */
 export function computeTransitAspectBrief(
-  transitPlanet: PlanetName | 'NorthNode',
+  transitPlanet: string,
   aspectType: AspectType,
-  natalPlanet: PlanetName | 'NorthNode',
+  natalPlanet: string,
   natalHouse: number | null,
   nature: Nature,
   applying?: boolean,
@@ -121,8 +120,8 @@ export function computeTransitAspectBrief(
     const phrasePair = phrases[nature]
     const verbPhrase = applying !== false ? phrasePair.applying : phrasePair.separating
 
-    // Optionally use getPlanetInHouseInterpretation for depth
-    const houseInterp = getPlanetInHouseInterpretation(natalPlanet, natalHouse)
+    // Optionally use getPlanetInHouseInterpretation for depth (asteroids return null gracefully)
+    const houseInterp = getPlanetInHouseInterpretation(natalPlanet as Parameters<typeof getPlanetInHouseInterpretation>[0], natalHouse)
     const contextBrief = houseInterp?.brief ?? houseTheme.brief
 
     // Compose the sentence:

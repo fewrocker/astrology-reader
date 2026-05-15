@@ -1,5 +1,6 @@
 import { normalizeAngle } from './zodiac'
-import type { PlanetPosition, PlanetName } from './types'
+import type { PlanetPosition, BodyName } from './types'
+import { isAsteroid } from './types'
 
 export type AspectType =
   | 'conjunction'
@@ -29,8 +30,8 @@ export const ASPECT_DEFINITIONS: AspectDefinition[] = [
 ]
 
 export interface Aspect {
-  planet1: PlanetName | 'NorthNode'
-  planet2: PlanetName | 'NorthNode'
+  planet1: BodyName
+  planet2: BodyName
   type: AspectType
   angle: number
   orb: number
@@ -44,7 +45,7 @@ export type AspectPatternType = 'Grand Trine' | 'T-Square' | 'Grand Cross' | 'Yo
 
 export interface AspectPattern {
   type: AspectPatternType
-  planets: (PlanetName | 'NorthNode')[]
+  planets: BodyName[]
 }
 
 /**
@@ -185,18 +186,30 @@ export function detectPatterns(aspects: Aspect[]): AspectPattern[] {
   return patterns
 }
 
+/**
+ * Filter asteroid-to-asteroid aspects beyond the given maximum orb.
+ * Asteroid-to-planet aspects are always kept.
+ * Call at the display assembly layer, not inside calculateAspects().
+ */
+export function filterAsteroidAspects(aspects: Aspect[], maxAsteroidOrb = 3): Aspect[] {
+  return aspects.filter(a => {
+    const bothAsteroids = isAsteroid(a.planet1 as BodyName) && isAsteroid(a.planet2 as BodyName)
+    return !bothAsteroids || a.orb <= maxAsteroidOrb
+  })
+}
+
 // Helpers
-function findSharedPlanet(a1: Aspect, a2: Aspect): (PlanetName | 'NorthNode') | null {
+function findSharedPlanet(a1: Aspect, a2: Aspect): BodyName | null {
   if (a1.planet1 === a2.planet1 || a1.planet1 === a2.planet2) return a1.planet1
   if (a1.planet2 === a2.planet1 || a1.planet2 === a2.planet2) return a1.planet2
   return null
 }
 
-function getOtherPlanet(a: Aspect, planet: PlanetName | 'NorthNode'): PlanetName | 'NorthNode' {
+function getOtherPlanet(a: Aspect, planet: BodyName): BodyName {
   return a.planet1 === planet ? a.planet2 : a.planet1
 }
 
-function hasPair(a: Aspect, p1: PlanetName | 'NorthNode', p2: PlanetName | 'NorthNode'): boolean {
+function hasPair(a: Aspect, p1: BodyName, p2: BodyName): boolean {
   return (a.planet1 === p1 && a.planet2 === p2) || (a.planet1 === p2 && a.planet2 === p1)
 }
 

@@ -1,9 +1,9 @@
-import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData } from '../../engine/types'
+import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData, BodyName } from '../../engine/types'
 export { getNatalPlanetContext } from './natalPlanetContext'
 export type { NatalPlanetContext } from './natalPlanetContext'
-import { SIGN_ELEMENTS, SIGN_MODALITIES } from '../../engine/types'
+import { SIGN_ELEMENTS, SIGN_MODALITIES, isAsteroid } from '../../engine/types'
 import type { Aspect, AspectPattern } from '../../engine/aspects'
-import { detectPatterns } from '../../engine/aspects'
+import { detectPatterns, filterAsteroidAspects } from '../../engine/aspects'
 import type { FocusArea } from '../../context/appState'
 import type { InterpretationEntry } from './types'
 import { FOCUS_AREA_MAPPINGS, ELEMENT_INTERPRETATIONS, MODALITY_INTERPRETATIONS } from './types'
@@ -50,8 +50,11 @@ export interface ModalityBalance {
 }
 
 export function analyzeElements(planets: PlanetPosition[]): ElementBalance {
+  // Classical element analysis uses the ten traditional planets only.
+  // Asteroids are excluded: their clustering patterns can skew element balance.
+  const classical = planets.filter(p => !isAsteroid(p.name as BodyName))
   const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
-  for (const p of planets) {
+  for (const p of classical) {
     counts[SIGN_ELEMENTS[p.sign]] += 1
   }
   const sorted = (Object.entries(counts) as [Element, number][]).sort((a, b) => b[1] - a[1])
@@ -69,8 +72,10 @@ export function analyzeElements(planets: PlanetPosition[]): ElementBalance {
 }
 
 export function analyzeModalities(planets: PlanetPosition[]): ModalityBalance {
+  // Classical modality analysis — asteroids excluded to prevent clustering skew.
+  const classical = planets.filter(p => !isAsteroid(p.name as BodyName))
   const counts: Record<Modality, number> = { Cardinal: 0, Fixed: 0, Mutable: 0 }
-  for (const p of planets) {
+  for (const p of classical) {
     counts[SIGN_MODALITIES[p.sign]] += 1
   }
   const sorted = (Object.entries(counts) as [Modality, number][]).sort((a, b) => b[1] - a[1])
@@ -130,13 +135,15 @@ export interface FullReading {
 export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?: FocusArea): FullReading {
   const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
     planet: p,
-    signInterpretation: getPlanetInSignInterpretation(p.name, p.sign),
-    houseInterpretation: chart.unknownTime ? null : getPlanetInHouseInterpretation(p.name, p.house),
-    dignity: p.name !== 'NorthNode' ? getDignity(p.name as PlanetName, p.sign) : null,
-    retrogradeInterpretation: p.retrograde && p.name !== 'NorthNode' ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+    signInterpretation: !isAsteroid(p.name as BodyName) ? getPlanetInSignInterpretation(p.name as PlanetName | 'NorthNode', p.sign) : null,
+    houseInterpretation: (chart.unknownTime || isAsteroid(p.name as BodyName)) ? null : getPlanetInHouseInterpretation(p.name as PlanetName | 'NorthNode', p.house),
+    dignity: (!isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? getDignity(p.name as PlanetName, p.sign) : null,
+    retrogradeInterpretation: (p.retrograde && !isAsteroid(p.name as BodyName) && p.name !== 'NorthNode') ? (NATAL_RETROGRADE[p.name] ?? null) : null,
   }))
 
-  const aspectReadings: AspectReading[] = aspects.map((a) => ({
+  // Filter asteroid-to-asteroid aspects beyond 3° orb — keep asteroid-to-planet aspects
+  const filteredAspects = filterAsteroidAspects(aspects)
+  const aspectReadings: AspectReading[] = filteredAspects.map((a) => ({
     aspect: a,
     interpretation: getAspectInterpretation(a),
   }))
@@ -163,8 +170,11 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     }
   }
 
-  // Detect and interpret aspect patterns
-  const detectedPatterns = detectPatterns(aspects)
+  // Detect patterns using classical aspects only — no interpretation text for asteroid patterns
+  const classicalAspects = filteredAspects.filter(a =>
+    !isAsteroid(a.planet1 as BodyName) && !isAsteroid(a.planet2 as BodyName)
+  )
+  const detectedPatterns = detectPatterns(classicalAspects)
   const patternReadings: PatternReading[] = detectedPatterns.map((p) => {
     const interpretation = PATTERN_INTERPRETATIONS[p.type]
     const planetSigns = p.planets.map((name) => {

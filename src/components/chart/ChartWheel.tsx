@@ -1,7 +1,7 @@
-import type { ChartData, ZodiacSign, PlanetName } from '../../engine/types'
+import type { ChartData, ZodiacSign, PlanetName, BodyName, AsteroidName } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_GLYPHS, ASTEROID_ARCHETYPES, isAsteroid, getBodyGlyph } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'
@@ -22,6 +22,7 @@ const OUTER_R = SIZE / 2 - 12
 const SIGN_R = OUTER_R - 40
 const INNER_R = SIGN_R - 70
 const PLANET_R = INNER_R + 35
+const ASTEROID_R = 240
 const TRANSIT_PLANET_R = 288 // between natal planets (263) and zodiac ring inner (298)
 
 type HoverState =
@@ -66,21 +67,28 @@ const ELEMENT_COLORS: Record<string, string> = {
 /* ─── HTML Tooltip Components ─── */
 
 function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/types').PlanetPosition; chartData: ChartData }) {
-  const signInterp = getPlanetInSignInterpretation(planet.name, planet.sign)
-  const houseInterp = !chartData.unknownTime ? getPlanetInHouseInterpretation(planet.name, planet.house) : null
-  const dignity = planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
-  const retroInterp = planet.retrograde && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
-  const glyph = PLANET_GLYPHS[planet.name]
+  const isAsteroidBody = isAsteroid(planet.name as BodyName)
+  const signInterp = !isAsteroidBody ? getPlanetInSignInterpretation(planet.name as PlanetName | 'NorthNode', planet.sign) : null
+  const houseInterp = !chartData.unknownTime && !isAsteroidBody ? getPlanetInHouseInterpretation(planet.name as PlanetName | 'NorthNode', planet.house) : null
+  const dignity = !isAsteroidBody && planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
+  const retroInterp = planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
+  const glyph = getBodyGlyph(planet.name as BodyName)
+  const archetype = isAsteroidBody ? ASTEROID_ARCHETYPES[planet.name as AsteroidName] : null
 
   return (
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xl">{glyph}</span>
-        <span className="text-mystic-gold font-heading text-base font-semibold">
+        <span className={`font-heading text-base font-semibold ${isAsteroidBody ? 'text-amber-500' : 'text-mystic-gold'}`}>
           {planet.name === 'NorthNode' ? 'North Node' : planet.name}
         </span>
-        {planet.retrograde && planet.name !== 'NorthNode' && (
+        {archetype && (
+          <span className="text-xs border border-amber-500/30 rounded px-1.5 py-0.5 text-amber-500/80 bg-amber-500/10">
+            {archetype}
+          </span>
+        )}
+        {planet.retrograde && !isAsteroidBody && planet.name !== 'NorthNode' && (
           <span className="text-mystic-muted text-xs border border-mystic-muted/30 rounded px-1">Rx</span>
         )}
         {dignity && (
@@ -90,8 +98,16 @@ function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/typ
         )}
       </div>
       <div className="text-mystic-muted text-xs">
-        {planet.degree}°{planet.minute}' {ZODIAC_GLYPHS[planet.sign]} {planet.sign} — House {planet.house}
+        {planet.degree}°{planet.minute}' {ZODIAC_GLYPHS[planet.sign]} {planet.sign}
+        {planet.house > 0 && ` — House ${planet.house}`}
       </div>
+
+      {/* Asteroid archetype note */}
+      {isAsteroidBody && archetype && (
+        <p className="text-mystic-text/80 text-sm leading-relaxed italic">
+          {planet.name} carries the {archetype.toLowerCase()} archetype — a transpersonal influence that colors themes in your chart.
+        </p>
+      )}
 
       {/* Sign interpretation */}
       {signInterp && (
@@ -138,8 +154,8 @@ function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/typ
 
 function AspectTooltip({ aspect }: { aspect: Aspect }) {
   const interp = getAspectInterpretation(aspect)
-  const g1 = PLANET_GLYPHS[aspect.planet1 as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[aspect.planet2 as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(aspect.planet1 as BodyName)
+  const g2 = getBodyGlyph(aspect.planet2 as BodyName)
   const aspectName = aspect.type.charAt(0).toUpperCase() + aspect.type.slice(1)
   const natureColor = aspect.nature === 'harmonious' ? 'text-green-400' : aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
@@ -189,7 +205,7 @@ function HouseTooltip({ houseNum, chartData }: { houseNum: number; chartData: Ch
       <p className="text-mystic-text/90 text-sm leading-relaxed">{theme.brief}</p>
       {planetsInHouse.length > 0 && (
         <div className="text-mystic-gold text-xs font-medium pt-1 border-t border-mystic-gold/10">
-          Planets here: {planetsInHouse.map(p => `${PLANET_GLYPHS[p.name]} ${p.name}`).join(', ')}
+          Planets here: {planetsInHouse.map(p => `${getBodyGlyph(p.name as BodyName)} ${p.name}`).join(', ')}
         </div>
       )}
     </div>
@@ -199,7 +215,7 @@ function HouseTooltip({ houseNum, chartData }: { houseNum: number; chartData: Ch
 /* ─── Transit Tooltip Components ─── */
 
 function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosition; transitAspects?: TransitAspect[] }) {
-  const glyph = PLANET_GLYPHS[planet.name as PlanetName] ?? '☊'
+  const glyph = getBodyGlyph(planet.name as BodyName)
   const relatedAspects = transitAspects?.filter(a => a.transitPlanet === planet.name) ?? []
 
   return (
@@ -233,7 +249,7 @@ function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosit
           </div>
           <div className="space-y-1">
             {relatedAspects.map((a, i) => {
-              const g2 = PLANET_GLYPHS[a.natalPlanet as PlanetName] ?? '☊'
+              const g2 = getBodyGlyph(a.natalPlanet as BodyName)
               const natureColor = a.nature === 'harmonious' ? 'text-green-400' : a.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
               return (
                 <div key={i} className="flex items-center gap-1.5 text-xs">
@@ -251,8 +267,8 @@ function TransitPlanetTooltip({ planet, transitAspects }: { planet: TransitPosit
 }
 
 function TransitAspectTooltip({ aspect }: { aspect: TransitAspect }) {
-  const g1 = PLANET_GLYPHS[aspect.transitPlanet as PlanetName] ?? '☊'
-  const g2 = PLANET_GLYPHS[aspect.natalPlanet as PlanetName] ?? '☊'
+  const g1 = getBodyGlyph(aspect.transitPlanet as BodyName)
+  const g2 = getBodyGlyph(aspect.natalPlanet as BodyName)
   const aspectName = aspect.type.charAt(0).toUpperCase() + aspect.type.slice(1)
   const natureColor = aspect.nature === 'harmonious' ? 'text-green-400' : aspect.nature === 'challenging' ? 'text-red-400' : 'text-mystic-gold'
 
@@ -456,6 +472,17 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+
+          {/* Asteroid glow filter (amber) */}
+          <filter id="asteroidGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur" />
+            <feFlood floodColor="#d97706" floodOpacity="0.35" result="color" />
+            <feComposite in="color" in2="blur" operator="in" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         {/* Background */}
@@ -603,8 +630,10 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             const p2 = chartData.planets.find(p => p.name === aspect.planet2)
             if (!p1 || !p2) return null
 
-            const pos1 = polarToXY(CX, CY, PLANET_R, offset(p1.longitude))
-            const pos2 = polarToXY(CX, CY, PLANET_R, offset(p2.longitude))
+            const r1 = isAsteroid(p1.name as BodyName) ? ASTEROID_R : PLANET_R
+            const r2 = isAsteroid(p2.name as BodyName) ? ASTEROID_R : PLANET_R
+            const pos1 = polarToXY(CX, CY, r1, offset(p1.longitude))
+            const pos2 = polarToXY(CX, CY, r2, offset(p2.longitude))
             const color = getAspectColor(aspect.nature)
             const baseOpacity = Math.max(0.15, 1 - aspect.orb / 8)
             const isAspectHovered = hover?.kind === 'aspect' && hover.index === i
@@ -654,11 +683,11 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           })}
         </g>
 
-        {/* Planets */}
-        {chartData.planets.map((planet, idx) => {
+        {/* Planets (classical — asteroids rendered separately below) */}
+        {chartData.planets.filter(p => !isAsteroid(p.name as BodyName)).map((planet, idx) => {
           const pos = polarToXY(CX, CY, PLANET_R, offset(planet.longitude))
           const isHovered = hoveredPlanet === planet.name
-          const glyph = PLANET_GLYPHS[planet.name]
+          const glyph = PLANET_GLYPHS[planet.name as PlanetName | 'NorthNode'] ?? '?'
 
           const isSun = planet.name === 'Sun'
           const isMoon = planet.name === 'Moon'
@@ -724,6 +753,81 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
           )
         })}
 
+        {/* Asteroids — inner amber ring at ASTEROID_R with de-collision */}
+        {(() => {
+          const asteroidPlanets = chartData.planets.filter(p => isAsteroid(p.name as BodyName))
+          const displayAngles = asteroidPlanets.map(p => offset(p.longitude))
+          for (let i = 0; i < displayAngles.length; i++) {
+            for (let j = i + 1; j < displayAngles.length; j++) {
+              let diff = displayAngles[j] - displayAngles[i]
+              if (diff > 180) diff -= 360
+              if (diff < -180) diff += 360
+              if (Math.abs(diff) < 5) {
+                const avg = (displayAngles[i] + displayAngles[j]) / 2
+                displayAngles[i] = avg - 3
+                displayAngles[j] = avg + 3
+              }
+            }
+          }
+          return asteroidPlanets.map((asteroid, idx) => {
+            const pos = polarToXY(CX, CY, ASTEROID_R, displayAngles[idx])
+            const isHovered = hoveredPlanet === asteroid.name
+            const glyph = ASTEROID_GLYPHS[asteroid.name as AsteroidName] ?? '?'
+
+            return (
+              <g
+                key={asteroid.name}
+                onMouseEnter={() => handleHoverEnter({ kind: 'planet', name: asteroid.name })}
+                onMouseLeave={handleHoverLeave}
+                onClick={(e) => handleTap({ kind: 'planet', name: asteroid.name }, e)}
+                className="chart-planet cursor-pointer"
+                style={{ animationDelay: `${0.5 + idx * 0.09}s` }}
+              >
+                {/* Amber glow */}
+                <circle
+                  cx={pos.x} cy={pos.y}
+                  r={isHovered ? 16 : 12}
+                  fill="#d97706"
+                  filter="url(#asteroidGlow)"
+                  opacity={isHovered ? 0.5 : 0.15}
+                  style={{ transition: 'r 200ms ease, opacity 200ms ease' }}
+                />
+                {/* Circle */}
+                <circle
+                  cx={pos.x} cy={pos.y}
+                  r={isHovered ? 13 : 10}
+                  fill="#0a0a0f"
+                  stroke={isHovered ? '#d97706' : '#3a2800'}
+                  strokeWidth={isHovered ? 1.5 : 0.7}
+                  style={{ transition: 'r 200ms ease, stroke 200ms ease, stroke-width 200ms ease' }}
+                />
+                {/* Glyph */}
+                <text
+                  x={pos.x} y={pos.y}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill={isHovered ? '#d97706' : '#c49a30'}
+                  fontSize={isHovered ? 13 : 11}
+                  fontFamily="serif"
+                  style={{ transition: 'fill 200ms ease, font-size 200ms ease' }}
+                >
+                  {glyph}
+                </text>
+                {asteroid.retrograde && (
+                  <text
+                    x={pos.x + 9} y={pos.y - 7}
+                    fill="#b54a4a"
+                    fontSize="7"
+                    fontFamily="sans-serif"
+                  >
+                    R
+                  </text>
+                )}
+              </g>
+            )
+          })
+        })()}
+
         {/* Transit-to-natal aspect lines (dashed) — only visible when a transit planet is hovered/tapped */}
         {transitPlanets && transitAspects && (hoveredTransit || hoveredPlanet || (hover?.kind === 'transitAspect')) && (() => {
           const majorTypes = ['conjunction', 'sextile', 'square', 'trine', 'opposition']
@@ -743,7 +847,8 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               if (!tp || !np) return null
 
               const pos1 = polarToXY(CX, CY, TRANSIT_PLANET_R, offset(tp.longitude))
-              const pos2 = polarToXY(CX, CY, PLANET_R, offset(np.longitude))
+              const natalR = isAsteroid(np.name as BodyName) ? ASTEROID_R : PLANET_R
+              const pos2 = polarToXY(CX, CY, natalR, offset(np.longitude))
               const color = getAspectColor(ta.nature)
               const isTAHovered = hover?.kind === 'transitAspect' && hover.index === origIdx
               const opacity = isTAHovered ? 1 : 0.6
@@ -789,7 +894,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
 
           const pos = polarToXY(CX, CY, r, offset(tp.longitude))
           const isHovered = hoveredTransit === tp.name
-          const glyph = PLANET_GLYPHS[tp.name as PlanetName] ?? '☊'
+          const glyph = getBodyGlyph(tp.name as BodyName)
 
           return (
             <g
