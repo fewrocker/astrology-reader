@@ -845,9 +845,6 @@ export default function AdvanceTab({
   // Retrograde section header (spec 8.2)
   const retrogradeHeader = snapshot?.score.category === 'shift' ? 'Planetary Shift' : 'Retrograde Activity'
 
-  // Ref for slider container width for tooltip positioning
-  const sliderContainerRef = useRef<HTMLDivElement>(null)
-
   return (
     <div>
       {/* Animation styles (spec 4.1–4.6) — GPU-composited opacity+transform only */}
@@ -923,7 +920,7 @@ export default function AdvanceTab({
         </div>
 
         {/* Slider with marker overlay (spec 3.1–3.3) */}
-        <div className="relative w-full" ref={sliderContainerRef}>
+        <div className="relative w-full">
           <input
             type="range"
             min={0}
