@@ -8,6 +8,7 @@ import {
   type ChartAngles,
   type ChartData,
 } from './types'
+import { getPlanetLongitude, getMeanNodeLongitude, getHouseForLongitude } from './ephemeris'
 
 /** Map our planet names to astronomy-engine Body enum */
 const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
@@ -21,24 +22,6 @@ const BODY_MAP: Record<PlanetName, Astronomy.Body> = {
   Uranus: Astronomy.Body.Uranus,
   Neptune: Astronomy.Body.Neptune,
   Pluto: Astronomy.Body.Pluto,
-}
-
-/**
- * Get geocentric ecliptic longitude for a planet at a given time.
- * Uses GeoVector (geocentric equatorial J2000) → Ecliptic conversion.
- * EclipticLongitude() is heliocentric and wrong for natal charts.
- */
-function getPlanetLongitude(body: Astronomy.Body, time: Astronomy.AstroTime): number {
-  if (body === Astronomy.Body.Sun) {
-    return Astronomy.SunPosition(time).elon
-  }
-
-  if (body === Astronomy.Body.Moon) {
-    return Astronomy.EclipticGeoMoon(time).lon
-  }
-
-  const geo = Astronomy.GeoVector(body, time, true)
-  return Astronomy.Ecliptic(geo).elon
 }
 
 /**
@@ -58,24 +41,6 @@ function isRetrograde(body: Astronomy.Body, time: Astronomy.AstroTime): boolean 
   if (diff < -180) diff += 360
 
   return diff < 0
-}
-
-/**
- * Calculate Mean Lunar Node (North Node).
- */
-function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
-  // Mean Lunar Node formula
-  // T is centuries from J2000.0
-  const T = time.tt / 36525
-
-  // Mean longitude of ascending node (in degrees)
-  let omega = 125.0445479
-    - 1934.1362891 * T
-    + 0.0020754 * T * T
-    + T * T * T / 467441
-    - T * T * T * T / 60616000
-
-  return normalizeAngle(omega)
 }
 
 /**
@@ -222,25 +187,6 @@ function eclipticLongFromRA(raRad: number, oblRad: number): number {
   // From α = atan2(sin(λ)cos(ε), cos(λ)), the inverse is:
   const lon = Math.atan2(Math.sin(raRad), Math.cos(raRad) * Math.cos(oblRad))
   return normalizeAngle(lon * Astronomy.RAD2DEG)
-}
-
-/**
- * Determine which house a planet is in based on house cusps.
- */
-export function getHouseForLongitude(longitude: number, cusps: number[]): number {
-  for (let i = 0; i < 12; i++) {
-    const nextI = (i + 1) % 12
-    const start = cusps[i]
-    const end = cusps[nextI]
-
-    if (start < end) {
-      if (longitude >= start && longitude < end) return i + 1
-    } else {
-      // Wraps around 360°
-      if (longitude >= start || longitude < end) return i + 1
-    }
-  }
-  return 1 // fallback
 }
 
 /**
