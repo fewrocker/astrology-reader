@@ -358,7 +358,8 @@ export function buildTransitPrompt(
   }
 
   // Element profile — gives GPT calibration context for how to frame transits
-  const elementAnalysis = analyzeElements(natalChart.planets)
+  const classicalPlanets = natalChart.planets.filter(p => (PLANET_NAMES as readonly string[]).includes(p.name))
+  const elementAnalysis = analyzeElements(classicalPlanets)
   prompt += `\n## Natal Element Profile\n`
   prompt += `Dominant element: ${elementAnalysis.dominant} — ${elementAnalysis.interpretation.dominant}\n`
 

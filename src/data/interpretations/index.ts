@@ -1,7 +1,7 @@
 import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData } from '../../engine/types'
 export { getNatalPlanetContext } from './natalPlanetContext'
 export type { NatalPlanetContext } from './natalPlanetContext'
-import { SIGN_ELEMENTS, SIGN_MODALITIES } from '../../engine/types'
+import { SIGN_ELEMENTS, SIGN_MODALITIES, PLANET_NAMES } from '../../engine/types'
 import type { Aspect, AspectPattern } from '../../engine/aspects'
 import { detectPatterns } from '../../engine/aspects'
 import type { FocusArea } from '../../context/appState'
@@ -141,8 +141,9 @@ export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?:
     interpretation: getAspectInterpretation(a),
   }))
 
-  const elements = analyzeElements(chart.planets)
-  const modalities = analyzeModalities(chart.planets)
+  const classicalPlanets = chart.planets.filter(p => (PLANET_NAMES as readonly string[]).includes(p.name))
+  const elements = analyzeElements(classicalPlanets)
+  const modalities = analyzeModalities(classicalPlanets)
 
   let focus: FocusReading | null = null
   if (focusArea) {
