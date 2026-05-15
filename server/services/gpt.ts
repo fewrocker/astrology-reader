@@ -858,7 +858,7 @@ async function handleSynastryInterpretation(payload: {
   const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
   const synastryData = calculateSynastry(chart1, chart2)
   const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date, person1.name, person2.name)
-  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }], { temperature: 0.85, max_tokens: 4000 }))
 }
 
 async function handleCoupleTransitInterpretation(payload: {
@@ -887,7 +887,7 @@ async function handleCoupleTransitInterpretation(payload: {
   }
 
   const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth, person1.name, person2.name)
-  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
+  return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }], { temperature: 0.85, max_tokens: 3000 }))
 }
 
 // ---------------------------------------------------------------------------
