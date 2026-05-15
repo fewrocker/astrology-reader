@@ -1,5 +1,5 @@
 import * as Astronomy from 'astronomy-engine'
-import { longitudeToZodiac, normalizeAngle } from './zodiac'
+import { longitudeToZodiac } from './zodiac'
 import type { PlanetPosition, PlanetName, BodyName, ChartData, HouseCusp, AsteroidName } from './types'
 import { PLANET_NAMES, ASTEROID_NAMES, ASTEROID_ARCHETYPES, isAsteroid } from './types'
 import type { AspectType } from './aspects'
