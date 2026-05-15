@@ -333,11 +333,6 @@ function AppContent() {
         const prompt = buildTransitPrompt(chart, transitData, birthData.date, state.transitPeriod!, state.transitTargetMonth ?? undefined)
         void prompt // built for local display only; server recomputes from period
         const interpretation = await getGptInterpretation(state.transitPeriod!, state.transitTargetMonth ?? undefined)
-        incrementTodayUsed()
-
-        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
-        // Must fire only on success (not on RateLimitError or network error).
-        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_TRANSIT_INTERPRETATION', interpretation })
@@ -398,10 +393,6 @@ function AppContent() {
           { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city!.lat, lng: birthData.city!.lng, tz: birthData.city!.tz, name: birthData.userName?.trim() || undefined },
           { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz, name: partnerBirthData.userName?.trim() || undefined },
         )
-        incrementTodayUsed()
-
-        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
-        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
@@ -450,10 +441,6 @@ function AppContent() {
           state.synastryTransitPeriod!,
           state.synastryTransitTargetMonth ?? undefined,
         )
-        incrementTodayUsed()
-
-        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
-        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SYNASTRY_TRANSIT_RESULTS', transitData, interpretation })
@@ -512,10 +499,6 @@ function AppContent() {
 
         // Get GPT interpretation asynchronously — server computes from stored birth data
         const interpretation = await getSolarReturnInterpretation(srData.targetYear)
-        incrementTodayUsed()
-
-        // Spec 12 — increment todayUsed optimistically after a successful GPT response.
-        incrementTodayUsed()
 
         if (!cancelled) {
           dispatch({ type: 'SET_SOLAR_RETURN_INTERPRETATION', interpretation })
