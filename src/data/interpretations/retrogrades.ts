@@ -41,6 +41,26 @@ export const NATAL_RETROGRADE: Record<string, InterpretationEntry> = {
     brief: 'Transforms from within through deep psychological work',
     detail: 'Pluto retrograde at birth indicates that your transformative power operates from the inside out. Rather than seeking to change the world around you, you instinctively work on your own psychological depths. You may be drawn to therapy, shadow work, or deep introspection from an early age. Power dynamics play out internally — you wrestle with your own intensity, control patterns, and desire for regeneration. Your personal transformations are profound but mostly invisible to others. When you finally emerge from a Pluto transit or life phase, the change is complete and irreversible.',
   },
+  Chiron: {
+    brief: 'The wound turns inward — the healing journey longer, more solitary, more profound',
+    detail: 'With Chiron retrograde in your birth chart, the wound-and-wisdom journey is primarily internal — longer to begin, more private in its unfolding, and often invisible to those around you. You may spend years carrying the original wounding territory before the impulse to heal it fully awakens; this is not delay but depth. The work that happens in the interior before it surfaces is the very substance of the wisdom you eventually carry. When this healing finally moves outward, what others receive from you has been earned in solitude they cannot easily replicate.',
+  },
+  Ceres: {
+    brief: 'The nourishment cycle turns inward — giving and receiving care both require inner work',
+    detail: 'With Ceres retrograde at birth, the cycle of nourishment and loss moves primarily through the interior — the grief is more private, the relationship to receiving care more complicated, the path back from loss more internally navigated than outwardly supported. You may find it easier to give nourishment than to receive it, or carry a complex relationship to the acts of being tended. The renewal still comes; it simply arrives through an inward passage rather than an outward one. What you learn to nourish most completely, over time, is yourself.',
+  },
+  Pallas: {
+    brief: 'Strategic intelligence turns inward — perceptions deeper, expression of them slower to surface',
+    detail: 'With Pallas retrograde at birth, the strategic intelligence is primarily interior — your perceptions are often deep and accurate before you can articulate them, and the gap between what you understand and what you express can feel significant. You may have been underestimated in environments that reward quick, outward thinking, while carrying a more thorough and far-reaching intelligence beneath the surface. Over time, this becomes an asset: the insights that emerge from your slower processing are more fully formed, less easily disrupted, and often more precise than the quick conclusions of those around you.',
+  },
+  Juno: {
+    brief: 'The bond question turns inward — relationship patterns work through a longer, deeper process',
+    detail: 'With Juno retrograde in your birth chart, the work of commitment is primarily interior — you process your relationship patterns deeply and privately, often carrying the understanding of a past bond long after others might have moved on. You may be drawn back to unresolved relationship questions, or find that past partnerships teach you their lessons belatedly, when you finally have the distance to see clearly. This is not an obstacle to partnership — it is a different timeline. The commitment you eventually make carries the weight of what was genuinely worked through.',
+  },
+  Vesta: {
+    brief: 'The sacred flame burns in private — devotion internalized, deeper, less publicly expressed',
+    detail: 'With Vesta retrograde at birth, the devotion is primarily interior — the flame of sacred dedication burns in a place that others rarely see, and the work of genuine commitment happens in private before it ever becomes visible. You may struggle to externalize your deepest vocational sense, or carry a devotion to something that the world cannot easily receive or recognize. This is not absence of dedication — it is dedication of a particularly interior kind. What you tend in private is often more sustaining than anything you could show.',
+  },
 }
 
 // ---------- transit retrograde interpretations ----------

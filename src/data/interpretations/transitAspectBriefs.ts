@@ -1,8 +1,20 @@
 import type { PlanetName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
+import type { InterpretationEntry } from './types'
 import { getPlanetInHouseInterpretation } from './index'
 import { getHouseTheme } from './houseThemes'
 import { getAspectPerfectionBrief } from './transitEvents'
+
+// ─── Special-case transit aspect overrides ───────────────────────────────────
+// Keyed as `${transitPlanet}_${aspectType}_${natalPlanet}`.
+// These entries take precedence over the computed brief for significant life transits.
+
+export const TRANSIT_ASPECT_OVERRIDES: Record<string, InterpretationEntry> = {
+  Chiron_Conjunction_Chiron: {
+    brief: 'Chiron is returning to where it stood at your birth — the wound teacher comes full circle.',
+    detail: 'This is your Chiron Return — one of the most significant transits of a human life, occurring around age 49–51. Chiron has completed one full orbit and is arriving at the exact place it occupied when you were born. The wound that has shaped your life — the original pattern of not-enough, of early wounding in the area described by Chiron\'s natal sign and house — is now asking to be met consciously rather than carried. This is not a crisis. It is an invitation: from the wound to the wisdom, from the teacher to the healed healer.',
+  },
+}
 
 // ─── Internal planet archetype verb phrase table ─────────────────────────────
 // 10 transit planets × 3 natures (harmonious, challenging, neutral) = 30 entries.
