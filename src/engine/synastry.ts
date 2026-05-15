@@ -346,6 +346,27 @@ function identifyKeyThemes(aspects: SynastryAspect[]): string[] {
     themes.push('North Node contacts point to a fated, karmically significant relationship')
   }
 
+  // Chiron contacts = wound and healing
+  const personalPlanets = ['Sun', 'Moon', 'Venus', 'Mars']
+  const chironAspects = aspects.filter(a =>
+    (a.person1Planet as string) === 'Chiron' || (a.person2Planet as string) === 'Chiron'
+  )
+  const chironPersonalAspects = chironAspects.filter(a => {
+    const other = (a.person1Planet as string) === 'Chiron' ? a.person2Planet : a.person1Planet
+    return personalPlanets.includes(other as string)
+  })
+  if (chironPersonalAspects.length > 0) {
+    const a = chironPersonalAspects[0]
+    themes.push(a.nature === 'challenging'
+      ? "One of you carries a wound the other's presence reopens — Chiron contacts this chart's personal planets, and the dynamic may defy easy explanation"
+      : "A healer-and-healed thread runs through this connection — Chiron touching a personal planet brings depth and the possibility of mutual transformation")
+  }
+
+  // Chiron-to-Chiron = generational resonance
+  if (hasAspect('Chiron', 'Chiron')) {
+    themes.push("Your Chirons are in close contact — two people whose wounds speak the same language, mirroring each other's unhealed patterns")
+  }
+
   if (themes.length === 0) {
     themes.push('A relationship with unique dynamics worth exploring through deeper aspects')
   }
