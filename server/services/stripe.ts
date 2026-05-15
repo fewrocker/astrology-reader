@@ -1,8 +1,9 @@
 import Stripe from 'stripe'
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2026-04-22.dahlia',
-})
+const stripeKey = process.env.STRIPE_SECRET_KEY
+const stripe = stripeKey
+  ? new Stripe(stripeKey, { apiVersion: '2026-04-22.dahlia' })
+  : null as unknown as Stripe
 
 export const PRICE_IDS = {
   basic: process.env.STRIPE_BASIC_PRICE_ID || '',

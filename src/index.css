@@ -229,6 +229,16 @@ body {
   background: radial-gradient(circle, var(--tw-gradient-stops));
 }
 
+/* ===== Advance Tab — Slider Thumb Halo ===== */
+/* Applied when the slider thumb is at a marked position (power/favorable/challenging/shift). */
+/* The CSS variable --thumb-halo is set inline on the <input> element from React. */
+input[type='range'].has-thumb-halo::-webkit-slider-thumb {
+  box-shadow: var(--thumb-halo, 0 0 8px rgba(201, 168, 76, 0.5));
+}
+input[type='range'].has-thumb-halo::-moz-range-thumb {
+  box-shadow: var(--thumb-halo, 0 0 8px rgba(201, 168, 76, 0.5));
+}
+
 /* ---------- Discuss Modal Oracle Animation ---------- */
 
 .discuss-oracle-container {

@@ -1,0 +1,111 @@
+WARNING: GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set — Google OAuth routes disabled
+WARNING: FACEBOOK_APP_ID or FACEBOOK_APP_SECRET not set — Facebook OAuth routes disabled
+Server running on http://localhost:3002
+[GPT route] TypeError: Cannot read properties of undefined (reading 'date')
+    at handleSynastryInterpretation (file:///projects/astrology-reader/dist-server/services/gpt.js:614:43)
+    at handleGptRequest (file:///projects/astrology-reader/dist-server/services/gpt.js:676:20)
+    at file:///projects/astrology-reader/dist-server/routes/gpt.js:37:30
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+    at next (/projects/astrology-reader/node_modules/express/lib/router/route.js:149:13)
+    at gptRateLimit (file:///projects/astrology-reader/dist-server/middleware/gptRateLimit.js:86:9)
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+    at next (/projects/astrology-reader/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/projects/astrology-reader/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+[0mPOST /api/gpt/interpret [31m500[0m 12.253 ms - 26[0m
+[0mPOST /api/analytics/event [32m200[0m 1.750 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.898 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.778 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.884 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.497 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 16368.303 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.760 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 1.080 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.757 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.790 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.862 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.992 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 14112.869 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.895 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.953 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.858 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.591 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.921 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 1.172 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.834 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.538 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 5815.551 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.744 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 6321.484 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.712 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 9154.219 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.711 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 9827.135 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 10398.368 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.806 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.732 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 11681.831 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.703 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 1.061 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.655 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.557 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.700 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 5889.990 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 6822.313 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.796 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.734 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.854 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 9683.303 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 10280.536 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 10629.592 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 10474.552 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.840 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.872 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 5796.021 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.711 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.783 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 5425.405 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.718 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.983 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.730 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.720 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.728 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 8963.901 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.753 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 10036.495 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 8514.691 ms - -[0m
+[0mPOST /api/gpt/interpret [32m200[0m 8422.266 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.692 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.652 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.540 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.564 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.407 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.534 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.757 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.437 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.436 ms - 11[0m
+[GPT route] Error: Transit interpretation requires either a userId with birth context or a systemPrompt.
+    at handleTransitInterpretation (file:///projects/astrology-reader/dist-server/services/gpt.js:162:19)
+    at handleGptRequest (file:///projects/astrology-reader/dist-server/services/gpt.js:650:20)
+    at file:///projects/astrology-reader/dist-server/routes/gpt.js:37:30
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+    at next (/projects/astrology-reader/node_modules/express/lib/router/route.js:149:13)
+    at gptRateLimit (file:///projects/astrology-reader/dist-server/middleware/gptRateLimit.js:86:9)
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+    at next (/projects/astrology-reader/node_modules/express/lib/router/route.js:149:13)
+    at Route.dispatch (/projects/astrology-reader/node_modules/express/lib/router/route.js:119:3)
+    at Layer.handle [as handle_request] (/projects/astrology-reader/node_modules/express/lib/router/layer.js:95:5)
+[0mPOST /api/gpt/interpret [31m500[0m 1.190 ms - 26[0m
+[0mPOST /api/analytics/event [32m200[0m 0.757 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.552 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.754 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.534 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.705 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.623 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.403 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 17880.434 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.698 ms - 11[0m
+[0mPOST /api/gpt/interpret [32m200[0m 13874.932 ms - -[0m
+[0mPOST /api/analytics/event [32m200[0m 0.786 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 0.487 ms - 11[0m
+[0mPOST /api/analytics/event [32m200[0m 1.030 ms - 11[0m

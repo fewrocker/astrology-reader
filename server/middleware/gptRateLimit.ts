@@ -137,7 +137,7 @@ export function gptRateLimit(req: Request, res: Response, next: NextFunction): v
 
       let currentCount = 0
       try {
-        const usageRow = getUsageStmt().get(userId, today) as { count: number } | undefined
+        const usageRow = getUsageStmt().get([userId, today]) as { count: number } | undefined
         currentCount = usageRow?.count ?? 0
       } catch (err) {
         console.error('[gptRateLimit] Failed to read gpt_usage from DB — defaulting to 0:', err)
@@ -157,7 +157,7 @@ export function gptRateLimit(req: Request, res: Response, next: NextFunction): v
     // blocks a paying user (spec §53).
     let dbChanges = 1
     try {
-      const result = upsertUsageStmt().run(userId, today, limit) as { changes: number }
+      const result = upsertUsageStmt().run([userId, today, limit]) as { changes: number }
       dbChanges = result.changes
     } catch (err) {
       console.error('[gptRateLimit] DB upsert for gpt_usage failed — failing open:', err)
@@ -188,7 +188,7 @@ export function gptRateLimit(req: Request, res: Response, next: NextFunction): v
       if (capturedEntry.count > 0) capturedEntry.count--
       // Decrement DB row — MAX(0, count - 1) prevents negative counts (spec §10)
       try {
-        releaseUsageStmt().run(userId, capturedToday)
+        releaseUsageStmt().run([userId, capturedToday])
       } catch (err) {
         console.error('[gptRateLimit] DB decrement for gpt_usage failed:', err)
       }

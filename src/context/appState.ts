@@ -312,7 +312,7 @@ function buildInitialState(): AppState {
   return {
     view: 'form',
     formStep: 0,
-    formCompleted: false,
+    formCompleted: hasCachedBirthData(),
     birthData: loadCachedBirthData(),
     chartData: cachedChart?.chartData ?? null,
     aspects: cachedChart?.aspects ?? [],

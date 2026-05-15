@@ -1,5 +1,15 @@
 # Done Proposals
 
+## Sprint 0018 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-advance-monthly-midnight-reset](issue-advance-monthly-midnight-reset.md) | Issue Fix | merged sprint-0018 |
+| [issue-advance-station-threshold-overfire](issue-advance-station-threshold-overfire.md) | Issue Fix | merged sprint-0018 |
+| [code-score-snapshot-engine](code-score-snapshot-engine.md) | Code Enhancement | merged sprint-0018 |
+| [feat-advance-marker-system](feat-advance-marker-system.md) | Feature | merged sprint-0018 |
+| [feat-advance-next-notable-navigation](feat-advance-next-notable-navigation.md) | Feature | merged sprint-0018 |
+
 ## Sprint 0017 — Completed
 
 | Proposal | Type | Delivered |

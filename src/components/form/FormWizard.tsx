@@ -1,116 +1,130 @@
-import { useRef } from 'react'
+import { useState, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { saveProfile } from '../../services/authService'
 import { track } from '../../services/analytics'
-import StepDate from './StepDate'
-import StepTime from './StepTime'
-import StepPlace from './StepPlace'
-
-const STEPS = [
-  { label: 'Date', component: StepDate },
-  { label: 'Time', component: StepTime },
-  { label: 'Place', component: StepPlace },
-]
+import CityAutocomplete from './CityAutocomplete'
+import type { City } from '../../data/cityTypes'
 
 export default function FormWizard() {
   const { state, dispatch } = useApp()
   const { isAuthenticated } = useAuth()
-  const { formStep, birthData } = state
-  const StepComponent = STEPS[formStep].component
+  const { birthData } = state
+  const [errors, setErrors] = useState<string[]>([])
   const formStartedRef = useRef(false)
 
-  const canNext = (): boolean => {
-    switch (formStep) {
-      case 0: return !!birthData.date
-      case 1: return true // time always has default
-      case 2: return !!birthData.city
-      default: return false
-    }
-  }
+  const handleSubmit = () => {
+    const errs: string[] = []
+    if (!birthData.date) errs.push('Date of birth is required')
+    if (!birthData.city) errs.push('Place of birth is required')
+    setErrors(errs)
+    if (errs.length > 0) return
 
-  const handleFormStarted = () => {
     if (!formStartedRef.current) {
       formStartedRef.current = true
       track('form_started')
     }
-  }
 
-  const handleNext = () => {
-    handleFormStarted()
-    if (formStep < STEPS.length - 1) {
-      dispatch({ type: 'SET_STEP', step: formStep + 1 })
-    } else {
-      dispatch({ type: 'COMPLETE_FORM' })
-      if (isAuthenticated) {
-        saveProfile(birthData).catch(() => {
-          dispatch({ type: 'SET_STORAGE_WARNING', message: 'Birth data saved locally — could not sync to server.' })
-        })
-      }
-    }
-  }
-
-  const handleBack = () => {
-    if (formStep > 0) {
-      dispatch({ type: 'SET_STEP', step: formStep - 1 })
+    dispatch({ type: 'COMPLETE_FORM' })
+    if (isAuthenticated) {
+      saveProfile(birthData).catch(() => {
+        dispatch({ type: 'SET_STORAGE_WARNING', message: 'Birth data saved locally — could not sync to server.' })
+      })
     }
   }
 
   return (
     <div className="w-full max-w-lg mx-auto">
-      {/* Progress indicator */}
-      <div className="flex items-center justify-center gap-2 mb-8">
-        {STEPS.map((step, i) => (
-          <div key={step.label} className="flex items-center">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
-                i < formStep
-                  ? 'bg-mystic-gold text-mystic-bg'
-                  : i === formStep
-                    ? 'border-2 border-mystic-gold text-mystic-gold'
-                    : 'border border-mystic-border text-mystic-muted'
-              }`}
-            >
-              {i < formStep ? '✓' : i + 1}
-            </div>
-            {i < STEPS.length - 1 && (
-              <div className={`w-8 h-px mx-1 ${i < formStep ? 'bg-mystic-gold' : 'bg-mystic-border'}`} />
-            )}
+      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-8 mb-6 glow-gold">
+
+        <p className="text-mystic-muted text-xs uppercase tracking-widest mb-2">Your details</p>
+        <h2 className="font-heading text-2xl text-mystic-gold mb-6">Your Birth Details</h2>
+
+        {/* Name */}
+        <div className="mb-5">
+          <label htmlFor="your-name" className="block text-mystic-muted text-xs uppercase tracking-wider mb-2">
+            Name (optional)
+          </label>
+          <input
+            id="your-name"
+            type="text"
+            placeholder="e.g., Emma"
+            value={birthData.userName ?? ''}
+            onChange={e => dispatch({ type: 'UPDATE_BIRTH_DATA', data: { userName: e.target.value } })}
+            className="w-full px-4 py-3 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text focus:border-mystic-gold/50 focus:outline-none"
+            maxLength={40}
+          />
+        </div>
+
+        {/* Date */}
+        <div className="mb-5">
+          <label className="block text-mystic-muted text-xs uppercase tracking-wider mb-2">
+            Date of Birth
+          </label>
+          <input
+            type="date"
+            value={birthData.date}
+            max={new Date().toISOString().split('T')[0]}
+            onChange={e => dispatch({ type: 'UPDATE_BIRTH_DATA', data: { date: e.target.value } })}
+            className="w-full px-4 py-3 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text focus:border-mystic-gold/50 focus:outline-none [color-scheme:dark]"
+          />
+        </div>
+
+        {/* Time */}
+        <div className="mb-5">
+          <label className="block text-mystic-muted text-xs uppercase tracking-wider mb-2">
+            Time of Birth
+          </label>
+          <input
+            type="time"
+            value={birthData.time}
+            disabled={birthData.unknownTime}
+            onChange={e => dispatch({ type: 'UPDATE_BIRTH_DATA', data: { time: e.target.value } })}
+            className="w-full px-4 py-3 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text focus:border-mystic-gold/50 focus:outline-none disabled:opacity-40 [color-scheme:dark]"
+          />
+          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={birthData.unknownTime}
+              onChange={e =>
+                dispatch({
+                  type: 'UPDATE_BIRTH_DATA',
+                  data: { unknownTime: e.target.checked, time: '12:00' },
+                })
+              }
+              className="accent-mystic-gold"
+            />
+            <span className="text-mystic-muted text-xs">I don't know my birth time</span>
+          </label>
+        </div>
+
+        {/* City */}
+        <div className="mb-6">
+          <label className="block text-mystic-muted text-xs uppercase tracking-wider mb-2">
+            Place of Birth
+          </label>
+          <CityAutocomplete
+            value={birthData.city}
+            onChange={(city: City | null) => dispatch({ type: 'UPDATE_BIRTH_DATA', data: { city } })}
+          />
+        </div>
+
+        {/* Errors */}
+        {errors.length > 0 && (
+          <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg">
+            {errors.map((e, i) => (
+              <p key={i} className="text-red-400 text-sm">{e}</p>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Step label */}
-      <div className="text-center mb-6">
-        <span className="text-xs uppercase tracking-widest text-mystic-muted">
-          Step {formStep + 1} of {STEPS.length} — {STEPS[formStep].label}
-        </span>
-      </div>
-
-      {/* Step content */}
-      <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 mb-6 glow-gold step-enter" key={formStep}>
-        <StepComponent />
-      </div>
-
-      {/* Navigation */}
-      <div className="flex justify-between">
+        {/* Submit */}
         <button
           type="button"
-          onClick={handleBack}
-          disabled={formStep === 0}
-          aria-label="Go to previous step"
-          className="px-6 py-2 rounded-lg text-sm text-mystic-muted hover:text-mystic-text transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={handleSubmit}
+          className="w-full px-6 py-3 bg-mystic-gold text-mystic-bg font-heading rounded-lg hover:bg-mystic-gold/90 transition-colors"
         >
-          ← Back
-        </button>
-        <button
-          type="button"
-          onClick={handleNext}
-          disabled={!canNext()}
-          aria-label={formStep === STEPS.length - 1 ? 'Generate your birth chart reading' : 'Go to next step'}
-          className="px-6 py-2 rounded-lg text-sm bg-mystic-gold text-mystic-bg font-medium hover:bg-mystic-gold/90 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {formStep === STEPS.length - 1 ? 'Generate Reading ✦' : 'Next →'}
+          Generate Reading ✦
         </button>
       </div>
     </div>

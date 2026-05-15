@@ -394,10 +394,8 @@ function AppContent() {
           { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city!.lat, lng: partnerBirthData.city!.lng, tz: partnerBirthData.city!.tz, name: partnerBirthData.userName?.trim() || undefined },
         )
 
-        if (!cancelled) {
-          dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
-          incrementTodayUsed()
-        }
+        dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
+        if (!cancelled) incrementTodayUsed()
       } catch (e) {
         if (e instanceof RateLimitError) {
           if (!cancelled) openUpgrade(e.info)
@@ -520,8 +518,6 @@ function AppContent() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [state.view, state.solarReturnTargetYear]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [cachedBirthDataExists] = useState(() => hasCachedBirthData())
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-mystic-bg flex flex-col items-center justify-center gap-4">
@@ -535,7 +531,7 @@ function AppContent() {
     )
   }
 
-  const showCachedLanding = state.view === 'form' && (cachedBirthDataExists || state.formCompleted) && !!state.birthData.date && !!state.birthData.city
+  const showCachedLanding = state.view === 'form' && state.formCompleted && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 
