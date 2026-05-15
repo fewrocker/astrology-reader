@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback, useTransition } from 'react'
 import type { TransitPeriod, TransitPosition, TransitAspect } from '../../engine/transits'
-import { calculateCurrentPositions, calculateTransitAspects, assignTransitHouses, getRetrogradeStatus } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, assignTransitHouses, getRetrogradeStatus, computeEnergyRating } from '../../engine/transits'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -14,6 +14,18 @@ import { computeTransitAspectBrief } from '../../data/interpretations/transitAsp
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type MarkerCategory = 'power' | 'favorable' | 'challenging' | 'shift' | 'neutral'
+
+export interface SnapshotScore {
+  category: MarkerCategory
+  coShift: boolean
+  intensity: number
+  reason: string
+  triggerAspect?: string
+  shiftPlanet?: string
+  shiftDirection?: 'retrograde' | 'direct'
+}
+
 interface AdvanceSnapshot {
   offset: number
   date: Date
@@ -22,6 +34,7 @@ interface AdvanceSnapshot {
   housedTransitPlanets: TransitPosition[]
   transitAspects: TransitAspect[]
   retrogrades: { planet: PlanetName; isRetro: boolean; status: string }[]
+  score: SnapshotScore
 }
 
 interface AdvanceConfig {
@@ -35,6 +48,14 @@ const ADVANCE_CONFIG: Record<TransitPeriod, AdvanceConfig> = {
   daily: { unit: 'day', unitPlural: 'days', max: 30, msPerStep: 86400000 },
   weekly: { unit: 'week', unitPlural: 'weeks', max: 52, msPerStep: 7 * 86400000 },
   monthly: { unit: 'month', unitPlural: 'months', max: 36, msPerStep: 30.44 * 86400000 }, // average month
+}
+
+// ─── Orb Thresholds ──────────────────────────────────────────────────────────
+
+const ORB_THRESHOLDS: Record<TransitPeriod, { angleContact: number; applyingTight: number; energyMinAspects: number }> = {
+  daily:   { angleContact: 1.0, applyingTight: 2.0, energyMinAspects: 2 },
+  weekly:  { angleContact: 2.0, applyingTight: 3.0, energyMinAspects: 3 },
+  monthly: { angleContact: 3.0, applyingTight: 4.0, energyMinAspects: 2 },
 }
 
 // ─── Power Day Banner ─────────────────────────────────────────────────────────
@@ -57,12 +78,6 @@ const ASPECT_VERB_BANNER: Record<AspectType, string> = {
 const ANGLE_DOMAIN: Record<'ASC' | 'MC', string> = {
   ASC: 'a significant moment for identity and how the world first meets you',
   MC: 'a significant moment for career decisions and public commitments',
-}
-
-/** Spell out count words for small numbers (spec 9). */
-function spellCount(n: number): string {
-  const words: Record<number, string> = { 3: 'Three', 4: 'Four', 5: 'Five' }
-  return words[n] ?? String(n)
 }
 
 /**
@@ -100,28 +115,48 @@ function detectAngleContact(
 }
 
 /**
- * Compute the power-day banner text for a given snapshot and chart.
- * Returns null when neither trigger condition is met, or at offset 0.
+ * Score a snapshot and return a structured SnapshotScore.
+ * This is the single source of truth for detecting astrological conditions.
  */
-function computePowerDayBanner(
-  snapshot: AdvanceSnapshot,
+function scoreSnapshot(
+  snapshot: Pick<AdvanceSnapshot, 'offset' | 'transitPlanets' | 'transitAspects' | 'retrogrades'>,
+  prev: AdvanceSnapshot | null,
   chartData: ChartData,
-): string | null {
-  // Suppress banner for current date (offset 0) — it's a reference point, not a future date
-  if (snapshot.offset === 0) return null
+  period: TransitPeriod,
+): SnapshotScore {
+  // Offset 0 is the reference point — always neutral
+  if (snapshot.offset === 0) {
+    return { category: 'neutral', intensity: 0, reason: '', coShift: false }
+  }
 
-  // Suppress banner for empty aspect lists
-  if (snapshot.transitAspects.length === 0) return null
+  const orbThresholds = ORB_THRESHOLDS[period]
 
-  // ── Primary trigger: slow planet within 1° of natal angle (requires birth time) ───
+  // ── Station detection: compare prev vs current retrograde state ──────────
+  let hasStation = false
+  let stationPlanet: string | undefined
+  let stationDirection: 'retrograde' | 'direct' | undefined
+
+  if (prev) {
+    for (const r of snapshot.retrogrades) {
+      const prevR = prev.retrogrades.find(pr => pr.planet === r.planet)
+      if (prevR && prevR.isRetro !== r.isRetro) {
+        hasStation = true
+        stationPlanet = r.planet
+        stationDirection = r.isRetro ? 'retrograde' : 'direct'
+        break
+      }
+    }
+  }
+
+  // ── Primary trigger: slow planet within angleContact° of natal angle ──────
   if (!chartData.unknownTime) {
     const angleEntries: { key: 'ASC' | 'MC'; lon: number }[] = [
       { key: 'ASC', lon: chartData.angles.ascendant.longitude },
       { key: 'MC', lon: chartData.angles.midheaven.longitude },
     ]
 
-    let bestContact: {
-      planet: PlanetName
+    let best: {
+      planet: string
       angleKey: 'ASC' | 'MC'
       aspectType: AspectType
       orb: number
@@ -130,36 +165,98 @@ function computePowerDayBanner(
     for (const tp of snapshot.transitPlanets) {
       if (!SLOW_PLANETS_FOR_BANNER.has(tp.name as PlanetName)) continue
       for (const { key, lon } of angleEntries) {
-        const contact = detectAngleContact(tp.longitude, lon, 1.0)
-        if (contact && (!bestContact || contact.orb < bestContact.orb)) {
-          bestContact = {
-            planet: tp.name as PlanetName,
-            angleKey: key,
-            aspectType: contact.aspectType,
-            orb: contact.orb,
-          }
+        const contact = detectAngleContact(tp.longitude, lon, orbThresholds.angleContact)
+        if (contact && (!best || contact.orb < best.orb)) {
+          best = { planet: tp.name, angleKey: key, aspectType: contact.aspectType, orb: contact.orb }
         }
       }
     }
 
-    if (bestContact) {
-      const angleName = bestContact.angleKey === 'ASC' ? 'your Ascendant' : 'your Midheaven'
-      const verb = ASPECT_VERB_BANNER[bestContact.aspectType] ?? 'contacts'
-      const domain = ANGLE_DOMAIN[bestContact.angleKey]
-      return `${bestContact.planet} ${verb} ${angleName} on this date — ${domain}.`
+    if (best) {
+      const verb = ASPECT_VERB_BANNER[best.aspectType] ?? 'contacts'
+      const angleName = best.angleKey === 'ASC' ? 'your Ascendant' : 'your Midheaven'
+      return {
+        category: 'power',
+        intensity: 1.0 - (best.orb / orbThresholds.angleContact),
+        reason: `${best.planet} ${verb} ${angleName} — ${ANGLE_DOMAIN[best.angleKey]}.`,
+        triggerAspect: best.aspectType,
+        coShift: hasStation,
+        shiftPlanet: stationPlanet,
+        shiftDirection: stationDirection,
+      }
     }
   }
 
-  // ── Secondary trigger: 3+ applying aspects with orb ≤ 2° ─────────────────
-  const tightApplying = snapshot.transitAspects.filter(a => a.applying && a.orb <= 2.0)
-  if (tightApplying.length >= 3) {
-    const count = spellCount(tightApplying.length)
-    // natalHouse not yet embedded (prerequisite task-0002 pending in this file's scope);
-    // use the plain fallback variant (spec 9, natalHouse-null branch).
-    return `${count} tight aspects converge on this date — a notable concentration of planetary energy.`
+  // ── Favorable / Challenging: energy rating + tight applying aspects ────────
+  const energyRating = computeEnergyRating(snapshot.transitAspects)
+
+  const tightApplyingHarmonious = snapshot.transitAspects.filter(
+    a => a.applying && a.orb <= orbThresholds.applyingTight && a.nature === 'harmonious'
+  )
+  const tightApplyingChallenging = snapshot.transitAspects.filter(
+    a => a.applying && a.orb <= orbThresholds.applyingTight && a.nature === 'challenging'
+  )
+
+  // Monthly period: tighten score thresholds for genuinely extreme readings only
+  const favorableThreshold = period === 'monthly' ? 5 : 4
+  const challengingThreshold = period === 'monthly' ? 1 : 2
+
+  if (energyRating.score >= favorableThreshold && tightApplyingHarmonious.length >= orbThresholds.energyMinAspects) {
+    const tightest = tightApplyingHarmonious[0]
+    return {
+      category: 'favorable',
+      intensity: (energyRating.score - 3) / 2,
+      reason: `${tightApplyingHarmonious.length} harmonious aspects applying — ${tightest.transitPlanet} ${tightest.type} ${tightest.natalPlanet}.`,
+      triggerAspect: tightest.type,
+      coShift: hasStation,
+      shiftPlanet: stationPlanet,
+      shiftDirection: stationDirection,
+    }
   }
 
-  return null
+  if (energyRating.score <= challengingThreshold && tightApplyingChallenging.length >= orbThresholds.energyMinAspects) {
+    const tightest = tightApplyingChallenging[0]
+    return {
+      category: 'challenging',
+      intensity: (3 - energyRating.score) / 2,
+      reason: `${tightApplyingChallenging.length} tense aspects applying — ${tightest.transitPlanet} ${tightest.type} ${tightest.natalPlanet}.`,
+      triggerAspect: tightest.type,
+      coShift: hasStation,
+      shiftPlanet: stationPlanet,
+      shiftDirection: stationDirection,
+    }
+  }
+
+  // ── Shift: station with no higher-priority category ───────────────────────
+  if (hasStation) {
+    return {
+      category: 'shift',
+      intensity: 0.8,
+      reason: `${stationPlanet} stations ${stationDirection} — a turning point in ${stationPlanet}'s influence.`,
+      coShift: false,
+      shiftPlanet: stationPlanet,
+      shiftDirection: stationDirection,
+    }
+  }
+
+  return { category: 'neutral', intensity: 0, reason: '', coShift: false }
+}
+
+/**
+ * Format a SnapshotScore as a human-readable banner string.
+ */
+function formatScoreAsBannerText(score: SnapshotScore): string {
+  return score.reason
+}
+
+/**
+ * Compute the power-day banner text for a given snapshot.
+ * Delegates all detection to the pre-computed snapshot.score.
+ */
+function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
+  if (snapshot.offset === 0) return null
+  if (snapshot.score.category === 'neutral') return null
+  return formatScoreAsBannerText(snapshot.score)
 }
 
 // ─── Pre-calculator ──────────────────────────────────────────────────────────
@@ -187,6 +284,14 @@ function preCalculateSnapshots(
     const retrogrades = getRetrogradeStatus(targetDate)
     const housedTransitPlanets = assignTransitHouses(transitPlanets, chartData.houses)
 
+    const prev = snapshots[i - 1] ?? null
+    const score = scoreSnapshot(
+      { offset: i, transitPlanets, transitAspects, retrogrades },
+      prev,
+      chartData,
+      period,
+    )
+
     snapshots.push({
       offset: i,
       date: targetDate,
@@ -195,6 +300,7 @@ function preCalculateSnapshots(
       housedTransitPlanets,
       transitAspects,
       retrogrades,
+      score,
     })
   }
 
@@ -236,9 +342,9 @@ export default function AdvanceTab({
 
   // Compute the power-day banner for the currently selected snapshot
   const powerDayBanner = useMemo(() => {
-    if (!snapshot || !chartData) return null
-    return computePowerDayBanner(snapshot, chartData)
-  }, [snapshot, chartData])
+    if (!snapshot) return null
+    return computePowerDayBanner(snapshot)
+  }, [snapshot])
 
   const formatDate = (d: Date) =>
     d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
