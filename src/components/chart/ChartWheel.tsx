@@ -17,6 +17,7 @@ interface ChartWheelProps {
   transitAspects?: TransitAspect[]
   synastryPlanets?: PlanetPosition[]
   synastryAspects?: SynastryAspect[]
+  synastryViewMode?: 'charts' | 'connections'
 }
 
 const SIZE = 700
@@ -382,7 +383,7 @@ function SynastryAspectTooltip({ aspect }: { aspect: SynastryAspect }) {
   )
 }
 
-export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects, synastryPlanets, synastryAspects }: ChartWheelProps) {
+export default function ChartWheel({ chartData, aspects, transitPlanets, transitAspects, synastryPlanets, synastryAspects, synastryViewMode }: ChartWheelProps) {
   const [hover, setHover] = useState<HoverState>(null)
   const [tapped, setTapped] = useState(false)
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null)
@@ -769,13 +770,14 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
             const isConnected = !hoveredPlanet ||
               aspect.planet1 === hoveredPlanet ||
               aspect.planet2 === hoveredPlanet
+            const natalBaseOpacity = synastryViewMode === 'connections' ? baseOpacity * 0.2 : baseOpacity
             const opacity = isAspectHovered
               ? 1
               : hoveredTransit
                 ? 0.04
                 : hoveredPlanet
                   ? (isConnected ? Math.min(baseOpacity + 0.2, 0.9) : 0.04)
-                  : baseOpacity
+                  : natalBaseOpacity
 
             const len = Math.sqrt((pos2.x - pos1.x) ** 2 + (pos2.y - pos1.y) ** 2)
 
@@ -838,7 +840,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 r={isHovered ? 20 : (isSun ? 22 : isMoon ? 18 : 14)}
                 fill={isSun ? '#e8a820' : isMoon ? '#b8c8e8' : '#9080c0'}
                 filter={glowFilter}
-                opacity={isHovered ? 0.7 : (isSun ? 0.55 : isMoon ? 0.45 : 0.2)}
+                opacity={isHovered ? 0.7 : (synastryViewMode === 'connections' ? 0.10 : (isSun ? 0.55 : isMoon ? 0.45 : 0.2))}
                 className={glowClass}
                 style={{
                   animationDelay: isSun ? '0s' : isMoon ? '3s' : `${idx * 0.8}s`,
@@ -1030,6 +1032,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 ? (sa.person1Planet === hoveredPlanet)
                 : true
 
+              const synastryRestOpacity = synastryViewMode === 'connections' ? 0.55 : 0.12
               let opacity: number
               if (isSAHovered) {
                 opacity = 1.0
@@ -1038,7 +1041,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               } else if (hoveredPlanet) {
                 opacity = isConnectedToHoveredPlanet ? 0.7 : 0.06
               } else {
-                opacity = 0.3
+                opacity = synastryRestOpacity
               }
 
               return (
@@ -1171,16 +1174,16 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
               {/* Glow */}
               <circle
                 cx={pos.x} cy={pos.y}
-                r={isHovered ? 16 : 12}
+                r={isHovered ? 16 : 14}
                 fill={SYNASTRY_COLOR}
                 filter="url(#synastryGlow)"
-                opacity={isHovered ? 0.6 : 0.15}
+                opacity={isHovered ? 0.6 : (synastryViewMode === 'connections' ? 0.10 : 0.20)}
                 style={{ transition: 'r 200ms ease, opacity 200ms ease' }}
               />
               {/* Circle */}
               <circle
                 cx={pos.x} cy={pos.y}
-                r={isHovered ? 14 : 11}
+                r={isHovered ? 14 : 13}
                 fill="#0a0a0f"
                 stroke={isHovered ? SYNASTRY_COLOR : '#2a1a3a'}
                 strokeWidth={isHovered ? 1.5 : 0.7}
@@ -1191,8 +1194,8 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
                 x={pos.x} y={pos.y}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill={isHovered ? SYNASTRY_COLOR : '#d8b8f8'}
-                fontSize={isHovered ? 14 : 12}
+                fill={isHovered ? SYNASTRY_COLOR : '#e8d8ff'}
+                fontSize={isHovered ? 14 : 14}
                 fontFamily="serif"
                 style={{ transition: 'fill 200ms ease, font-size 200ms ease' }}
               >

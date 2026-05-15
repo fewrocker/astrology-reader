@@ -341,6 +341,7 @@ export default function SynastryPage() {
   const { chartData, aspects, birthData, partnerBirthData, partnerChartData, partnerAspects, synastryData, synastryInterpretation } = state
   const [discussOpen, setDiscussOpen] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [viewMode, setViewMode] = useState<'charts' | 'connections'>('charts')
 
   useEffect(() => { track('reading_viewed', { reading_type: 'synastry' }) }, [])
 
@@ -392,12 +393,37 @@ export default function SynastryPage() {
             {' · '}{partnerBirthData.date}
           </span>
         </div>
+        <div className="flex justify-center mb-3">
+          <div className="inline-flex rounded-full border border-mystic-gold/20 bg-mystic-gold/5 p-0.5 gap-0.5">
+            <button
+              onClick={() => setViewMode('charts')}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                viewMode === 'charts'
+                  ? 'bg-mystic-gold/20 text-mystic-gold'
+                  : 'text-mystic-muted hover:text-mystic-text'
+              }`}
+            >
+              Show charts
+            </button>
+            <button
+              onClick={() => setViewMode('connections')}
+              className={`px-4 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                viewMode === 'connections'
+                  ? 'bg-[#c084fc]/20 text-[#c084fc]'
+                  : 'text-mystic-muted hover:text-mystic-text'
+              }`}
+            >
+              Show connections
+            </button>
+          </div>
+        </div>
         <div className="w-full max-w-2xl">
           <ChartWheel
             chartData={chartData}
             aspects={aspects}
             synastryPlanets={partnerChartData.planets}
             synastryAspects={synastryData.synastryAspects}
+            synastryViewMode={viewMode}
           />
         </div>
         <div className="flex flex-wrap gap-4 text-xs text-center justify-center mt-2 text-mystic-muted">
