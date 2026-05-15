@@ -61,6 +61,19 @@ function isRetrograde(body: Astronomy.Body, time: Astronomy.AstroTime): boolean 
 }
 
 /**
+ * Compute daily motion for a planet (degrees per day; positive = direct, negative = retrograde).
+ */
+function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
+  const lon1 = getPlanetLongitude(body, time)
+  const timePlus = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const lon2 = getPlanetLongitude(body, timePlus)
+  let diff = lon2 - lon1
+  if (diff > 180) diff -= 360
+  if (diff < -180) diff += 360
+  return diff
+}
+
+/**
  * Calculate Mean Lunar Node (North Node).
  */
 function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
@@ -270,23 +283,31 @@ export function calculateChart(
     const lon = getPlanetLongitude(body, time)
     const zodiac = longitudeToZodiac(lon)
     const retro = isRetrograde(body, time)
+    const motion = getDailyMotion(body, time)
 
     planets.push({
       ...zodiac,
       name,
       retrograde: retro,
       house: 0, // assigned after house calculation
+      dailyMotion: motion,
     })
   }
 
-  // North Node
+  // North Node — mean node moves retrograde at ~0.053°/day
   const nodeLon = getMeanNodeLongitude(time)
   const nodeZodiac = longitudeToZodiac(nodeLon)
+  const timePlus1d = Astronomy.MakeTime(new Date(time.date.getTime() + 86400000))
+  const nodeLonPlus = getMeanNodeLongitude(timePlus1d)
+  let nodeDailyMotion = nodeLonPlus - nodeLon
+  if (nodeDailyMotion > 180) nodeDailyMotion -= 360
+  if (nodeDailyMotion < -180) nodeDailyMotion += 360
   planets.push({
     ...nodeZodiac,
     name: 'NorthNode',
     retrograde: true, // North Node is always retrograde in mean motion
     house: 0,
+    dailyMotion: nodeDailyMotion,
   })
 
   // Calculate LST, ASC, MC with dynamic obliquity
