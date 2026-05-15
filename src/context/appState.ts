@@ -130,6 +130,8 @@ const TRANSIT_RESULTS_CACHE_KEY = 'astral-chart-transit-results'
 const PARTNER_DATA_CACHE_KEY = 'astral-chart-partner-data'
 const SYNASTRY_RESULTS_CACHE_KEY = 'astral-chart-synastry-results'
 
+const SYNASTRY_CACHE_VERSION = 2
+
 export function loadCachedBirthData(): BirthData {
   try {
     const raw = localStorage.getItem(BIRTH_DATA_CACHE_KEY)
@@ -198,6 +200,7 @@ export function loadCachedPartnerData(): BirthData {
 }
 
 export interface CachedSynastryResults {
+  _v?: number
   partnerChartData: ChartData
   partnerAspects: Aspect[]
   synastryData: SynastryData
@@ -206,7 +209,7 @@ export interface CachedSynastryResults {
 
 export function saveSynastryResults(data: CachedSynastryResults, onQuotaError?: (msg: string) => void): void {
   try {
-    localStorage.setItem(SYNASTRY_RESULTS_CACHE_KEY, JSON.stringify(data))
+    localStorage.setItem(SYNASTRY_RESULTS_CACHE_KEY, JSON.stringify({ _v: SYNASTRY_CACHE_VERSION, ...data }))
   } catch (e) {
     if (isQuotaError(e)) {
       onQuotaError?.('Your browser storage is full — synastry results could not be cached. Export your data to free space.')
@@ -218,7 +221,12 @@ export function loadCachedSynastryResults(): CachedSynastryResults | null {
   try {
     const raw = localStorage.getItem(SYNASTRY_RESULTS_CACHE_KEY)
     if (!raw) return null
-    return JSON.parse(raw) as CachedSynastryResults
+    const parsed = JSON.parse(raw)
+    if (!parsed || parsed._v !== SYNASTRY_CACHE_VERSION) {
+      localStorage.removeItem(SYNASTRY_RESULTS_CACHE_KEY)
+      return null
+    }
+    return parsed as CachedSynastryResults
   } catch {
     return null
   }
