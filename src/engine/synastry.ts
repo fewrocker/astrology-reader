@@ -741,14 +741,19 @@ export function buildSynastryPrompt(
   synastryData: SynastryData,
   person1Date: string,
   person2Date: string,
+  person1Name?: string,
+  person2Name?: string,
 ): string {
+  const label1 = person1Name?.trim() || 'Person 1'
+  const label2 = person2Name?.trim() || 'Person 2'
+
   const elementAnalysis1 = analyzeElements(chart1.planets)
   const elementAnalysis2 = analyzeElements(chart2.planets)
 
   let prompt = `You are an expert astrologer providing a factual, direct synastry (couple compatibility) reading. State what the charts show plainly — both the genuine strengths and the real difficulties — without sugar-coating.\n\n`
 
   // Person 1
-  prompt += `## Person 1 Birth Chart\nBorn: ${person1Date}\n`
+  prompt += `## ${label1} Birth Chart\nBorn: ${person1Date}\n`
   prompt += `Natal positions:\n`
   for (const p of chart1.planets) {
     prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart1.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
@@ -757,11 +762,11 @@ export function buildSynastryPrompt(
     prompt += `Ascendant: ${chart1.angles.ascendant.degree}°${chart1.angles.ascendant.minute}' ${chart1.angles.ascendant.sign}\n`
     prompt += `Midheaven: ${chart1.angles.midheaven.degree}°${chart1.angles.midheaven.minute}' ${chart1.angles.midheaven.sign}\n`
   }
-  prompt += `\n## Person 1 Element Profile\n`
+  prompt += `\n## ${label1} Element Profile\n`
   prompt += `Dominant element: ${elementAnalysis1.dominant} — ${elementAnalysis1.interpretation.dominant}\n`
 
   // Person 2
-  prompt += `\n## Person 2 Birth Chart\nBorn: ${person2Date}\n`
+  prompt += `\n## ${label2} Birth Chart\nBorn: ${person2Date}\n`
   prompt += `Natal positions:\n`
   for (const p of chart2.planets) {
     prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}${!chart2.unknownTime ? ` (House ${p.house})` : ''}${p.retrograde ? ' [Rx]' : ''}\n`
@@ -770,26 +775,26 @@ export function buildSynastryPrompt(
     prompt += `Ascendant: ${chart2.angles.ascendant.degree}°${chart2.angles.ascendant.minute}' ${chart2.angles.ascendant.sign}\n`
     prompt += `Midheaven: ${chart2.angles.midheaven.degree}°${chart2.angles.midheaven.minute}' ${chart2.angles.midheaven.sign}\n`
   }
-  prompt += `\n## Person 2 Element Profile\n`
+  prompt += `\n## ${label2} Element Profile\n`
   prompt += `Dominant element: ${elementAnalysis2.dominant} — ${elementAnalysis2.interpretation.dominant}\n`
 
   // Cross-chart aspects — sorted by orb ascending so GPT sees tightest contacts first
   const sortedAspects = [...synastryData.synastryAspects].sort((a, b) => a.orb - b.orb)
   prompt += `\n## Synastry Aspects (Cross-Chart)\n`
   for (const a of sortedAspects) {
-    prompt += `- Person 1 ${a.person1Planet} ${a.symbol} Person 2 ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
+    prompt += `- ${label1} ${a.person1Planet} ${a.symbol} ${label2} ${a.person2Planet} (${a.type}, orb ${a.orb}°, ${a.nature})\n`
   }
 
   // House overlays
   if (synastryData.houseOverlay.person1InPerson2Houses.length > 0) {
     prompt += `\n## House Overlays\n`
-    prompt += `Person 1's planets in Person 2's houses:\n`
+    prompt += `${label1}'s planets in ${label2}'s houses:\n`
     for (const h of synastryData.houseOverlay.person1InPerson2Houses) {
-      prompt += `- ${h.planet} in ${h.sign} → Person 2's House ${h.house}\n`
+      prompt += `- ${h.planet} in ${h.sign} → ${label2}'s House ${h.house}\n`
     }
-    prompt += `Person 2's planets in Person 1's houses:\n`
+    prompt += `${label2}'s planets in ${label1}'s houses:\n`
     for (const h of synastryData.houseOverlay.person2InPerson1Houses) {
-      prompt += `- ${h.planet} in ${h.sign} → Person 1's House ${h.house}\n`
+      prompt += `- ${h.planet} in ${h.sign} → ${label1}'s House ${h.house}\n`
     }
   }
 
@@ -827,7 +832,7 @@ export function buildSynastryPrompt(
   )
   const tightestSynastry = personalAspects[0] ?? sortedAspects[0]
   if (tightestSynastry) {
-    prompt += `Priority: Lead with the single most significant contact in this synastry — the tightest orb aspect that involves personal planets. State what this contact means for the relationship and, where house data is available, name the life area it activates (e.g., 'Person 1's Venus in their 7th house — the partnership zone') before expanding to the broader picture.\n\n`
+    prompt += `Priority: Lead with the single most significant contact in this synastry — the tightest orb aspect that involves personal planets. State what this contact means for the relationship and, where house data is available, name the life area it activates (e.g., '${label1}'s Venus in their 7th house — the partnership zone') before expanding to the broader picture.\n\n`
   }
 
   prompt += `The Couple Relational Profile above describes the character of this relationship on seven dimensions. Reference this vocabulary in the reading — use the dimension labels (Intensity, Emotional Flow, etc.) and the qualitative positions (e.g., "Distinctly Fiery," "Leaning Merging") naturally in the prose. Do not repeat all seven dimensions mechanically; integrate the most relevant ones into the narrative as they apply to the aspects and placements discussed.\n\n`
@@ -844,7 +849,7 @@ export function buildSynastryPrompt(
 
   // House-naming instruction — gated on at least one person having known birth time
   if (!chart1.unknownTime || !chart2.unknownTime) {
-    prompt += `Where house data is available for either person, name the house that receives each planet placement and state what life area it governs for that person — not just the house number, but what the house means (e.g., 'Person 1's 5th house, the zone of creative expression and romance'). Use "Person 1's 7th house (partnership)" rather than "Person 1's Libra." Where birth time is unknown, interpret in terms of sign and nature only.\n\n`
+    prompt += `Where house data is available for either person, name the house that receives each planet placement and state what life area it governs for that person — not just the house number, but what the house means (e.g., '${label1}'s 5th house, the zone of creative expression and romance'). Use "${label1}'s 7th house (partnership)" rather than "${label1}'s Libra." Where birth time is unknown, interpret in terms of sign and nature only.\n\n`
   }
 
   // Anti-generic constraint
@@ -852,7 +857,7 @@ export function buildSynastryPrompt(
 
   prompt += `Write 6-8 flowing paragraphs. Be direct, specific, and reference actual placements. `
   prompt += `State what works well between them and what will be genuinely difficult — do not minimize tensions or over-romanticize strengths. `
-  prompt += `Use "Person 1" and "Person 2" as labels. Close with the most important factual dynamic to be aware of, not generic encouragement.`
+  prompt += `Use "${label1}" and "${label2}" as labels throughout. Close with the most important factual dynamic to be aware of, not generic encouragement.`
 
   return prompt
 }
@@ -868,7 +873,12 @@ export function buildCoupleTransitPrompt(
   person1Date: string,
   person2Date: string,
   targetMonth?: string,
+  person1Name?: string,
+  person2Name?: string,
 ): string {
+  const label1 = person1Name?.trim() || 'Person 1'
+  const label2 = person2Name?.trim() || 'Person 2'
+
   const coupleElementAnalysis1 = analyzeElements(chart1.planets)
   const coupleElementAnalysis2 = analyzeElements(chart2.planets)
 
@@ -887,24 +897,24 @@ export function buildCoupleTransitPrompt(
   let prompt = `You are an expert astrologer providing a factual, direct ${period} couple transit reading. State what the transits show plainly — both favorable and challenging — without softening.\n\n`
 
   // Brief chart summary
-  prompt += `## Person 1 (born ${person1Date})\n`
+  prompt += `## ${label1} (born ${person1Date})\n`
   for (const p of chart1.planets.filter(pp => ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury'].includes(pp.name as string))) {
     prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}\n`
   }
-  prompt += `\n## Person 1 Element Profile\n`
+  prompt += `\n## ${label1} Element Profile\n`
   prompt += `Dominant element: ${coupleElementAnalysis1.dominant} — ${coupleElementAnalysis1.interpretation.dominant}\n`
 
-  prompt += `\n## Person 2 (born ${person2Date})\n`
+  prompt += `\n## ${label2} (born ${person2Date})\n`
   for (const p of chart2.planets.filter(pp => ['Sun', 'Moon', 'Venus', 'Mars', 'Mercury'].includes(pp.name as string))) {
     prompt += `- ${p.name}: ${p.degree}°${p.minute}' ${p.sign}\n`
   }
-  prompt += `\n## Person 2 Element Profile\n`
+  prompt += `\n## ${label2} Element Profile\n`
   prompt += `Dominant element: ${coupleElementAnalysis2.dominant} — ${coupleElementAnalysis2.interpretation.dominant}\n`
 
   // Key synastry aspects
   prompt += `\n## Key Synastry Aspects\n`
   for (const a of synastryData.synastryAspects.slice(0, 10)) {
-    prompt += `- P1 ${a.person1Planet} ${a.symbol} P2 ${a.person2Planet} (${a.type}, ${a.nature})\n`
+    prompt += `- ${label1} ${a.person1Planet} ${a.symbol} ${label2} ${a.person2Planet} (${a.type}, ${a.nature})\n`
   }
 
   // Composite chart
@@ -941,7 +951,7 @@ export function buildCoupleTransitPrompt(
   prompt += `Consider transits to the composite chart as affecting the relationship dynamic.\n`
   prompt += `Cover: relationship energy, communication, romance, and any challenges or growth opportunities.\n`
   prompt += `For each transit aspect to the composite chart, name what dimension of the relationship is being activated (romance, communication, shared resources, public identity, etc.) rather than stating only the house number.\n`
-  prompt += `Write 4-6 flowing paragraphs. Be specific about placements. Use "Person 1" and "Person 2".\n`
+  prompt += `Write 4-6 flowing paragraphs. Be specific about placements. Use "${label1}" and "${label2}" throughout.\n`
   prompt += `State favorable transits plainly and state difficult ones without softening. Do not end with generic encouragement — close with the most important factual takeaway for the relationship during this period.`
 
   return prompt

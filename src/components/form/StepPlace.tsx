@@ -29,6 +29,20 @@ export default function StepPlace() {
           <span className="text-mystic-purple">Timezone:</span> {state.birthData.city.tz}
         </div>
       )}
+      <div>
+        <label htmlFor="your-name" className="block text-sm text-mystic-muted mb-2">
+          Your name (optional)
+        </label>
+        <input
+          id="your-name"
+          type="text"
+          placeholder="e.g., Emma"
+          value={state.birthData.userName ?? ''}
+          onChange={e => dispatch({ type: 'UPDATE_BIRTH_DATA', data: { userName: e.target.value } })}
+          className="w-full px-4 py-3 bg-mystic-bg border border-mystic-border rounded-lg text-mystic-text focus:border-mystic-gold/50 focus:outline-none"
+          maxLength={40}
+        />
+      </div>
     </div>
   )
 }

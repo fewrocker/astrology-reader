@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
+import { resolvePersonLabel } from '../../context/appState'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -122,12 +123,12 @@ function InterpretationSection({ text }: { text: string }) {
   )
 }
 
-function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
+function SynastryAspectsSection({ aspects, label1, label2 }: { aspects: SynastryAspect[]; label1: string; label2: string }) {
   if (aspects.length === 0) return null
 
   return (
     <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen={false}>
-      <p className="text-mystic-muted text-xs mb-3">Aspects between Person 1's planets and Person 2's planets</p>
+      <p className="text-mystic-muted text-xs mb-3">Aspects between {label1}'s planets and {label2}'s planets</p>
       <div>
         {aspects.map((a, i) => (
           <AspectRow
@@ -140,7 +141,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
             orb={a.orb}
             applying={false}
             showApplyingBadge={false}
-            labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
+            labelOverride={`${label1}'s ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} ${label2}'s ${a.person2Planet}`}
             brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
           />
         ))}
@@ -293,13 +294,14 @@ function CompositeSection({ synastryData }: { synastryData: SynastryData }) {
   )
 }
 
-function IndividualChartSection({ title, chartData, aspects }: {
+function IndividualChartSection({ title, chartData, aspects, defaultOpen }: {
   title: string
   chartData: import('../../engine/types').ChartData
   aspects: import('../../engine/aspects').Aspect[]
+  defaultOpen?: boolean
 }) {
   return (
-    <CollapsibleSection title={title}>
+    <CollapsibleSection title={title} defaultOpen={defaultOpen}>
       <div className="flex justify-center mb-4">
         <div className="w-full max-w-md">
           <ChartWheel chartData={chartData} aspects={aspects} />
@@ -347,8 +349,8 @@ export default function SynastryPage() {
     if (!birthData.city || !partnerBirthData.city) return
     setRetrying(true)
     const interpretation = await getSynastryInterpretation(
-      { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city.lat, lng: birthData.city.lng, tz: birthData.city.tz },
-      { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city.lat, lng: partnerBirthData.city.lng, tz: partnerBirthData.city.tz },
+      { date: birthData.date, time: birthData.unknownTime ? null : (birthData.time || null), lat: birthData.city.lat, lng: birthData.city.lng, tz: birthData.city.tz, name: birthData.userName?.trim() || undefined },
+      { date: partnerBirthData.date, time: partnerBirthData.unknownTime ? null : (partnerBirthData.time || null), lat: partnerBirthData.city.lat, lng: partnerBirthData.city.lng, tz: partnerBirthData.city.tz, name: partnerBirthData.userName?.trim() || undefined },
     )
     dispatch({ type: 'SET_SYNASTRY_INTERPRETATION', interpretation })
     setRetrying(false)
@@ -356,8 +358,10 @@ export default function SynastryPage() {
 
   if (!chartData || !partnerChartData || !synastryData) return null
 
-  const person1Label = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
-  const person2Label = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
+  const label1 = resolvePersonLabel(birthData)
+  const label2 = resolvePersonLabel(partnerBirthData)
+  const person1City = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
+  const person2City = partnerBirthData.city ? `${partnerBirthData.city.name}, ${partnerBirthData.city.country}` : ''
 
   return (
     <div className="w-full max-w-5xl mx-auto">
@@ -366,11 +370,11 @@ export default function SynastryPage() {
         <div className="inline-block px-4 py-1 rounded-full bg-pink-900/30 border border-pink-500/30 text-pink-400 text-xs uppercase tracking-widest mb-3">
           Couple Synastry
         </div>
-        <h2 className="font-heading text-3xl text-mystic-gold mb-2">Compatibility Reading</h2>
+        <h2 className="font-heading text-3xl text-mystic-gold mb-2">{label1} & {label2}</h2>
         <div className="flex flex-col sm:flex-row gap-2 justify-center text-mystic-muted text-sm">
-          <span>Person 1: {birthData.date} — {person1Label}</span>
+          <span>{birthData.date}{person1City ? ` — ${person1City}` : ''}</span>
           <span className="hidden sm:inline text-mystic-gold">✦</span>
-          <span>Person 2: {partnerBirthData.date} — {person2Label}</span>
+          <span>{partnerBirthData.date}{person2City ? ` — ${person2City}` : ''}</span>
         </div>
       </div>
 
@@ -379,12 +383,12 @@ export default function SynastryPage() {
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center text-xs text-center mb-3">
           <span className="text-mystic-muted">
             <span style={{ color: '#c9a84c' }} className="mr-1">●</span>
-            <span className="font-medium text-mystic-text/80">Person 1 (inner)</span>
+            <span className="font-medium text-mystic-text/80">{label1} (inner)</span>
             {' · '}{birthData.date}
           </span>
           <span className="text-mystic-muted">
             <span style={{ color: '#c084fc' }} className="mr-1">●</span>
-            <span className="font-medium text-mystic-text/80">Person 2 (outer)</span>
+            <span className="font-medium text-mystic-text/80">{label2} (outer)</span>
             {' · '}{partnerBirthData.date}
           </span>
         </div>
@@ -425,19 +429,19 @@ export default function SynastryPage() {
       )}
 
       {/* Synastry aspects */}
-      <SynastryAspectsSection aspects={synastryData.synastryAspects} />
+      <SynastryAspectsSection aspects={synastryData.synastryAspects} label1={label1} label2={label2} />
 
       {/* House overlays */}
       {synastryData.houseOverlay.person1InPerson2Houses.length > 0 && (
         <HouseOverlaySection
           entries={synastryData.houseOverlay.person1InPerson2Houses}
-          label="Person 1's Planets in Person 2's Houses"
+          label={`${label1}'s Planets in ${label2}'s Houses`}
         />
       )}
       {synastryData.houseOverlay.person2InPerson1Houses.length > 0 && (
         <HouseOverlaySection
           entries={synastryData.houseOverlay.person2InPerson1Houses}
-          label="Person 2's Planets in Person 1's Houses"
+          label={`${label2}'s Planets in ${label1}'s Houses`}
         />
       )}
 
@@ -445,8 +449,8 @@ export default function SynastryPage() {
       <CompositeSection synastryData={synastryData} />
 
       {/* Individual charts */}
-      <IndividualChartSection title="Person 1 — Birth Chart" chartData={chartData} aspects={aspects} />
-      <IndividualChartSection title="Person 2 — Birth Chart" chartData={partnerChartData} aspects={partnerAspects} />
+      <IndividualChartSection title={`${label1} — Birth Chart`} chartData={chartData} aspects={aspects} defaultOpen={false} />
+      <IndividualChartSection title={`${label2} — Birth Chart`} chartData={partnerChartData} aspects={partnerAspects} defaultOpen={false} />
 
       {/* Action buttons */}
       <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8 mb-12">

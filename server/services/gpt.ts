@@ -850,20 +850,20 @@ async function handleSolarReturnInterpretation(
 // ---------------------------------------------------------------------------
 
 async function handleSynastryInterpretation(payload: {
-  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
-  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string }
 }): Promise<string> {
   const { person1, person2 } = payload
   const chart1 = calculateChart(person1.date, person1.time ?? '12:00', person1.lat, person1.lng, person1.tz, !person1.time)
   const chart2 = calculateChart(person2.date, person2.time ?? '12:00', person2.lat, person2.lng, person2.tz, !person2.time)
   const synastryData = calculateSynastry(chart1, chart2)
-  const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date)
+  const prompt = buildSynastryPrompt(chart1, chart2, synastryData, person1.date, person2.date, person1.name, person2.name)
   return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
 }
 
 async function handleCoupleTransitInterpretation(payload: {
-  person1: { date: string; time: string | null; lat: number; lng: number; tz: string }
-  person2: { date: string; time: string | null; lat: number; lng: number; tz: string }
+  person1: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string }
+  person2: { date: string; time: string | null; lat: number; lng: number; tz: string; name?: string }
   period: string
   targetMonth?: string
 }): Promise<string> {
@@ -886,7 +886,7 @@ async function handleCoupleTransitInterpretation(payload: {
     retrogrades: [],
   }
 
-  const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth)
+  const prompt = buildCoupleTransitPrompt(chart1, chart2, synastryData, transitData, payload.period as TransitPeriod, person1.date, person2.date, payload.targetMonth, person1.name, person2.name)
   return retryWithBackoff(() => callOpenAI([{ role: 'system', content: prompt }]))
 }
 
