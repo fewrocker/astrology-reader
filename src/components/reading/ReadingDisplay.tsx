@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { FullReading, PlanetReading, AspectReading, ElementBalance, ModalityBalance, FocusReading, PatternReading } from '../../data/interpretations'
-import type { ChartData, PlanetName, BodyName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
+import type { ChartData, PlanetName, AsteroidName, BodyName } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph, ASTEROID_ARCHETYPES, ASTEROID_NAMES, isAsteroid } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
 import { dignityScore } from '../../data/interpretations/dignities'
@@ -141,7 +141,7 @@ function PlanetCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }
 export function PlanetSection({ reading, showHouse }: { reading: FullReading; showHouse: boolean }) {
   return (
     <Section title="Planets in Signs & Houses" defaultOpen>
-      {reading.planets.map(pr => (
+      {reading.planets.filter(pr => !isAsteroid(pr.planet.name as BodyName)).map(pr => (
         <PlanetCard key={pr.planet.name} pr={pr} showHouse={showHouse} />
       ))}
     </Section>
@@ -440,6 +440,103 @@ export function HousesOverview({ chart }: { chart: ChartData }) {
   )
 }
 
+// ---------- asteroid section ----------
+
+function AsteroidCard({ pr, showHouse }: { pr: PlanetReading; showHouse: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const asteroid = pr.planet
+  const archetypeName = ASTEROID_ARCHETYPES[asteroid.name as AsteroidName]
+  const glyph = getBodyGlyph(asteroid.name as BodyName)
+
+  return (
+    <div className="border border-amber-400/10 rounded-lg p-4 mb-2">
+      <button
+        className="w-full text-left flex items-start gap-3"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+      >
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-amber-400 font-medium">
+              <span title={asteroid.name}>{glyph}</span> {asteroid.name}
+            </span>
+            {archetypeName && (
+              <span className="bg-amber-900/20 text-amber-400 border border-amber-400/20 rounded px-1.5 py-0.5 text-xs font-medium">
+                {archetypeName}
+              </span>
+            )}
+            {asteroid.retrograde && (
+              <span className="text-amber-400 text-xs border border-amber-400/30 rounded px-1">Rx</span>
+            )}
+          </div>
+          <div className="text-mystic-muted text-sm mt-0.5">
+            in{' '}
+            <span className="text-amber-400">
+              {ZODIAC_GLYPHS[asteroid.sign]} {asteroid.sign}
+            </span>
+            {showHouse && (
+              <span className="text-mystic-muted"> · House {asteroid.house}</span>
+            )}
+          </div>
+          {pr.signInterpretation && (
+            <div className="text-mystic-muted text-sm mt-1">{pr.signInterpretation.brief}</div>
+          )}
+        </div>
+        <span className="text-mystic-muted text-sm shrink-0">{expanded ? '−' : '+'}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 ml-9 space-y-3 text-sm">
+          {pr.signInterpretation && (
+            <div>
+              <div className="text-amber-400/80 font-medium text-xs uppercase tracking-wider mb-1">
+                {asteroid.name} in {asteroid.sign}
+              </div>
+              <div className="text-mystic-text/90 leading-relaxed">{pr.signInterpretation.detail}</div>
+            </div>
+          )}
+          {showHouse && pr.houseInterpretation && (
+            <div>
+              <div className="text-amber-400/80 font-medium text-xs uppercase tracking-wider mb-1">
+                {asteroid.name} in House {asteroid.house}
+              </div>
+              <div className="text-mystic-text/90 leading-relaxed">{pr.houseInterpretation.detail}</div>
+            </div>
+          )}
+          {pr.retrogradeInterpretation && (
+            <div className="rounded-md p-3 bg-red-900/10">
+              <div className="font-medium text-xs uppercase tracking-wider mb-1 text-red-400">
+                ℞ Retrograde at Birth
+              </div>
+              <div className="text-mystic-text/80 leading-relaxed">{pr.retrogradeInterpretation.detail}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function AsteroidSection({ reading, showHouse }: { reading: FullReading; showHouse: boolean }) {
+  const asteroids = reading.planets.filter(pr => isAsteroid(pr.planet.name as BodyName))
+  const orderedAsteroids = ASTEROID_NAMES
+    .map(name => asteroids.find(pr => pr.planet.name === name))
+    .filter((pr): pr is PlanetReading => pr !== undefined)
+
+  if (orderedAsteroids.every(pr => !pr.signInterpretation)) return null
+
+  return (
+    <Section title="Asteroids & Minor Bodies" defaultOpen={false}>
+      <p className="text-mystic-muted text-sm mb-4">
+        The asteroids mark symbolic territory — wounds being healed, gifts being offered, and patterns of devotion or strategy that run beneath the surface of the chart.
+      </p>
+      {orderedAsteroids.map(pr => (
+        <AsteroidCard key={pr.planet.name} pr={pr} showHouse={showHouse} />
+      ))}
+    </Section>
+  )
+}
+
 // ---------- planetary strength section ----------
 
 function StrengthBar({ planet, score, dignity }: { planet: PlanetReading; score: number; dignity: PlanetReading['dignity'] }) {
@@ -491,7 +588,7 @@ function MutualReceptionCard({ mr }: { mr: MutualReception }) {
 
 export function PlanetaryStrengthSection({ reading }: { reading: FullReading }) {
   const scoredPlanets = reading.planets
-    .filter(pr => pr.planet.name !== 'NorthNode')
+    .filter(pr => pr.planet.name !== 'NorthNode' && !isAsteroid(pr.planet.name as BodyName))
     .map(pr => ({
       pr,
       score: dignityScore(pr.planet.name as PlanetName, pr.planet.sign),
@@ -573,7 +670,7 @@ function RetrogradePlanetCard({ name, glyph, sign, interpretation }: { name: str
 }
 
 export function RetrogradeSummarySection({ reading }: { reading: FullReading }) {
-  const retrogradePlanets = reading.planets.filter(pr => pr.retrogradeInterpretation)
+  const retrogradePlanets = reading.planets.filter(pr => pr.retrogradeInterpretation && !isAsteroid(pr.planet.name as BodyName))
   const { headline, narrative } = reading.retrogradeSummary
 
   return (
