@@ -1,4 +1,5 @@
 import type { PlanetName, ZodiacSign, Element, Modality, PlanetPosition, ChartData } from '../../engine/types'
+import { isAsteroid } from '../../engine/types'
 export { getNatalPlanetContext } from './natalPlanetContext'
 export type { NatalPlanetContext } from './natalPlanetContext'
 import { SIGN_ELEMENTS, SIGN_MODALITIES, PLANET_NAMES } from '../../engine/types'
@@ -130,10 +131,10 @@ export interface FullReading {
 export function assembleReading(chart: ChartData, aspects: Aspect[], focusArea?: FocusArea): FullReading {
   const planetReadings: PlanetReading[] = chart.planets.map((p) => ({
     planet: p,
-    signInterpretation: getPlanetInSignInterpretation(p.name, p.sign),
-    houseInterpretation: chart.unknownTime ? null : getPlanetInHouseInterpretation(p.name, p.house),
-    dignity: p.name !== 'NorthNode' ? getDignity(p.name as PlanetName, p.sign) : null,
-    retrogradeInterpretation: p.retrograde && p.name !== 'NorthNode' ? (NATAL_RETROGRADE[p.name] ?? null) : null,
+    signInterpretation: getPlanetInSignInterpretation(p.name as (PlanetName | 'NorthNode'), p.sign),
+    houseInterpretation: chart.unknownTime ? null : getPlanetInHouseInterpretation(p.name as (PlanetName | 'NorthNode'), p.house),
+    dignity: !isAsteroid(p.name) && p.name !== 'NorthNode' ? getDignity(p.name as PlanetName, p.sign) : null,
+    retrogradeInterpretation: p.retrograde && !isAsteroid(p.name) && p.name !== 'NorthNode' ? (NATAL_RETROGRADE[p.name] ?? null) : null,
   }))
 
   const aspectReadings: AspectReading[] = aspects.map((a) => ({

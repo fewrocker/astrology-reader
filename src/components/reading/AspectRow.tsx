@@ -1,13 +1,13 @@
 import { useState } from 'react'
-import type { PlanetName } from '../../engine/types'
+import type { BodyName } from '../../engine/types'
 import type { AspectType } from '../../engine/aspects'
 import { PLANET_GLYPHS, getBodyGlyph } from '../../engine/types'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 export interface AspectRowProps {
-  transitPlanet: PlanetName | 'NorthNode'
-  natalPlanet: PlanetName | 'NorthNode'
+  transitPlanet: BodyName
+  natalPlanet: BodyName
   aspectType: AspectType
   nature: 'harmonious' | 'challenging' | 'neutral'
   /** Aspect symbol (e.g. "□", "△", "☌") */

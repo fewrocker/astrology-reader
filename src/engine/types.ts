@@ -29,8 +29,28 @@ export const PLANET_GLYPHS: Record<PlanetName | 'NorthNode', string> = {
 
 export type AsteroidName = 'Chiron' | 'Ceres' | 'Pallas' | 'Juno' | 'Vesta'
 
+export const ASTEROID_NAMES: AsteroidName[] = ['Chiron', 'Ceres', 'Pallas', 'Juno', 'Vesta']
+
+export type BodyName = PlanetName | 'NorthNode' | AsteroidName
+
 export const ASTEROID_GLYPHS: Record<AsteroidName, string> = {
-  Chiron: '⚷', Ceres: '⚳', Pallas: '⚴', Juno: '⚵', Vesta: '⚶',
+  Chiron: '⚷',
+  Ceres: '⚳',
+  Pallas: '⚴',
+  Juno: '⚵',
+  Vesta: '⚶',
+}
+
+export const ASTEROID_ARCHETYPES: Record<AsteroidName, string> = {
+  Chiron: 'Wounded Healer',
+  Ceres: 'Nourisher',
+  Pallas: 'Strategist',
+  Juno: 'Devoted Partner',
+  Vesta: 'Sacred Flame',
+}
+
+export function isAsteroid(name: BodyName): name is AsteroidName {
+  return (ASTEROID_NAMES as readonly string[]).includes(name)
 }
 
 export function getBodyGlyph(name: string): string {
@@ -52,7 +72,7 @@ export interface ZodiacPosition {
 }
 
 export interface PlanetPosition extends ZodiacPosition {
-  name: PlanetName | 'NorthNode'
+  name: BodyName
   retrograde: boolean
   house: number        // 1-12
   dailyMotion?: number // degrees per day; positive = direct, negative = retrograde

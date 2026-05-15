@@ -126,7 +126,7 @@ function SynastryAspectsSection({ aspects }: { aspects: SynastryAspect[] }) {
             applying={false}
             showApplyingBadge={false}
             labelOverride={`P1 ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} P2 ${a.person2Planet}`}
-            brief={computeSynastryAspectBrief(a.person1Planet, a.type, a.person2Planet, a.nature)}
+            brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
           />
         ))}
       </div>

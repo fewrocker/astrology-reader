@@ -1,5 +1,5 @@
 import { normalizeAngle, longitudeToZodiac } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
+import type { PlanetPosition, BodyName, ChartData, ZodiacPosition, HouseCusp, Element, Modality } from './types'
 import { PLANET_NAMES, SIGN_ELEMENTS, SIGN_MODALITIES } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
@@ -8,8 +8,8 @@ import { analyzeElements } from '../data/interpretations/index'
 // ── Types ──────────────────────────────────────────────────
 
 export interface SynastryAspect {
-  person1Planet: PlanetName | 'NorthNode'
-  person2Planet: PlanetName | 'NorthNode'
+  person1Planet: BodyName
+  person2Planet: BodyName
   type: AspectType
   orb: number
   exactAngle: number
@@ -19,7 +19,7 @@ export interface SynastryAspect {
 }
 
 export interface HouseOverlayEntry {
-  planet: PlanetName | 'NorthNode'
+  planet: BodyName
   sign: string
   house: number // House in partner's chart
   degree: number
