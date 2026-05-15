@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, ZODIAC_GLYPHS, isAsteroid } from '../../engine/types'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
 
@@ -31,10 +31,10 @@ function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expand
   // Get enriched interpretation
   let detailText = ''
   if (event.type === 'aspect-perfection' && event.aspectType && event.secondPlanet) {
-    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet, event.natalHouse ?? null)
-  } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && event.toSign) {
+    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet as (PlanetName | 'NorthNode'), event.natalHouse ?? null)
+  } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet) && event.toSign) {
     detailText = getIngressBrief(event.planet, event.toSign)
-  } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && event.stationType) {
+  } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet) && event.stationType) {
     detailText = getStationBrief(event.planet, event.stationType)
   }
 

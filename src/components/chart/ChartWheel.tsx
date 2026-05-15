@@ -1,7 +1,7 @@
 import type { ChartData, ZodiacSign, PlanetName } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_GLYPHS, isAsteroid } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'
@@ -66,11 +66,11 @@ const ELEMENT_COLORS: Record<string, string> = {
 /* ─── HTML Tooltip Components ─── */
 
 function PlanetTooltip({ planet, chartData }: { planet: import('../../engine/types').PlanetPosition; chartData: ChartData }) {
-  const signInterp = getPlanetInSignInterpretation(planet.name, planet.sign)
-  const houseInterp = !chartData.unknownTime ? getPlanetInHouseInterpretation(planet.name, planet.house) : null
-  const dignity = planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
-  const retroInterp = planet.retrograde && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
-  const glyph = PLANET_GLYPHS[planet.name]
+  const signInterp = getPlanetInSignInterpretation(planet.name as (PlanetName | 'NorthNode'), planet.sign)
+  const houseInterp = !chartData.unknownTime ? getPlanetInHouseInterpretation(planet.name as (PlanetName | 'NorthNode'), planet.house) : null
+  const dignity = !isAsteroid(planet.name) && planet.name !== 'NorthNode' ? getDignity(planet.name as PlanetName, planet.sign) : null
+  const retroInterp = planet.retrograde && !isAsteroid(planet.name) && planet.name !== 'NorthNode' ? (NATAL_RETROGRADE[planet.name] ?? null) : null
+  const glyph = isAsteroid(planet.name) ? ASTEROID_GLYPHS[planet.name] : PLANET_GLYPHS[planet.name as (PlanetName | 'NorthNode')]
 
   return (
     <div className="space-y-3">
@@ -189,7 +189,7 @@ function HouseTooltip({ houseNum, chartData }: { houseNum: number; chartData: Ch
       <p className="text-mystic-text/90 text-sm leading-relaxed">{theme.brief}</p>
       {planetsInHouse.length > 0 && (
         <div className="text-mystic-gold text-xs font-medium pt-1 border-t border-mystic-gold/10">
-          Planets here: {planetsInHouse.map(p => `${PLANET_GLYPHS[p.name]} ${p.name}`).join(', ')}
+          Planets here: {planetsInHouse.map(p => `${isAsteroid(p.name) ? ASTEROID_GLYPHS[p.name] : PLANET_GLYPHS[p.name as (PlanetName | 'NorthNode')]} ${p.name}`).join(', ')}
         </div>
       )}
     </div>
@@ -658,7 +658,7 @@ export default function ChartWheel({ chartData, aspects, transitPlanets, transit
         {chartData.planets.map((planet, idx) => {
           const pos = polarToXY(CX, CY, PLANET_R, offset(planet.longitude))
           const isHovered = hoveredPlanet === planet.name
-          const glyph = PLANET_GLYPHS[planet.name]
+          const glyph = isAsteroid(planet.name) ? ASTEROID_GLYPHS[planet.name] : PLANET_GLYPHS[planet.name as (PlanetName | 'NorthNode')]
 
           const isSun = planet.name === 'Sun'
           const isMoon = planet.name === 'Moon'

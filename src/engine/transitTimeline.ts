@@ -1,7 +1,7 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetName, ChartData } from './types'
-import { PLANET_NAMES } from './types'
+import type { PlanetName, BodyName, ChartData } from './types'
+import { PLANET_NAMES, isAsteroid } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
 import type { TransitPeriod } from './transits'
@@ -20,8 +20,8 @@ export interface TimelineEvent {
   type: TimelineEventType
   date: Date
   dateStr: string // YYYY-MM-DD
-  planet?: PlanetName | 'NorthNode'
-  secondPlanet?: PlanetName | 'NorthNode'
+  planet?: BodyName
+  secondPlanet?: BodyName
   natalHouse?: number | null   // null when unknownTime; absent for non-aspect events
   natalSign?: string
   aspectType?: AspectType
@@ -71,9 +71,10 @@ function getMeanNodeLongitude(time: Astronomy.AstroTime): number {
   return normalizeAngle(omega)
 }
 
-function getLongitudeForName(name: PlanetName | 'NorthNode', time: Astronomy.AstroTime): number {
+function getLongitudeForName(name: BodyName, time: Astronomy.AstroTime): number {
   if (name === 'NorthNode') return getMeanNodeLongitude(time)
-  return getPlanetLongitude(BODY_MAP[name], time)
+  if (isAsteroid(name)) return 0 // asteroid calculation path pending
+  return getPlanetLongitude(BODY_MAP[name as PlanetName], time)
 }
 
 function getDailyMotion(body: Astronomy.Body, time: Astronomy.AstroTime): number {
@@ -99,7 +100,7 @@ function aspectSeparation(transitLon: number, natalLon: number, targetAngle: num
  * Returns null if the aspect doesn't perfect within the window.
  */
 function findAspectPerfection(
-  transitPlanet: PlanetName | 'NorthNode',
+  transitPlanet: BodyName,
   natalLon: number,
   targetAngle: number,
   startDate: Date,
@@ -179,7 +180,7 @@ function findAspectPerfections(
   const { planets: natalPlanets, unknownTime } = natalChart
 
   // Only track meaningful transit planets (skip Sun for daily since it barely moves)
-  const transitNames: (PlanetName | 'NorthNode')[] = [...PLANET_NAMES]
+  const transitNames: BodyName[] = [...PLANET_NAMES]
 
   // Wider orb window for scanning
   const orbScale = period === 'daily' ? 0.5 : period === 'weekly' ? 0.8 : 1.0

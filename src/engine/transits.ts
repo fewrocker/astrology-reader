@@ -1,6 +1,6 @@
 import * as Astronomy from 'astronomy-engine'
 import { longitudeToZodiac, normalizeAngle } from './zodiac'
-import type { PlanetPosition, PlanetName, ChartData, HouseCusp } from './types'
+import type { PlanetPosition, PlanetName, BodyName, ChartData, HouseCusp } from './types'
 import { PLANET_NAMES } from './types'
 import type { AspectType } from './aspects'
 import { ASPECT_DEFINITIONS } from './aspects'
@@ -15,8 +15,8 @@ export interface TransitPosition extends PlanetPosition {
 }
 
 export interface TransitAspect {
-  transitPlanet: PlanetName | 'NorthNode'
-  natalPlanet: PlanetName | 'NorthNode'
+  transitPlanet: BodyName
+  natalPlanet: BodyName
   natalHouse: number | null   // null when chartData.unknownTime is true
   natalSign: string
   type: AspectType

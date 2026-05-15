@@ -363,9 +363,9 @@ export default function AdvanceTab({
               const natalHouse = rawHouse && rawHouse > 0 ? rawHouse : null
 
               const brief = computeTransitAspectBrief(
-                a.transitPlanet,
+                a.transitPlanet as (PlanetName | 'NorthNode'),
                 a.type,
-                a.natalPlanet,
+                a.natalPlanet as (PlanetName | 'NorthNode'),
                 natalHouse,
                 a.nature,
                 a.applying,
