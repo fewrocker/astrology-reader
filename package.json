@@ -15,7 +15,6 @@
     "@types/cookie-parser": "^1.4.10",
     "astronomia": "^4.2.0",
     "astronomy-engine": "^2.1.19",
-    "astronomia": "^4.2.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^9.4.3",
     "compression": "^1.8.1",

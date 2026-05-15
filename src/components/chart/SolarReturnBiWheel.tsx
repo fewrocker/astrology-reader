@@ -1,5 +1,5 @@
-import type { ChartData, ZodiacSign, PlanetName } from '../../engine/types'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, getBodyGlyph } from '../../engine/types'
+import type { ChartData, ZodiacSign } from '../../engine/types'
+import { ZODIAC_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, getBodyGlyph } from '../../engine/types'
 import { useState, useCallback } from 'react'
 
 interface SolarReturnBiWheelProps {

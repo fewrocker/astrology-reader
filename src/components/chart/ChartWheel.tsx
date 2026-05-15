@@ -1,7 +1,7 @@
 import type { ChartData, ZodiacSign, PlanetName, BodyName, AsteroidName } from '../../engine/types'
 import type { Aspect } from '../../engine/aspects'
 import type { TransitPosition, TransitAspect } from '../../engine/transits'
-import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_ARCHETYPES, isAsteroid, getBodyGlyph } from '../../engine/types'
+import { ZODIAC_GLYPHS, PLANET_GLYPHS, ZODIAC_SIGNS, SIGN_ELEMENTS, ASTEROID_GLYPHS, ASTEROID_ARCHETYPES, isAsteroid, getBodyGlyph } from '../../engine/types'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import { getPlanetInSignInterpretation, getPlanetInHouseInterpretation, getAspectInterpretation } from '../../data/interpretations'
 import { getDignity } from '../../data/interpretations/dignities'

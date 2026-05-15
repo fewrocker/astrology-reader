@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useApp } from '../../context/AppContext'
-import type { PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
+import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import ChartWheel from '../chart/ChartWheel'
 import ErrorBoundary from '../ErrorBoundary'

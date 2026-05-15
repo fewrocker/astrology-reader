@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FullReading, PlanetReading, AspectReading, ElementBalance, ModalityBalance, FocusReading, PatternReading } from '../../data/interpretations'
-import type { ChartData, PlanetName } from '../../engine/types'
+import type { ChartData, PlanetName, BodyName } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import { HOUSE_THEMES } from '../../data/interpretations/houseThemes'
@@ -283,7 +283,7 @@ function PatternCard({ pr }: { pr: PatternReading }) {
             <div className="flex flex-wrap gap-2 mt-1">
               {pr.planetSigns.map((ps) => (
                 <span key={ps.name} className="text-mystic-text text-sm">
-                  {getBodyGlyph(ps.name)}{' '}
+                  {getBodyGlyph(ps.name as BodyName)}{' '}
                   {ps.name} in {ZODIAC_GLYPHS[ps.sign]} {ps.sign}
                 </span>
               ))}
