@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useTransition, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { SolarReturnData } from '../../engine/solarReturn'
 import type { ZodiacSign, PlanetName } from '../../engine/types'
@@ -10,6 +10,266 @@ import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSolarReturnInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
+import type { AdvanceConfig, AdvanceSnapshot } from '../reading/AdvanceTab'
+import {
+  preCalculateSnapshots,
+  OverviewStrip,
+  ADVANCE_CONFIG,
+  MARKER_COLORS,
+  CATEGORY_LABELS,
+} from '../reading/AdvanceTab'
+
+// ─── SR Advance Config ───────────────────────────────────────────────────────
+
+const SR_ADVANCE_CONFIG: AdvanceConfig = {
+  unit: 'month',
+  unitPlural: 'months',
+  max: 12,
+  msPerStep: ADVANCE_CONFIG.monthly.msPerStep,
+}
+
+// ─── SolarReturnAdvancePreview Component ────────────────────────────────────
+
+function SolarReturnAdvancePreview({ srData }: { srData: SolarReturnData }) {
+  const { srChart, srMoment, targetYear } = srData
+
+  // UTC-normalize the SR moment so step-0 is always the correct calendar date
+  const srBaseDate = useMemo(() => {
+    const utcDateStr = srMoment.toISOString().split('T')[0]
+    return new Date(utcDateStr) // parsed as UTC midnight
+  }, [srMoment])
+
+  // Snapshot cache keyed by SR chart identity + target year
+  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
+  const [isPending, startTransition] = useTransition()
+
+  const cacheKey = useMemo(() => [
+    'sr',
+    targetYear,
+    srChart.angles.ascendant.longitude.toFixed(4),
+    srChart.angles.midheaven.longitude.toFixed(4),
+  ].join(':'), [targetYear, srChart])
+
+  useEffect(() => {
+    const cached = snapshotCache.current.get(cacheKey)
+    if (cached) {
+      setSnapshots(cached)
+      return
+    }
+    startTransition(() => {
+      // Compute monthly snapshots using the full 36-step engine, then slice to 13 (offsets 0–12)
+      const allSnapshots = preCalculateSnapshots(srChart, 'monthly', srBaseDate)
+      const sliced = allSnapshots.slice(0, 13) // offsets 0–12
+
+      // Secondary density cap: max 3 non-neutral markers (20% of 12)
+      const maxMarkers = Math.ceil(12 * 0.2) // 3
+      const nonNeutral = sliced.filter(s => s.score.category !== 'neutral' && s.offset > 0)
+      if (nonNeutral.length > maxMarkers) {
+        const NON_NEUTRAL_CATEGORIES = ['power', 'favorable', 'challenging', 'shift'] as const
+        const reservedOffsets = new Set<number>()
+        for (const cat of NON_NEUTRAL_CATEGORIES) {
+          const best = nonNeutral
+            .filter(s => s.score.category === cat)
+            .sort((a, b) => b.score.intensity - a.score.intensity)[0]
+          if (best) reservedOffsets.add(best.offset)
+        }
+        const remaining = nonNeutral
+          .filter(s => !reservedOffsets.has(s.offset))
+          .sort((a, b) => b.score.intensity - a.score.intensity)
+        const fillCount = maxMarkers - reservedOffsets.size
+        for (let i = 0; i < fillCount && i < remaining.length; i++) {
+          reservedOffsets.add(remaining[i].offset)
+        }
+        for (let i = 0; i < sliced.length; i++) {
+          if (sliced[i].score.category !== 'neutral' && !reservedOffsets.has(sliced[i].offset)) {
+            sliced[i] = {
+              ...sliced[i],
+              score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
+            }
+          }
+        }
+      }
+
+      snapshotCache.current.set(cacheKey, sliced)
+      setSnapshots(sliced)
+    })
+  }, [cacheKey, srChart, srBaseDate])
+
+  const [offset, setOffset] = useState(0)
+
+  const markers = useMemo(
+    () => snapshots.filter(s => s.score.category !== 'neutral' && s.offset > 0),
+    [snapshots]
+  )
+
+  const snapshot = snapshots[offset]
+
+  const nextMarker = markers.find(m => m.offset > offset) ?? null
+  const prevMarker = [...markers].reverse().find(m => m.offset < offset && m.offset > 0) ?? null
+
+  const offsetLabel = offset === 0 ? 'SR Start' : `Month ${offset}`
+
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+
+  return (
+    <div className="mt-8 border border-amber-500/15 rounded-xl overflow-hidden">
+      <div className="px-5 py-4 bg-amber-900/10 border-b border-amber-500/10">
+        <h3 className="font-heading text-amber-300 text-sm uppercase tracking-wider">
+          When This Year Intensifies
+        </h3>
+      </div>
+      <div className="px-5 py-4">
+        {/* Animation styles */}
+        <style>{`
+          @keyframes glow-breathe-gold {
+            0%, 100% { opacity: 0.75; transform: rotate(45deg) scale(1.0); }
+            50%       { opacity: 1.0;  transform: rotate(45deg) scale(1.15); }
+          }
+          @keyframes glow-breathe-red {
+            0%, 100% { opacity: 0.70; transform: scale(1.0); }
+            50%       { opacity: 1.0;  transform: scale(1.1); }
+          }
+          @keyframes shift-rotate {
+            0%, 100% { transform: rotate(40deg); opacity: 0.80; }
+            50%       { transform: rotate(50deg); opacity: 1.0; }
+          }
+          .marker-anim-power     { animation: glow-breathe-gold 3s ease-in-out infinite; }
+          .marker-anim-challenging { animation: glow-breathe-red 2s ease-in-out infinite; }
+          .marker-anim-shift     { animation: shift-rotate 4s ease-in-out infinite; }
+          @media (prefers-reduced-motion: reduce) {
+            .marker-anim-power,
+            .marker-anim-challenging,
+            .marker-anim-shift { animation: none; opacity: 0.85; }
+          }
+        `}</style>
+
+        {/* Overview strip */}
+        <OverviewStrip
+          markers={markers}
+          max={12}
+          offset={offset}
+          onJump={setOffset}
+          isPending={isPending}
+          config={SR_ADVANCE_CONFIG}
+          unknownTime={srChart.unknownTime === true}
+          quietMessage="A relatively even year — the intensity is distributed rather than concentrated in specific peaks."
+        />
+
+        {/* Prev / Next navigation */}
+        <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl px-4 py-3 mb-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => prevMarker && setOffset(prevMarker.offset)}
+              disabled={!prevMarker}
+              className="text-mystic-gold/60 text-xs hover:text-mystic-gold disabled:opacity-30 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Jump to previous notable moment"
+            >
+              ← Prev
+            </button>
+            <div className="text-center">
+              <span className="font-heading text-lg text-mystic-gold">{offsetLabel}</span>
+              {snapshot && (
+                <p className="text-mystic-muted text-xs mt-0.5">
+                  {formatDate(snapshot.date)}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={() => nextMarker && setOffset(nextMarker.offset)}
+              disabled={!nextMarker}
+              className="text-mystic-gold/60 text-xs hover:text-mystic-gold disabled:opacity-30 disabled:cursor-not-allowed min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label="Jump to next notable moment"
+            >
+              Next ✦
+            </button>
+          </div>
+        </div>
+
+        {/* Category banner for non-neutral snapshots */}
+        {snapshot && snapshot.score.category !== 'neutral' && snapshot.offset > 0 && (
+          <div className={`rounded-xl border border-l-2 px-4 py-3 flex items-start gap-2 ${
+            snapshot.score.category === 'power'
+              ? 'border-mystic-gold/30 border-l-mystic-gold bg-mystic-gold/10'
+              : snapshot.score.category === 'favorable'
+                ? 'border-green-500/30 border-l-green-500 bg-green-900/10'
+                : snapshot.score.category === 'challenging'
+                  ? 'border-red-500/30 border-l-red-500 bg-red-900/10'
+                  : 'border-blue-500/30 border-l-blue-500 bg-blue-900/10'
+          }`}>
+            <span className={`mt-0.5 shrink-0 text-base ${
+              snapshot.score.category === 'power'
+                ? 'text-mystic-gold'
+                : snapshot.score.category === 'favorable'
+                  ? 'text-green-400'
+                  : snapshot.score.category === 'challenging'
+                    ? 'text-red-400'
+                    : 'text-blue-400'
+            }`}>
+              {snapshot.score.category === 'challenging' ? '⚠' :
+               snapshot.score.category === 'shift' ? '◆' : '✦'}
+            </span>
+            <div>
+              <p className={`text-xs uppercase tracking-wider mb-1 ${
+                snapshot.score.category === 'power'
+                  ? 'text-mystic-gold/60'
+                  : snapshot.score.category === 'favorable'
+                    ? 'text-green-400/60'
+                    : snapshot.score.category === 'challenging'
+                      ? 'text-red-400/60'
+                      : 'text-blue-400/60'
+              }`}>
+                {CATEGORY_LABELS[snapshot.score.category]}
+              </p>
+              <p className={`text-sm ${
+                snapshot.score.category === 'power'
+                  ? 'text-mystic-gold/90'
+                  : snapshot.score.category === 'favorable'
+                    ? 'text-green-400/90'
+                    : snapshot.score.category === 'challenging'
+                      ? 'text-red-400/90'
+                      : 'text-blue-400/90'
+              }`}>
+                <span className="font-heading">
+                  {snapshot.score.bannerBoldFragment ?? snapshot.score.reason.split(' ')[0]}
+                </span>
+                {' ' + snapshot.score.reason.slice(
+                  (snapshot.score.bannerBoldFragment ?? snapshot.score.reason.split(' ')[0]).length
+                ).trimStart()}
+              </p>
+              {snapshot.score.guidance && (
+                <p className="text-xs text-mystic-muted/80 mt-1.5 font-light leading-relaxed">
+                  {snapshot.score.guidance}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Color legend */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-4">
+          {(['power', 'favorable', 'challenging', 'shift'] as const).map(cat => (
+            <span key={cat} className="flex items-center gap-1.5 text-[10px] text-mystic-muted">
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '7px',
+                  height: '7px',
+                  backgroundColor: MARKER_COLORS[cat],
+                  borderRadius: cat === 'power' || cat === 'shift' ? '1px' : '50%',
+                  transform: cat === 'power' || cat === 'shift' ? 'rotate(45deg)' : undefined,
+                  flexShrink: 0,
+                }}
+              />
+              {CATEGORY_LABELS[cat]}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function SRReading({ text }: { text: string }) {
   const paragraphs = text.split('\n').filter(p => p.trim().length > 0)
@@ -275,6 +535,8 @@ export default function SolarReturnPage() {
               <SRReading text={solarReturnInterpretation} />
             </>
           )}
+          {/* SR advance preview — "When This Year Intensifies" */}
+          <SolarReturnAdvancePreview srData={solarReturnData} />
         </div>
       )}
 
