@@ -417,7 +417,16 @@ export default function CoupleAdvanceTab({
 
   useEffect(() => {
     // Cache key includes both chart identities so partner-switching invalidates cache
-    const cacheKey = `${period}:${baseDate.toISOString()}:${chart1.angles.ascendant.longitude.toFixed(2)}:${chart2.angles.ascendant.longitude.toFixed(2)}`
+    const cacheKey = [
+      period,
+      baseDate.toISOString(),
+      chart1.angles.ascendant.longitude.toFixed(4),
+      chart1.angles.midheaven.longitude.toFixed(4),
+      String(chart1.unknownTime),
+      chart2.angles.ascendant.longitude.toFixed(4),
+      chart2.angles.midheaven.longitude.toFixed(4),
+      String(chart2.unknownTime),
+    ].join(':')
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
       setSnapshots(cached)
