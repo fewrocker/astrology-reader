@@ -21,6 +21,7 @@ export interface SnapshotScore {
   coShift: boolean          // true when shift co-occurs with favorable or challenging
   intensity: number         // 0.0–1.0, drives dot size and glow strength
   reason: string            // one-line human sentence for tooltip and banner
+  bannerBoldFragment?: string // token to bold in the banner (e.g. planet name); falls back to first word
   shiftPlanet?: string      // planet name when coShift or category === 'shift'
   shiftDirection?: 'retrograde' | 'direct'
   triggerAspect?: {         // the specific aspect that drove the score, for tooltip specificity
@@ -162,11 +163,14 @@ function buildPowerReason(
   planet: PlanetName,
   aspectType: AspectType,
   angleKey: 'ASC' | 'MC',
-): string {
+): { reason: string; bannerBoldFragment: string } {
   const angleName = angleKey === 'ASC' ? 'your Ascendant' : 'your Midheaven'
   const verb = ASPECT_VERB_BANNER[aspectType] ?? 'contacts'
   const domain = ANGLE_DOMAIN[angleKey]
-  return `${planet} ${verb} ${angleName} — ${domain}.`
+  return {
+    reason: `${planet} ${verb} ${angleName} — ${domain}.`,
+    bannerBoldFragment: planet,
+  }
 }
 
 /**
@@ -175,7 +179,7 @@ function buildPowerReason(
 function buildAspectReason(
   tightest: TransitAspect,
   category: 'favorable' | 'challenging',
-): string {
+): { reason: string; bannerBoldFragment: string } {
   const domainMap: Partial<Record<string, string>> = {
     Pluto: 'transformation and power', Neptune: 'inspiration and surrender',
     Uranus: 'disruption and revelation', Saturn: 'structure and discipline',
@@ -188,11 +192,11 @@ function buildAspectReason(
   const type = tightest.type
   const domain = domainMap[planet as string] ?? 'planetary energy'
 
-  if (category === 'favorable') {
-    return `${planet} ${type} your natal ${natalPlanet} — a window of ${domain}.`
-  } else {
-    return `${planet} ${type} your natal ${natalPlanet} — tension around ${domain}.`
-  }
+  const reason = category === 'favorable'
+    ? `${planet} ${type} your natal ${natalPlanet} — a window of ${domain}.`
+    : `${planet} ${type} your natal ${natalPlanet} — tension around ${domain}.`
+
+  return { reason, bannerBoldFragment: planet }
 }
 
 /**
@@ -258,7 +262,7 @@ function scoreSnapshot(
 
     if (bestContact) {
       const intensity = Math.max(0, 1.0 - (bestContact.orb / orbs.angleContact))
-      const reason = buildPowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
+      const { reason, bannerBoldFragment } = buildPowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
 
       // coShift check: if there's also a station
       const coShift = !!stationPlanet
@@ -267,6 +271,7 @@ function scoreSnapshot(
         coShift,
         intensity,
         reason,
+        bannerBoldFragment,
         shiftPlanet: coShift ? stationPlanet : undefined,
         shiftDirection: coShift ? stationDirection : undefined,
         triggerAspect: {
@@ -303,11 +308,13 @@ function scoreSnapshot(
       const rawScore = Math.abs(rating.score - 3)
       const intensity = rawScore / 2
 
+      const { reason: coShiftReason, bannerBoldFragment: coShiftBold } = buildAspectReason(tightest, primaryCategory)
       return {
         category: primaryCategory,
         coShift: true,
         intensity,
-        reason: buildAspectReason(tightest, primaryCategory),
+        reason: coShiftReason,
+        bannerBoldFragment: coShiftBold,
         shiftPlanet: stationPlanet,
         shiftDirection: stationDirection,
         triggerAspect: {
@@ -325,6 +332,7 @@ function scoreSnapshot(
       coShift: false,
       intensity: 0.8,
       reason: `${stationPlanet} stations ${stationDirection}.`,
+      bannerBoldFragment: stationPlanet,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
@@ -343,11 +351,13 @@ function scoreSnapshot(
       )[0]
       const intensity = Math.abs(rating.score - 3) / 2
 
+      const { reason: favReason, bannerBoldFragment: favBold } = buildAspectReason(tightest, 'favorable')
       return {
         category: 'favorable',
         coShift: false,
         intensity,
-        reason: buildAspectReason(tightest, 'favorable'),
+        reason: favReason,
+        bannerBoldFragment: favBold,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -371,11 +381,13 @@ function scoreSnapshot(
       )[0]
       const intensity = Math.abs(rating.score - 3) / 2
 
+      const { reason: chalReason, bannerBoldFragment: chalBold } = buildAspectReason(tightest, 'challenging')
       return {
         category: 'challenging',
         coShift: false,
         intensity,
-        reason: buildAspectReason(tightest, 'challenging'),
+        reason: chalReason,
+        bannerBoldFragment: chalBold,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -725,8 +737,12 @@ function MarkerTooltip({ marker, positionX }: TooltipProps) {
     : ''
 
   // Clamp left position so tooltip stays within container (spec 6.3)
-  // Tooltip is 200px wide; container is ~100% wide. Adjust extremes.
+  // Tooltip is 280px wide; container is ~100% wide. Adjust extremes.
   const clampedLeft = Math.max(0, Math.min(positionX, 85))
+
+  // Truncate to first sentence for compact tooltip display; full text appears in banner.
+  const firstSentence = score.reason.split('. ')[0]
+  const tooltipReason = firstSentence.endsWith('.') ? firstSentence : firstSentence + '.'
 
   return (
     <div
@@ -745,14 +761,14 @@ function MarkerTooltip({ marker, positionX }: TooltipProps) {
       {/* Tooltip panel */}
       <div
         className="bg-mystic-bg/95 border border-mystic-gold/20 rounded-lg px-3 py-2 shadow-lg text-left"
-        style={{ maxWidth: '200px' }}
+        style={{ maxWidth: '280px' }}
       >
         <p className="text-[10px] text-mystic-muted mb-0.5">{dateStr}</p>
         <p className="text-[11px] font-medium mb-0.5" style={{ color }}>
           {label}{orbSuffix}
         </p>
         <p className="text-[10px] text-mystic-text/80" style={{ textWrap: 'balance' } as React.CSSProperties}>
-          {score.reason}
+          {tooltipReason}
         </p>
       </div>
     </div>
@@ -1047,8 +1063,8 @@ export default function AdvanceTab({
                   ? 'text-red-400/90'
                   : 'text-blue-400/90'
           }`}>
-            <span className="font-heading">{categoryBanner.split(' ')[0]}</span>
-            {' ' + categoryBanner.split(' ').slice(1).join(' ')}
+            <span className="font-heading">{snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]}</span>
+            {' ' + categoryBanner.slice((snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]).length).trimStart()}
           </p>
         </div>
       )}
