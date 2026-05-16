@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback, useTransition, useRef, memo } from 'react'
 import type { TransitPeriod, TransitPosition, TransitAspect } from '../../engine/transits'
-import { calculateCurrentPositions, calculateTransitAspects, assignTransitHouses, getRetrogradeStatus, computeEnergyRating } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, assignTransitHouses, getRetrogradeStatus } from '../../engine/transits'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { PLANET_GLYPHS, ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -99,6 +99,15 @@ const MARKER_HYSTERESIS_ORB = 0.5
 /** Slow planets for angle-contact trigger (Jupiter excluded intentionally). */
 const SLOW_PLANETS_FOR_BANNER = new Set<PlanetName>(['Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
+/** Planets used in combination-weight scoring — includes Jupiter unlike SLOW_PLANETS_FOR_BANNER. */
+const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
+
+/** Minimum combined weight for a constellation to fire a favorable/challenging marker. */
+const COMBINATION_WEIGHT_THRESHOLD = 3.0
+
+/** Reference weight for normalizing intensity (Pluto + Saturn at zero orb). */
+const COMBINATION_WEIGHT_NORMALIZE = 12
+
 /** Verb to use in banner text per aspect type. */
 const ASPECT_VERB_BANNER: Record<AspectType, string> = {
   conjunction: 'reaches',
@@ -129,6 +138,27 @@ function angularDiff(lon1: number, lon2: number): number {
   let diff = Math.abs(lon1 - lon2) % 360
   if (diff > 180) diff = 360 - diff
   return diff
+}
+
+/**
+ * Compute constellation combined weight for a set of aspects.
+ * sum(PLANET_WEIGHT[planet] × (1 − orb/maxOrb)) across all aspects.
+ * Slow planets dominate due to higher weight values; fast-planet noise stays below threshold.
+ */
+function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number {
+  return aspects.reduce((sum, a) => {
+    const w = PLANET_WEIGHT[a.transitPlanet as string] ?? 1
+    return sum + w * (1 - a.orb / maxOrb)
+  }, 0)
+}
+
+/** Convert a 1-based house number to an ordinal string (1st, 2nd … 12th). */
+function houseOrdinal(house: number): string {
+  const n = ((house - 1) % 12) + 1
+  if (n === 1) return '1st'
+  if (n === 2) return '2nd'
+  if (n === 3) return '3rd'
+  return `${n}th`
 }
 
 /**
@@ -281,8 +311,7 @@ function scoreSnapshot(
 
   // ── Priority 2: shift — station crossing (when no power) ─────────────────
   if (stationPlanet && stationDirection) {
-    // check if favorable or challenging co-occur
-    const rating = computeEnergyRating(snapshot.transitAspects)
+    // check if favorable or challenging co-occur via combination weight
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
@@ -290,18 +319,24 @@ function scoreSnapshot(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
 
-    const isFavorable = rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects
-    const isChallenging = rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects
+    const harmoniousWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const challengingWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+
+    const harmSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+
+    const isFavorable = harmoniousWeight >= (harmSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
+    const isChallenging = challengingWeight >= (challSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
 
     if (isFavorable || isChallenging) {
       // Primary category is favorable/challenging, coShift = true
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
-      const tightest = aspects.sort((a, b) =>
+      const combinedWeight = isFavorable ? harmoniousWeight : challengingWeight
+      const tightest = [...aspects].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const rawScore = Math.abs(rating.score - 3)
-      const intensity = rawScore / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       return {
         category: primaryCategory,
@@ -319,29 +354,57 @@ function scoreSnapshot(
       }
     }
 
-    // Pure shift
+    // Pure shift — find nearest natal planet to station degree for context
+    const stationTransitPlanet = snapshot.transitPlanets.find(tp => tp.name === stationPlanet)
+    const stationLon = stationTransitPlanet?.longitude
+
+    let nearestNatal: { name: string; house: number; diff: number } | null = null
+    if (stationLon !== undefined) {
+      for (const p of chartData.planets) {
+        const diff = angularDiff(stationLon, p.longitude)
+        if (diff <= 2.0) {
+          if (!nearestNatal || diff < nearestNatal.diff) {
+            nearestNatal = { name: p.name as string, house: p.house, diff }
+          }
+        }
+      }
+    }
+
+    let shiftReason = `${stationPlanet} stations ${stationDirection}`
+    if (nearestNatal) {
+      shiftReason += `, holding near your natal ${nearestNatal.name} in your ${houseOrdinal(nearestNatal.house)} house`
+    }
+    const retroBrief = stationDirection === 'retrograde'
+      ? TRANSIT_RETROGRADE[stationPlanet]?.brief
+      : undefined
+    shiftReason += retroBrief ? `. ${retroBrief}` : '.'
+
     return {
       category: 'shift',
       coShift: false,
       intensity: 0.8,
-      reason: `${stationPlanet} stations ${stationDirection}.`,
+      reason: shiftReason,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
   }
 
-  // ── Priority 3: favorable ─────────────────────────────────────────────────
+  // ── Priority 3: favorable — constellation-weight scoring ─────────────────
+  // When a COMBINATION_PLANETS member (including Jupiter) is present, the base threshold applies.
+  // Fast-planet-only clusters require twice the threshold to reduce noise.
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const favorableThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= favorableThreshold) {
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       return {
         category: 'favorable',
@@ -358,18 +421,20 @@ function scoreSnapshot(
     }
   }
 
-  // ── Priority 4: challenging ───────────────────────────────────────────────
+  // ── Priority 4: challenging — constellation-weight scoring ────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingChallenging = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challengingThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= challengingThreshold) {
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       return {
         category: 'challenging',
