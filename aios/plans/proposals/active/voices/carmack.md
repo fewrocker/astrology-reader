@@ -1,293 +1,222 @@
-# John Carmack's Technical Analysis: Sprint 0018 — Advance Tab Marker System
+# John Carmack's Technical Analysis: Sprint 0019 — Scoring Engine Upgrade & Synastry Advance
 
-## The Honest Summary
+## State of the Code
 
-The vision document is unusually precise — it already knows where the code lives, what the primitives are called, and what the implementation shape should look like. That's good. It saves time I'd otherwise spend reading code and writing the same conclusions. My job here is to be the adversary: find what the vision gets wrong or understates, identify the failure modes before they happen, and propose the implementation path that closes those gaps.
+Sprint 0018 got the infrastructure right. `scoreSnapshot` is a pure function over pre-computed snapshot data, the `SnapshotScore` type carries structured output, `preCalculateSnapshots` runs under `useTransition` and caches via `useRef`. The marker system renders correctly without tanking slider performance. The bones are solid.
 
-The core premise is correct: the data already exists. `preCalculateSnapshots` at `AdvanceTab.tsx:167` computes `transitPlanets`, `transitAspects`, and `retrogrades` for every step — up to 53 entries for weekly, 37 for monthly, 31 for daily. The `computeEnergyRating` function at `transits.ts:480` already does harmonic scoring. `computePowerDayBanner` at `AdvanceTab.tsx:106` already detects slow-planet angle contacts and tight applying clusters. The marker layer is a read operation over already-computed data. There is no expensive new computation to introduce.
-
-The risks are: (1) implementing the marker computation inside the render path and tanking slider performance, (2) the station detection being wrong — using `getRetrogradeStatus` per-snapshot instead of detecting the crossing between consecutive snapshots, (3) marker overlays intercepting pointer events on the native range input, and (4) the animation approach creating visual noise rather than mystical atmosphere. Let me work through each.
+What's broken is the content layer. I've read `scoreSnapshot` in full (lines 202–390 of `AdvanceTab.tsx`) and I can tell you exactly where it fails.
 
 ---
 
-## The `preCalculateSnapshots` Cost Model: What's Actually Slow
+## The Scoring Pipeline: Three Concrete Failures
 
-First, measure the actual cost before optimizing it. The snapshot loop at `AdvanceTab.tsx:167` runs:
+### Failure 1: `buildAspectReason` ignores the house dimension that's already in the data
 
-- `calculateCurrentPositions(targetDate)` — calls `getPlanetLongitude` for each of 10 planets plus 5 asteroids, each of which calls into the `astronomy-engine` WebAssembly module. For the Moon it uses `EclipticGeoMoon`, for the Sun `SunPosition`, for others `GeoVector` + `Ecliptic`. Then it calls `getDailyMotion` for each body, which doubles those calls by computing positions at T+24h too. Total: roughly 30 WASM calls per snapshot just for positions.
+`buildAspectReason` at line 175 receives a `TransitAspect`. Look at what `TransitAspect` carries: it has `natalHouse: number | null` already computed by `calculateTransitAspects` in `transits.ts:179`. The function ignores it entirely and reaches for a `domainMap` keyed on transit planet name instead.
 
-- `calculateTransitAspects(transitPlanets, chartData.planets, period)` — O(bodies × natal_planets × aspect_defs) = roughly 16 transit bodies × 16 natal bodies × 7 aspects = 1792 comparisons per snapshot. Each comparison is cheap arithmetic. For 53 snapshots (weekly): ~95,000 comparisons. This is negligible.
+The result is: "Saturn opposition your natal Moon — tension around structure and discipline." This tells the person nothing about *their* chart. The natal Moon's house determines whether this is hitting their domestic life, their career zone, their partnership axis, or their 12th-house inner world. That information is already in the `TransitAspect` struct sitting right there in the function parameter.
 
-- `getRetrogradeStatus(targetDate)` — calls `getDailyMotion` for 8 planets + 5 asteroids, each of which calls `getPlanetLongitude` twice. That's another 26 WASM calls per snapshot.
+The fix is straightforward. The `houseThemes.ts` file has `HOUSE_THEMES[house-1]` returning a `HouseTheme` with `.name` and `.brief`. `buildAspectReason` should pull `tightest.natalHouse`, look it up in `HOUSE_THEMES`, and use the house name in the reason string. This is a 5-line change that immediately makes every favorable/challenging reason sentence house-specific.
 
-- `assignTransitHouses` — 16 bodies × 12 house divisions, pure arithmetic.
+Critically, `computeTransitAspectBrief` in `transitAspectBriefs.ts` already does exactly this — it builds `"${transitPlanet} ${verbPhrase} your ${houseTheme.name} — ${contextBrief}"` (line 151). The scoring engine should call `computeTransitAspectBrief` for its reason strings, or at minimum replicate its house-lookup pattern. Right now there are two separate text-generation paths for the same transit aspect — one in `transitAspectBriefs.ts` (house-aware, used by `AspectRow`) and one in `buildAspectReason` (house-blind, used by scoring). This divergence will drift further unless it's collapsed.
 
-Total WASM calls per snapshot: approximately 56. For 53 weekly snapshots: ~3000 WASM calls. For 37 monthly snapshots: ~2000 calls. These are not trivial — a single WASM call through the astronomy-engine FFI is not free. The `useTransition` wrapper correctly keeps this off the main thread for UI purposes. The snapshot computation probably takes 200–800ms on a mid-range mobile device. That's already a known cost.
+The clean solution: make `buildAspectReason` call `computeTransitAspectBrief` directly, passing `tightest.natalHouse`. Done. One source of truth, immediate house context.
 
-**The scoring pass adds zero WASM calls.** A `scoreSnapshot()` function that operates on the already-computed `TransitAspect[]` array and `retrogrades[]` is pure arithmetic over in-memory data. For 53 snapshots, scoring takes microseconds total. This is the right architecture — run the expensive ephemeris work once in `preCalculateSnapshots`, then derive everything else from that output.
+### Failure 2: The scoring gate is binary — it cannot distinguish a Saturn+Pluto pile-up from two Venus trines
 
-**Performance critical point:** the marker layer must be a `useMemo` keyed on `snapshots`, not on `offset`. The score array and marker array are properties of the full snapshot set, not of the current slider position. Computing markers on every slider drag would be wrong — you'd be re-running the O(n) scoring pass on every `onChange` event. The correct structure:
+Look at lines 361–387: the challenging path filters for `a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'`, counts them, and if there are `>= 2`, it picks the heaviest by `PLANET_WEIGHT` and calls that the trigger. The "trigger" is reported but everything else is invisible.
+
+The actual scoring weight of the constellation is zero. A snapshot with Saturn square natal Sun (1.2° applying) and Pluto opposition natal Moon (0.8° applying) scores the same as a snapshot with Mercury square natal Venus (1.1° applying) and Mars square natal Jupiter (0.9° applying). Those are categorically different events in a person's life — one is a year-defining pressure pattern, one is a cranky Wednesday.
+
+The planetary weight system (`PLANET_WEIGHT` at line 122) is used only for *selecting the trigger aspect for the tooltip*. It doesn't affect whether the snapshot scores at all, or what intensity it gets. Intensity at line 373 is `Math.abs(rating.score - 3) / 2` — it comes entirely from the energy rating score, not from the planet weights.
+
+The fix: weight the intensity calculation by the planets involved. The sum of `PLANET_WEIGHT[transitPlanet]` values across the tight applying aspects gives you a real measure of the event's significance. Normalize it. A Saturn+Pluto cluster should produce `intensity: 0.9+`. A double Mercury/Mars configuration might produce `intensity: 0.4`. This affects both the dot size on the marker and (critically) the density cap, which keeps the top 20% by intensity. Saturn+Pluto windows should survive the density cap when Mercury/Mars windows get dropped.
+
+Concrete implementation: replace the energy-rating-only intensity formula with a weighted sum:
 
 ```typescript
-// Computed once when snapshots settle — not on slider drag
-const markers = useMemo(() => {
-  if (snapshots.length === 0) return []
-  return snapshots.map(s => scoreSnapshot(s, chartData)).filter(m => m.category !== 'neutral')
-}, [snapshots, chartData])
+const planetWeightSum = tightAspects.reduce((acc, a) => acc + (PLANET_WEIGHT[a.transitPlanet as string] ?? 1), 0)
+const maxPossibleWeight = 2 * (PLANET_WEIGHT.Pluto! + PLANET_WEIGHT.Neptune!) // two heaviest
+const intensity = Math.min(1.0, planetWeightSum / maxPossibleWeight)
 ```
 
-This is a `useMemo` over `snapshots` (which only changes after the `useTransition` completes), not over `offset`. The slider thumb position changes on drag; `snapshots` does not.
+This doesn't require any new data — `PLANET_WEIGHT` is already defined at line 122.
+
+### Failure 3: The favorable/challenging gate requires the energy rating AND tight applying aspects, but they're computed independently and double-filtered
+
+Lines 333–360 (favorable path): it calls `computeEnergyRating(snapshot.transitAspects)` which internally filters to classical aspects and takes the top 8. Then separately it filters `snapshot.transitAspects` for `applying && orb <= applyingTight && nature === 'harmonious'`. These are parallel filters over the same array, computed sequentially.
+
+The subtle bug: `computeEnergyRating` (in `transits.ts:503`) takes the top 8 by the sort order of `snapshot.transitAspects` — which is sorted by orb ascending. The energy rating and the applying filter may not be counting the same aspects. If 3 of the 8 tightest aspects are separating harmonious aspects, they count toward the energy rating but not toward `tightApplyingHarmonious`. You could have a rating.score of 4 (favorable) driven by 3 tight separating trines, but `tightApplyingHarmonious.length < 2`, so the snapshot doesn't mark. Meanwhile the separating trines represent a window that already peaked — exactly the wrong moment to mark as "coming up."
+
+The fix: compute the favorable/challenging score solely from applying aspects. Rewrite the energy rating for the scoring path to count only applying aspects:
+
+```typescript
+const applyingHarmonious = snapshot.transitAspects.filter(
+  a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
+    && !isAsteroid(a.transitPlanet as BodyName)
+)
+const applyingChallenging = snapshot.transitAspects.filter(
+  a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
+    && !isAsteroid(a.transitPlanet as BodyName)
+)
+const applyingScore = applyingHarmonious.length - applyingChallenging.length
+```
+
+Drop the `computeEnergyRating` call from `scoreSnapshot` entirely. The overall energy rating is the right tool for the daily energy widget on the main transit page — it's not the right tool for forward-looking snapshot marking where applying direction is everything.
 
 ---
 
-## Station Detection: The Current Approach Is Wrong for This Use Case
+## Combination Logic: The Architecture Gap
 
-`getRetrogradeStatus` at `transits.ts:227` detects whether a planet is retrograde at a specific date. It uses `getDailyMotion` at that point in time and the `isStationing = Math.abs(motion) < 0.02` threshold. This is what goes into `snapshot.retrogrades`.
+The current code has no data structure for "what combinations of concurrent aspects create emergent significance." It just picks the tightest/heaviest individual aspect and reports it.
 
-The vision says: "Any planet stations (motion crosses zero — direct to retrograde or vice versa) within the step's window." The problem is that `getRetrogradeStatus` at a single point in time does not detect crossings. It detects current state. A planet could be stationing at offset 7 but by the time `getRetrogradeStatus(date_at_offset_7)` runs, it might already be retrograde — in which case `isStationing` is false and `isRetro` is true, and you miss the fact that the station happened near this snapshot.
+The vision is right that a Jupiter transit to natal Venus in the 5th while a Venus-trine-Sun is simultaneously applying is a different event than either in isolation. But implementing this as a lookup table across all possible pairs would be a huge combinatoric space. The practical approach is tier-based combination scoring:
 
-The correct detection for the "shift" category in the marker system is to compare consecutive snapshots: if `snapshots[i-1].retrogrades.find(r => r.planet === X).isRetro !== snapshots[i].retrogrades.find(r => r.planet === X).isRetro`, then a station occurred between those two steps. For weekly resolution, this is accurate enough — the station happened somewhere in that week. For daily resolution, you know it happened on exactly that day.
+**Tier 1 — Single outer planet to personal planet, tight applying:**
+Saturn/Uranus/Neptune/Pluto to Sun/Moon/Venus/Mars/ASC/MC. Already detected. Add house context.
 
-Implementation — the `scoreSnapshot` function should receive both the current snapshot and the previous one:
+**Tier 2 — Mutual reinforcement: two+ applying aspects to planets in the same house:**
+If transit Jupiter is applying to natal Venus in the 5th, and simultaneously transit Sun is applying to natal Moon in the 5th, both activating the same house within the same snapshot — that's a genuine doubling of the 5th house signal. Detect this by grouping applying aspects by natal house and checking for 2+ tight hits in a single house.
+
+**Tier 3 — Cross-domain tension: challenging outer + personal planet AND challenging outer + personal planet in different houses:**
+Saturn challenging natal Mars (3rd house, communication friction) and simultaneously Pluto opposing natal Moon (4th house, home transformation) is two parallel pressure tracks. The combination is more draining than either alone. Score it by counting the total planet weight of the challenging cluster.
+
+None of these tiers requires new data. They require grouping the already-computed `TransitAspect[]` differently. The implementation is:
 
 ```typescript
-function scoreSnapshot(
-  snapshot: AdvanceSnapshot,
-  prev: AdvanceSnapshot | null,
-  chartData: ChartData,
-): SnapshotScore {
-  // ...
-  // Station detection: compare retrograde state to previous snapshot
-  if (prev) {
-    for (const r of snapshot.retrogrades) {
-      const prevR = prev.retrogrades.find(pr => pr.planet === r.planet)
-      if (prevR && prevR.isRetro !== r.isRetro) {
-        hasStation = true
-        stationPlanet = r.planet
-        stationDirection = r.isRetro ? 'retrograde' : 'direct'
-      }
-    }
+// Group tight applying aspects by natal house
+const byNatalHouse = new Map<number, TransitAspect[]>()
+for (const a of tightApplying) {
+  if (a.natalHouse) {
+    const existing = byNatalHouse.get(a.natalHouse) ?? []
+    byNatalHouse.set(a.natalHouse, [...existing, a])
   }
 }
+
+// Find house with 2+ activations
+const doubledHouse = [...byNatalHouse.entries()].find(([, aspects]) => aspects.length >= 2)
 ```
 
-This is more correct than the single-point approach and requires no additional WASM calls.
-
-**A separate correctness issue with `getRetrogradeStatus`:** The `isStationing` threshold of `Math.abs(motion) < 0.02` degrees/day is applied uniformly across all planets. Saturn's normal daily motion is about 0.033 degrees/day. Near station, it slows to near-zero. Mercury's normal motion is about 1.6 degrees/day, and it slows to near-zero before stationing. The 0.02 threshold makes sense for slow planets but is far too tight for Mercury — Mercury stations when its daily motion is approaching zero from well above 0.02, and the function may flag "Stationing" for Mercury for a much shorter window than it should. For the marker system's purposes, this doesn't matter much because we're using the consecutive-snapshot comparison method instead, but the underlying `getRetrogradeStatus` function has this latent inaccuracy.
+If `doubledHouse` exists, the reason string can say: "Jupiter and the Sun are both activating your 5th house (creativity, romance) in the same window — rare doubling of this life zone." That's a specific, meaningful statement, not a formula.
 
 ---
 
-## The `scoreSnapshot` Function: Exact Implementation Shape
+## The House Context Wiring: What's Already There vs. What's Missing
 
-The vision document's table (power > favorable > challenging > shift > neutral, with shift able to co-display) is the right priority order. Here is the concrete implementation:
+`computeTransitAspectBrief` at `transitAspectBriefs.ts:115` does everything the vision wants for individual aspect rows. It's house-aware, it uses verb phrases by planet/nature/applying, it outputs house names in plain English. It's used correctly in `AdvanceTab.tsx:1098` for the `AspectRow` components.
+
+The scoring engine (`buildAspectReason`) doesn't use it. `buildPowerReason` (line 161) doesn't use it either — it has its own `ANGLE_DOMAIN` lookup (lines 114–117) that's hard-coded to only ASC and MC.
+
+The divergence means: a user looking at the "Transit Aspects" section sees "Saturn pressing on your House of Home — [relevant brief]" in the aspect row, but the marker banner says "Saturn presses your Midheaven — a significant moment for career decisions." These are parallel text-generation systems that will drift in quality.
+
+The right call is to make `buildAspectReason` a thin wrapper over `computeTransitAspectBrief` with a different voice/length. The `transitAspectBriefs.ts` function already has a 200-character truncation limit — the reason string for a marker tooltip needs to be shorter and more punchy than an aspect row brief. Consider a `reason` variant that generates 1 sentence max, pulling from `houseTheme.name` and the verb phrase table already in `transitAspectBriefs.ts`.
+
+---
+
+## The Density Cap Is Broken in Practice
+
+The 20% density cap at lines 492–508 sorts by intensity descending and keeps the top `Math.ceil(config.max * 0.2)` markers. For monthly (36 steps, max 7 markers), that's fine. For weekly (52 steps, max 10 markers), fine.
+
+The problem: when all markers share the same category (all favorable, or all neutral except one shift), the cap doesn't enforce variety. The vision says: "the scoring system should prefer surfacing one each of power, favorable, challenging, and shift." The current cap has no category awareness.
+
+After the intensity sort and keep-set construction, there's nothing preventing 7 of the 7 monthly markers being `favorable` if Jupiter is making a long series of harmonious transits. That defeats the purpose.
+
+The fix: modify the density cap pass to enforce category caps before the intensity sort:
 
 ```typescript
-export type MarkerCategory = 'power' | 'favorable' | 'challenging' | 'shift' | 'neutral'
-
-export interface SnapshotScore {
-  category: MarkerCategory
-  coShift: boolean   // true when shift co-occurs with favorable/challenging
-  intensity: number  // 0.0–1.0, used to scale dot size/glow
-  reason: string
-  shiftPlanet?: string
-  shiftDirection?: 'retrograde' | 'direct'
+// Category-aware density cap
+const maxPerCategory: Partial<Record<MarkerCategory, number>> = {
+  favorable: Math.ceil(maxMarkers * 0.4),
+  challenging: Math.ceil(maxMarkers * 0.4),
+  power: maxMarkers, // uncapped — power days are rare by nature
+  shift: maxMarkers, // uncapped — stations are rare
 }
 ```
 
-The `computePowerDayBanner` function at `AdvanceTab.tsx:106` already implements the power-day logic cleanly. Rather than duplicate it, refactor it: extract the detection logic into `scoreSnapshot`, and have `computePowerDayBanner` call `scoreSnapshot` and format the result into banner text. This is the right factoring — one scoring function, one formatting function. Currently, `computePowerDayBanner` mixes detection and formatting, which is why it returns a pre-formatted string rather than structured data.
-
-**On orb thresholds per period:**
-
-The vision proposes loosening orbs for weekly (angle contact to 2°, applying threshold to 3°) and monthly (angle contact to 3°). This is correct but needs to be implemented carefully. The `ADVANCE_CONFIG` already knows the period — pass it to `scoreSnapshot`:
-
-```typescript
-const ORB_THRESHOLDS: Record<TransitPeriod, { angleContact: number; applyingTight: number; energyMinAspects: number }> = {
-  daily:   { angleContact: 1.0, applyingTight: 2.0, energyMinAspects: 2 },
-  weekly:  { angleContact: 2.0, applyingTight: 3.0, energyMinAspects: 3 },
-  monthly: { angleContact: 3.0, applyingTight: 4.0, energyMinAspects: 2 }, // fewer aspects, but coarser
-}
-```
-
-For monthly, require slow planets only (Saturn/Uranus/Neptune/Pluto) for the power category — Jupiter is already excluded from `SLOW_PLANETS_FOR_BANNER` (line 43) and should remain excluded for the power marker as well. The month-level favorable/challenging threshold should require `computeEnergyRating` score ≥ 3 (Highly Favorable) for green, or ≤ 1 (Demanding) for red — not 2 or 4. Reserve month-level markers for genuinely extreme readings.
-
-**On the energy rating function:**
-
-`computeEnergyRating` at `transits.ts:480` filters to classical aspects (excluding asteroids) and scores the top 8 by +1/-1. Its output scale is: score ≥ 3 = "Highly Favorable" (5), ≥ 1 = "Favorable" (4), 0 = "Mixed" (3), ≥ -2 = "Tense" (2), else = "Demanding" (1). The vision maps favorable ≥ 3 and challenging ≤ 1. That's scores of 5 (energy rating) for favorable and 1 for challenging. In actual usage, `computeEnergyRating` returns a `.score` field from 1–5. So "favorable marker" = `energyRating.score >= 4` AND 2+ tight applying harmonious, "challenging marker" = `energyRating.score <= 2` AND 2+ tight applying challenging. The vision's "≥ 3 AND 2+ applying harmonious" should read as: energy rating score (the 1-5 integer) ≥ 4, not the raw harmonic/challenging aspect count differential ≥ 3. Be explicit about which score scale is being compared.
+Sort within each category by intensity, keep the top N per category, then fill remaining slots from any category by intensity if slots remain. This guarantees variety without removing real peaks.
 
 ---
 
-## The Native Range Input Overlay: The Exact Layout Trap
+## Synastry Advance: The Architecture Decision
 
-The slider HTML at `AdvanceTab.tsx:265–276` is a plain `<input type="range">` inside a `<div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-5 mb-6">`. The vision's proposed wrapper div is correct, but there's a layout detail that will burn implementation time if not understood upfront.
+The Advance tab is a React component that takes `{ chartData, aspects, period, baseDate }`. `SynastryTransitPage.tsx` has none of this. The `synastryTransitData` in state is a `TransitData` (computed against the composite chart via `buildCoupleTransitPrompt`), not the composite `ChartData` itself.
 
-**The problem:** The native `<input type="range">` in WebKit/Blink has a clickable area that extends a few pixels beyond the visible track — the hit area includes the thumb region and some padding. A `<div>` overlaid with `pointer-events-none` won't intercept clicks, but the native input's `<input>` element itself extends to fill its CSS width. The marker dots need to be positioned relative to the track width, not the input element's full width, because the track is inset from the input edges.
+To bolt a couple-advance onto `SynastryTransitPage.tsx`, you need:
 
-On Webkit, the slider track starts and ends at the thumb's center, which is inset by `thumb_width/2` from the input edges. With a 20px thumb (`[&::-webkit-slider-thumb]:w-5`), the track effectively starts at `10px` from the left and ends at `10px` from the right. A marker at `left: 0%` or `left: 100%` will be offset.
+1. The composite `ChartData` in state — not just the computed transit aspects. The state has `synastryTransitData: TransitData` (lines 97 in `SynastryTransitPage.tsx`) but I don't see a `compositeChartData: ChartData` in state. Check `appState.ts` to confirm.
 
-**The fix:** Use CSS padding on the marker container div to match the thumb inset:
+2. A modified `scoreSnapshot` function (or a separate `scoreCoupleSnapshot`) that evaluates composite chart planetary contacts rather than individual natal contacts. The `chartData.angles.ascendant` and `chartData.angles.midheaven` for power-day detection need to be the composite angles.
 
-```jsx
-<div className="relative w-full">
-  <input type="range" ... />
-  <div 
-    className="absolute pointer-events-none"
-    style={{ top: '50%', transform: 'translateY(-50%)', left: '10px', right: '10px' }}
-  >
-    {markers.map(m => (
-      <MarkerDot
-        key={m.offset}
-        marker={m}
-        max={config.max}
-        onClick={() => setOffset(m.offset)}
-      />
-    ))}
-  </div>
-</div>
-```
+3. Composite chart house computation — `TransitAspectsToComposite` in `SynastryTransitPage.tsx` already notes this at line 29: "Composite planets have house: 0 — computeTransitAspectBrief falls to generic ASPECT_BRIEFS fallback. When composite house calculation is implemented, briefs will auto-upgrade." This is the existing technical debt for composite house context. Without it, the couple-advance reason strings will have no house language, exactly the same gap that exists for personal charts when birth time is unknown.
 
-And the `MarkerDot` positions at `left: (m.offset / config.max) * 100%` relative to this inset container — not relative to the full input width. This maps correctly to where the thumb would be at that offset.
+4. The vision also wants synastry-axis activation detection — "this week Jupiter transits your composite Venus while also hitting the Venus-Mars synastry axis." This requires access to the raw synastry aspects between person A and person B's charts, not just the composite chart transits. That data is in `SynastryData` (from the synastry reading), not in `TransitData`.
 
-**Click handlers on marker dots:** The marker container has `pointer-events-none`, which means individual child elements can override this with `pointer-events-auto`. The dots themselves should have `pointer-events-auto` and an `onClick` that calls `setOffset(m.offset)`. The native input still receives pointer events normally because the `pointer-events-none` is on the container, not on the input.
+The architectural shape I'd propose: create `preCalculateCoupleSnapshots` as a thin wrapper over `preCalculateSnapshots` that passes the composite `ChartData`. For the synastry-axis detection, you need a second input: the `synastryAspects` array from the compatibility reading. Pass it as an optional parameter. In `scoreCoupleSnapshot`, after the standard composite contact checks, run an additional pass: for each tight transit activating a composite planet, check if that same composite planet participates in a tight synastry aspect between the two individuals. If yes, the combination score gets a multiplier.
+
+This is additive architecture — `preCalculateSnapshots` doesn't change, the couple version calls the same engine with different inputs plus an extra synastry-check layer. Clean.
+
+The prerequisite that must be solved first: the composite `ChartData` needs to be available in state or computable on the synastry transit page. Without this, none of the advance slider mechanics work for couples because `AdvanceTab` requires `chartData: ChartData` as its primary input.
 
 ---
 
-## The Overview Strip: Implementation Caution
+## Performance: The Synastry Advance Cost
 
-The vision proposes an overview strip above the slider — a `w-full h-6` horizontal bar with colored dots at percentage positions. This is the right concept but has one practical problem: **dot density at the extremes**.
+Composite `preCalculateSnapshots` for weekly (52 snapshots) costs roughly the same as individual: ~3000 WASM calls. The synastry-axis overlay check is pure arithmetic over an in-memory array — negligible. The couple advance will have the same 200–800ms compute time as the individual advance. This is acceptable under `useTransition`.
 
-For 53 weekly snapshots in a `w-full` container on mobile (320–375px wide), each step represents about 6px of horizontal space. If two consecutive weeks are both marked (e.g., a favorable week followed by a power week), their dots are 6px apart on mobile — they will visually overlap. You need a collision-avoidance strategy.
+One new cost: if you want to check whether a transit activates synastry aspects, you need to compare transit planet positions against the synastry aspect array (which is pre-computed at reading time). This is O(synastry_aspects × transit_planets) per snapshot — maybe 50 aspects × 15 planets = 750 comparisons per snapshot, 39,000 total. Trivial.
 
-Simple approach: for each marked step, check if `|marker.offset - prevRenderedMarker.offset| < minGapSteps` where `minGapSteps = Math.ceil(config.max / containerWidthPx * minGapPx)`. Skip rendering the lower-priority marker if it would overlap the higher-priority one. Priority order: power > shift > favorable > challenging.
-
-For daily (30 steps in 320px = ~10px/step), there's no collision problem. For weekly (52 steps in 320px ≈ 6px/step), light overlap is possible. For monthly (36 steps in 320px ≈ 9px/step), mostly fine. The mobile case for weekly is the worst.
-
-An alternative that sidesteps this: render the overview strip as a heat map using a `<canvas>` or an SVG `rect` per step rather than individual dots. Each step is a colored column, 1–2px wide, and the colors blend into each other. No collision, no overlap, and the visual density itself communicates the distribution better than discrete dots. For 52 weeks × 2px per step = 104px — this fits in any mobile viewport. However, a canvas adds complexity. The simpler approach (just filter overlapping dots) is correct for v1.
+The expensive thing to avoid: don't recompute synastry aspects inside the couple advance. They're already computed. Pass them in as a static input to `preCalculateCoupleSnapshots`.
 
 ---
 
-## Animation: What Not to Do
+## Technical Debt Accumulating
 
-The codebase uses Tailwind's animation classes. The vision warns against `animate-bounce` and `animate-ping` — that's right, those look like notification badges and are too fast. But `animate-pulse` as-is also has a problem: Tailwind's default `animate-pulse` pulses opacity from 1 to 0.5 on a 2-second cycle. On a dark background with a small dot (6–8px), this makes the dot mostly invisible for half its cycle. That's wrong.
+**1. Two parallel text-generation paths**
 
-The right animation for "mystical breathing" is a glow/shadow pulse that keeps the dot fully opaque but breathes the shadow radius:
+`transitAspectBriefs.ts` (house-aware, phrase-table-based) and `buildAspectReason` in `AdvanceTab.tsx` (house-blind, domainMap-based) will drift apart. Every future improvement to one needs to be replicated in the other. This is the most immediate cleanup target — collapse them into one.
 
-```css
-@keyframes glow-pulse {
-  0%, 100% { box-shadow: 0 0 4px 1px currentColor; opacity: 0.85; }
-  50%       { box-shadow: 0 0 8px 3px currentColor; opacity: 1.0; }
-}
-```
+**2. `computeEnergyRating` is the wrong primitive for forward-looking scoring**
 
-In Tailwind config, add this as a custom animation or use the `style` prop inline for the duration. The `animation` CSS property on the dot element: `animation: glow-pulse 3s ease-in-out infinite` for power/gold, `2s` for challenging/red, `4s` for shift/blue, and no animation for favorable/green (favorable is stable, not attention-seeking).
+It's used in two contexts: the energy widget on the main transit page (appropriate — it scores the present state) and in `scoreSnapshot` for forward snapshots (inappropriate — it doesn't prefer applying over separating). The name should be a hint: "energy rating" is a present-tense concept. Future-snapshot marking needs "momentum rating" — which weights applying aspects heavily and discounts separating ones.
 
-**The practical issue with CSS custom animations in Tailwind:** Adding custom keyframes requires `tailwind.config.js` changes (`theme.extend.keyframes` and `theme.extend.animation`). This is standard practice but requires coordination with whoever owns the Tailwind config. Alternatively, use `style={{ animation: '...' }}` inline for the initial implementation — it avoids the config change entirely. Inline animation strings are fine for one-off elements.
+**3. The `SLOW_PLANETS_FOR_BANNER` set excludes Jupiter intentionally** (line 99–100 comment: "Jupiter excluded intentionally"). But the vision says "Jupiter transiting natal Venus in the 5th with a simultaneous Venus-trine-Sun would score neutral under the current rules." Jupiter is excluded from power-day detection by an arbitrary policy choice that was correct for Saturn-to-ASC/MC angle contacts but wrong for Jupiter-to-personal-planet detection. The exclusion needs to be scoped to "Jupiter excluded from ASC/MC angle contact power day detection" not "Jupiter excluded from all significance scoring." These are different things. Right now the code implements the broader exclusion by accident.
 
----
+**4. The hysteresis pass (lines 462–489) only inherits from left neighbor**
 
-## Tooltip Architecture
+It checks if both `snapshots[i-1]` and `snapshots[i+1]` have the same non-neutral category and if so fills in `snapshots[i]`. But it only looks at `prev.score.triggerAspect.orb` — it doesn't check whether the trigger aspect is still present in snapshot `i`. The `currAspect` lookup at line 479 finds the aspect by planet name pair, which could match a different aspect of the same type if there are multiple aspects between the same planet pair. Unlikely in practice, but the condition `a.transitPlanet === triggerPlanet && a.natalPlanet === triggerNatal` isn't tight enough — it should also check `a.type === triggerType` to avoid false matches.
 
-The vision mentions a hover tooltip showing date, category label, and reason. There are two implementation approaches:
+**5. Monthly snapshot date normalization**
 
-**Approach 1: CSS `:hover` tooltip.** The `MarkerDot` renders a sibling `<div>` that's `hidden group-hover:block` using Tailwind's group modifier. No React state needed. Limitation: the tooltip position is relative to the marker dot, which may overflow the slider container at the far left or right edges.
-
-**Approach 2: React state tooltip.** A `hoveredMarker` state in `AdvanceTab`, set on `onMouseEnter`/`onFocus` of each dot, cleared on `onMouseLeave`/`onBlur`. The tooltip renders once, positioned absolutely relative to the slider container. Cleaner overflow behavior.
-
-Approach 2 is right for this component — the tooltip is styled content, not a plain `title` attribute, and you need position clamping to avoid overflow at edges. One state variable is not expensive. The `hoveredMarker` state does not trigger `preCalculateSnapshots` to re-run (it only triggers a re-render of the tooltip div), so there's no performance concern.
-
-**Don't show the tooltip when the slider thumb is at that offset.** The current date display already shows `formatDate(snapshot.date)` and the banner already shows the power day text. Showing both simultaneously creates redundancy. The tooltip is for off-position markers. When `offset === marker.offset`, suppress the tooltip and rely on the existing UI to communicate that position's meaning.
+The comment at lines 428–432 notes: "JavaScript normalizes out-of-range dates (e.g., Feb 31 → Mar 3). This is a known limitation." This is fine as-is for now, but means that in February, the monthly advance for "month 3 from February 28" could silently compute to March 3 when the label says "month 3." For a 36-month range starting in January, this could cause 2–3 misaligned labels near month-end dates. Not sprint-critical but not invisible to users who read the date display carefully.
 
 ---
 
-## `AdvanceSnapshot` Type Extension
+## What to Build in Sprint 0019
 
-The current `AdvanceSnapshot` interface at `AdvanceTab.tsx:17`:
+In priority order, from a pure engineering standpoint:
 
-```typescript
-interface AdvanceSnapshot {
-  offset: number
-  date: Date
-  dateStr: string
-  transitPlanets: TransitPosition[]
-  housedTransitPlanets: TransitPosition[]
-  transitAspects: TransitAspect[]
-  retrogrades: { planet: PlanetName; isRetro: boolean; status: string }[]
-}
-```
+**1. House-aware reason strings in `buildAspectReason`** — call `computeTransitAspectBrief` or extract its house lookup pattern. This is a 1-day change with immediate visible quality improvement. No architecture risk.
 
-The vision proposes adding a pre-computed `score` field. I agree this is the right approach — scoring during `preCalculateSnapshots` instead of during the `useMemo([snapshots])` pass collapses the architecture from two passes to one. But it couples the scoring logic to the snapshot computation loop, making `preCalculateSnapshots` responsible for both data collection and analysis.
+**2. Combination-weighted intensity** — replace the energy-rating-derived intensity with the planet-weight-sum formula. This makes the density cap filter correctly: Saturn+Pluto events survive, Mercury/Mars events get dropped. Also fixes the scoring gate for combinations.
 
-The trade-off: slightly more coupled code vs. a simpler data flow. I'd choose the coupled approach — add `score: SnapshotScore` to the interface and compute it in the `preCalculateSnapshots` loop. The benefit: the marker array derivation (`useMemo`) becomes a single filter over `snapshots` rather than a map+filter. The scoring is done when the data is fresh, the retrogrades are right there, and you avoid a second pass over 53 elements.
+**3. Applying-only energy scoring in `scoreSnapshot`** — drop `computeEnergyRating` from the forward snapshot scorer, replace with applying-only aspect counts. Prevents marking events that have already peaked.
 
-The one complication is station detection requires looking at the previous snapshot. In the loop, `snapshots[i-1]` is available — pass it to `scoreSnapshot`:
+**4. Category-aware density cap** — enforce per-category maximums so the timeline shows variety. Purely a post-processing change to the cap pass, no ephemeris changes.
 
-```typescript
-for (let i = 0; i <= config.max; i++) {
-  // ... compute transitPlanets, transitAspects, retrogrades, housedTransitPlanets ...
-  const prev = snapshots[i - 1] ?? null
-  const score = scoreSnapshot({ offset: i, date: targetDate, transitAspects, retrogrades }, prev, chartData, period)
-  snapshots.push({ offset: i, date: targetDate, dateStr, transitPlanets, housedTransitPlanets, transitAspects, retrogrades, score })
-}
-```
+**5. Jupiter inclusion in combination scoring** — distinguish "Jupiter excluded from ASC/MC power-day detection" from "Jupiter included in combination scoring when it contacts personal planets in tight applying aspects."
 
-This is clean. The `score` field is computed once, stored, and reused by both the marker layer and the power day banner.
+**6. Composite ChartData in state, then `preCalculateCoupleSnapshots`** — this is the couple-advance prerequisite. Once the composite chart is addressable as `ChartData`, the couple-advance is a wrapper call over the existing engine. Estimate: getting the composite ChartData into state is 1-2 days, the couple advance tab wiring is another 1-2 days. The synastry-axis overlay detection is additional but can ship in a follow-up.
+
+Items 1–4 are content improvements to the existing individual advance. Item 5 is a scoring logic fix. Item 6 is new surface area. The vision tries to do all of these in one sprint — that's technically feasible if the sprint is scoped correctly, but items 1–4 are the ones that directly address the "thin and repetitive" output complaint, so they should ship first even if item 6 slips.
 
 ---
 
-## `computePowerDayBanner` Refactor
+## Key File Paths
 
-Currently `computePowerDayBanner` at `AdvanceTab.tsx:106` is ~57 lines that detect a condition and format a string. After adding `scoreSnapshot`, it should become a 5-line function:
-
-```typescript
-function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
-  if (snapshot.offset === 0) return null
-  if (snapshot.score.category === 'neutral') return null
-  return formatScoreAsBannerText(snapshot.score) // new formatting function
-}
-```
-
-The existing detection logic inside `computePowerDayBanner` (the `detectAngleContact` call, the SLOW_PLANETS loop, the `tightApplying.length >= 3` check) moves into `scoreSnapshot`. The text-formatting logic (`ASPECT_VERB_BANNER`, `ANGLE_DOMAIN`, `spellCount`) stays as formatting helpers called from `formatScoreAsBannerText`. The detection and presentation concerns are now separate.
-
-This means `computePowerDayBanner` no longer needs `chartData` as a parameter — the chart-specific context was used for detection, which is now in `scoreSnapshot`. The banner function only needs the pre-scored snapshot. That's a cleaner interface.
-
----
-
-## One Thing the Vision Gets Wrong
-
-The vision says "The `shift` category is orthogonal and should co-display with favorable or challenging if both conditions are met (a stacked or dual-dot treatment rather than suppression)."
-
-This is correct in principle but I'd push back on implementing dual-dot in the initial sprint. A "stacked or dual-dot treatment" requires:
-- Determining the vertical or horizontal offset between the two dots
-- Ensuring neither dot is cut off by the slider container
-- Defining hover behavior for a dual-dot position (which tooltip shows?)
-- Testing on mobile where dots are already small
-
-The simpler implementation: use a single dot with a mixed color indicator. If the category is `favorable` with `coShift = true`, render a blue border ring around the green dot (or a blue dot with a small shift indicator). This conveys both signals with one DOM element and avoids the layout complexity. Call it "category with modifier" rather than "dual dot." The `SnapshotScore` type already has `coShift: boolean` and `shiftPlanet`/`shiftDirection` fields — the data model is ready for this, the rendering just uses a ring instead of a second dot.
-
----
-
-## Implementation Order
-
-**Task 1 (foundation):** Refactor `computePowerDayBanner` into `scoreSnapshot` + `formatScoreAsBannerText`. Add `score: SnapshotScore` to `AdvanceSnapshot`. No UI changes — just restructure the scoring logic. Validate that the existing power day banner still renders correctly (regression check).
-
-**Task 2 (marker layer):** Add the marker overlay to the slider wrapper. Wire `markers = useMemo(...)` over `snapshots`. Render static colored dots with no animation. Verify pointer events don't interfere with slider dragging. Add click-to-jump on marker dots.
-
-**Task 3 (overview strip):** Add the horizontal strip above the slider. Wire dot positions. Add click-to-jump. Add the "Notable moments" label.
-
-**Task 4 (polish):** Add animations to marker dots. Add tooltip system. Calibrate thresholds per period. Verify the visual system (color, shape, opacity) is internally consistent.
-
-Tasks 1 and 2 are the core and should ship together. Tasks 3 and 4 are additive value on top of a working marker system.
-
----
-
-## Key Files and Line Numbers for Implementation
-
-- **Score computation goes here:** `AdvanceTab.tsx:167` — the `preCalculateSnapshots` function. Add `scoreSnapshot` call at the end of each loop iteration.
-- **Score type comes from here:** New `scoreSnapshot` function lives at the top of `AdvanceTab.tsx`, after line 163 (current bottom of the banner section).
-- **Detection primitives reuse:** `AdvanceTab.tsx:43` (`SLOW_PLANETS_FOR_BANNER`), `AdvanceTab.tsx:82` (`detectAngleContact`), `transits.ts:480` (`computeEnergyRating`).
-- **Slider HTML to wrap:** `AdvanceTab.tsx:265–276`.
-- **Overview strip inserts before slider container:** `AdvanceTab.tsx:259` (the `<div className="bg-mystic-surface/50 ...">` that wraps the slider section).
-- **Marker layer sits inside the slider wrapper:** New `<div>` sibling of the `<input>` at `AdvanceTab.tsx:265`.
-- **Power day banner refactors:** `AdvanceTab.tsx:106–163` (entire `computePowerDayBanner` function) — retain its structure, gut its body, have it delegate to `scoreSnapshot`.
-- **Station detection requires consecutive snapshot comparison** — not a new primitive, just access to `snapshots[i-1]` in the loop.
-- **`computeEnergyRating` (`transits.ts:480`) is the right primitive for favorable/challenging scoring** — do not replicate its logic.
-- **Do not call `buildTransitTimeline` from `AdvanceTab`** — that function's `findAspectPerfection` binary-search approach is expensive and redundant given that `preCalculateSnapshots` already has the aspect data.
+- Scoring engine: `/projects/astrology-reader/src/components/reading/AdvanceTab.tsx`, lines 161–390
+- Transit aspect engine: `/projects/astrology-reader/src/engine/transits.ts`, `calculateTransitAspects` at line 150
+- House-aware brief generation: `/projects/astrology-reader/src/data/interpretations/transitAspectBriefs.ts`, `computeTransitAspectBrief` at line 115
+- House theme data: `/projects/astrology-reader/src/data/interpretations/houseThemes.ts`, `HOUSE_THEMES` array and `getHouseTheme` function
+- Synastry transit surface: `/projects/astrology-reader/src/components/results/SynastryTransitPage.tsx` — no advance tab, no composite ChartData in scope
+- Energy rating primitive: `/projects/astrology-reader/src/engine/transits.ts`, `computeEnergyRating` at line 498
+- Synastry vocabulary: `/projects/astrology-reader/src/data/interpretations/synastryAspectBriefs.ts` and `synastryHouseOverlayBriefs.ts` — rich material for couple-advance reason strings when composite house placement is available
