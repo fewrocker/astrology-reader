@@ -1,191 +1,254 @@
-# Miyazaki's Craft Analysis: Sprint 0018 — The Slider That Tells You Nothing
+# Miyazaki's Craft Analysis: Sprint 0019 — The Words That Mean Nothing
 
 ---
 
-## What the Advance Tab Is Asking the User to Do
+## What the Product Says When It Speaks
 
-Open the Advance tab. A slider sits at the left edge. Below it: "Now." At the right edge: "30 days." The slider thumb is gold, which is good. The track is dark, which is correct. The date appears below when you drag.
+Sprint 0018 gave the Advance tab eyes. The marker system can now look at a thirty-six month span and say: here, and here, and here. This was the necessary first act. The tab could point.
 
-But to understand anything about the next thirty days, you must drag. You must visit every position. You must carry information in your head from one stop to the next. The chart changes as you move — the aspect list below rewrites itself — but there is no way to stand back and see the shape of the whole period before you commit to exploring it position by position. There is no bird's-eye. There is only the current moment, wherever you stopped dragging.
+Sprint 0019 is about what the tab says when you arrive at the place it pointed.
 
-This is a library where all the books are on the same shelf, spines turned inward. You can pull each one out individually. But there is no overview, no catalog, no way to walk in and know immediately: that week in the middle is red, that day near the end is gold. You must pull out every book yourself.
+And here the product fails completely. Not in structure, not in engineering — the scoring engine is sound, the marker architecture is clean. It fails in the way that is hardest to measure and easiest to dismiss: it fails in language. It fails in meaning. It fails in the specific act of telling a human being something true about their life.
 
-The user comes to the Advance tab with a question. Not "what is happening on day fourteen specifically" — not yet. The question is: where should I look? When is a good week to make the decision I have been postponing? When should I expect friction? When is a moment coming that deserves preparation? These are the questions that astrology is actually asked. And the current Advance tab cannot answer them without the user doing all the work themselves.
+When the slider lands on a gold power marker and the banner appears, what does it say?
 
-The sprint is about giving the tab the ability to speak first. The markers on the slider are not decoration. They are the chart pointing at itself and saying: here. Look here. This one matters.
+*"Saturn reaches your Ascendant — a significant moment for identity and how the world first meets you."*
 
----
+Read that sentence again. What does it tell you that you did not already know? You knew Saturn was involved — you can see the gold planet label in the aspect list. You knew the Ascendant was involved — you already knew what the Ascendant is. You knew it was significant — the gold color told you that before you read a word. And "how the world first meets you" is a phrase from an introductory astrology textbook, not from a wise friend who knows your situation.
 
-## The Mechanical Feeling
+This sentence costs the user their attention and gives them almost nothing in return. It is the astrological equivalent of a fortune cookie. It is astrology doing its most recognizable, least useful thing: using the vocabulary of the discipline to produce a sentence that sounds astrological without saying anything.
 
-There is a specific quality to the current Advance tab that I would call mechanical, and it is worth naming precisely before proposing anything, because mechanics and craft are opposites and the difference lives in small details.
+The red challenging banner:
 
-**The slider provides no preview of what it contains.** A musical instrument tells you something about its sound by looking at it. A violin communicates "sustained, resonant, capable of grief" through its shape alone, before it is played. The current Advance slider communicates nothing. It is a generic range input. It could be a volume control, a scroll bar, a form field for entering a number from 0 to 30. The fact that it controls a transit chart for a specific person's life is invisible in the component's appearance.
+*"Saturn opposition your natal Moon — tension around structure and discipline."*
 
-**The date label updates, but the update feels like a readout.** Below the slider: a date in gold type. When you drag, the date changes. This is correct behavior. But a date alone is not meaningful. "Fri, Jun 13, 2026" does not tell me anything until I have read the aspects below. The date is a readout from an instrument I cannot interpret until I read further. This forces sequential consumption: drag, scroll down, read aspects, scroll up, drag again, scroll down again. The attention bounces between the slider and the content it controls, with no integration between them.
+What decisions is this likely to surface in the user's life? What should they watch for? Is this a week to postpone the difficult conversation or to have it? Is the tension internal — a conflict between their emotional needs and their own self-imposed structures — or relational — Saturn pressing on the emotional bonds they have with others, depending on where the Moon sits? Is there anything they can do with this information beyond knowing that it exists?
 
-**The power-day banner appears and disappears unpredictably.** When the current snapshot happens to be a power day, a gold banner appears above the chart wheel saying what the power is. When it is not, nothing appears. This is correct behavior — you should not show a banner that does not apply. But from the user's perspective, the banner's appearance feels random. It does not feel like information they sought; it feels like something they stumbled into. The transit chart contains genuine structure — some moments are significantly more active than others — but the current interface presents them as equivalent until you happen to land on one.
+The sentence does not know. It cannot know, because it was written without asking any of these questions. It knows that Saturn is challenging the Moon. It knows that Saturn involves structure. It knows the Moon involves emotion. It reports the conjunction of these three facts and calls itself an interpretation.
 
-**The quick-stats row shows numbers that require interpretation.** "6 aspects / 4 harmonious / 2 challenging" is data. It is not wisdom. A user who does not understand the significance of tight-orb applying aspects cannot distinguish a day with 4 harmonious aspects all separating and wide from a day with 2 harmonious aspects both applying within 0.5° of exact. The numbers look similar; the meaning is opposite. The current interface provides the count but not the weight.
-
-**Loading says "Computing transits…" in plain muted text.** The calculation that happens when you switch to the Advance tab is real computation — it is calculating planetary positions for every step in the range, which is not trivial. The current loading state communicates none of this. "Computing transits…" in muted grey is the same text you would put on a broken form. It does not feel like the product is doing something extraordinary on your behalf. It feels like a wait.
-
-Each of these failures is small. Together they produce the mechanical feeling: this is an interface through which you access data, not an experience through which you encounter meaning.
+This is not interpretation. It is labeling. There is an enormous difference, and the user — even if they cannot name the difference — feels it immediately.
 
 ---
 
-## The Marker System: How It Should Feel
+## The Failure of the Domain Map
 
-The vision document describes the architecture correctly. I do not need to revise it. What I want to add is the felt quality that the architecture must produce — the specific sensory experience that makes the difference between markers that are technically present and markers that do the emotional work they are supposed to do.
+The core of the problem lives in `buildAspectReason` and its `domainMap`:
 
-### The slider must feel like a landscape, not a scale
+```
+Pluto: 'transformation and power'
+Neptune: 'inspiration and surrender'
+Uranus: 'disruption and revelation'
+Saturn: 'structure and discipline'
+Jupiter: 'expansion and opportunity'
+```
 
-Before any markers are designed, the slider itself needs to communicate that it contains terrain. The current dark track is flat. A landscape has topography — rises and falls that the eye reads before the mind interprets them.
+These are real. They are not wrong. But they are the first sentence in a conversation that stops after the first sentence. They name the planet's archetype and append it to the end of a formula string, and then they stop.
 
-The track behind the slider could carry a subtle gradient that reflects the overall energy distribution across the period. Not a gradient from left to right by time, but a gradient whose luminance rises where markers cluster and dims where the period is quiet. This does not need to be precise. A soft glow at the positions of significant markers, diffusing outward along the track, is enough to make the track feel inhabited before the user reads a single label.
+There is no house context. "Saturn opposition your natal Moon" tells the user nothing about which area of life this tension manifests in. But the natal Moon already has a house. That house is data the system already holds. Moon in the 7th house means the emotional structure being challenged is the user's approach to committed partnerships. Moon in the 4th means the pressure falls on home and family foundations. Moon in the 10th means the conflict between emotional needs and public-facing ambitions is being activated.
 
-This is not data visualization in the clinical sense. It is more like a path through fog where you can see that some areas ahead are lit and others are dark. You do not yet know what the light means. But you know where to walk toward.
+These are different life situations. They look the same to the current formula. The formula does not look at the house.
 
-### The dots must be quiet until asked
+The `buildAspectReason` function chooses the transit planet's domain and stops there. It should be choosing the *natal planet's house context* and starting there. The domain of the transit planet is the quality of the pressure. The house of the natal planet is the location where the pressure falls. A message that conveys only quality and omits location is half a message.
 
-The markers will be colored dots on the track — gold for power, green for favorable, red for challenging, blue for shift. The temptation will be to make them vivid and attention-seeking. This would be a mistake.
-
-The dots should be small at rest. Smaller than you think they need to be. Their color should be their identity, not their size. A 4px circle in emerald-400 reads as favorable; it does not need to be 8px to communicate this. When the slider thumb approaches — within three or four steps — the nearby dots should grow gently toward their full size. When the thumb lands exactly on a marked position, the dot brightens and a tooltip appears above it.
-
-This behavior — quiet at distance, available when near, fully revealed on contact — is the behavior of something waiting to be noticed, not something demanding attention. The dots should feel like they have always been there, visible to anyone who looked, rather than animating dramatically to announce themselves.
-
-The one exception is the gold power-day marker. A slow pulse — not a bounce or a ping, but a slow expansion and contraction of the dot's outer glow, like a breathing thing — is appropriate for these moments. Saturn making exact contact with the natal Ascendant is a genuinely rare event in a person's life. The marker for it should feel like something that has been waiting for a long time. The breathing pulse communicates patience, not urgency.
-
-Challenging red markers should pulse slightly faster than the gold ones — still slow by normal UI standards, but with a note of something active that the gold markers do not carry. Not alarming. More like a day that requires your attention.
-
-Favorable green markers can be static — a gentle glow without pulse. A favorable day does not demand anything. It offers. A static glow is an offering.
-
-Blue shift markers are the most unusual category — a planet stationing, direction changing. These are genuinely strange moments in the planetary sky: a body that has been moving in one direction for weeks or months slowing to a stop and beginning to move the other way. The marker for this should carry a visual quality of reversal — perhaps a slow rotation of the dot shape, or a diamond that slowly rotates a few degrees back and forth. Not dramatic. Just: something that was moving is no longer moving in the same way.
-
-### The tooltip is the moment of care
-
-When the slider reaches a marked position — or when the user hovers a dot in the overview strip — a small tooltip appears above the track. This tooltip is where the product has the opportunity to say something specific and true about this particular moment in this particular person's chart.
-
-The tooltip must not say: "Power Day."
-
-"Power Day" is a category label. It is the name of the folder, not the name of the thing inside the folder. A person who reads "Power Day" learns that this day has been classified as significant. They do not learn why this day is significant for them.
-
-The tooltip should say: "Saturn reaches your Ascendant." Or: "Three aspects converge, all applying." Or: "Uranus stations retrograde." These are specific observations derived from the chart. They take one or two seconds to read. They give the user something to carry into the detail below.
-
-The tooltip header — the date and the one-line reason — should be displayed in a small panel that appears above the track, connected to the dot by a thin vertical line so the visual relationship between the dot and the text is clear. The panel should feel like a whisper, not a callout. Small text, semi-transparent background, visible for as long as the hover or proximity lasts, then gone.
-
-One additional touch that would lift the tooltip from correct to caring: include the day of the week in the date. "Saturday, Jun 13" carries more weight than "Jun 13" alone. A person planning their life thinks in terms of weekdays. Knowing that the power day falls on a weekend, or on a Monday when they will be starting something important, matters. The date format is a small choice; the day of the week costs nothing and adds meaning.
-
-### The overview strip must feel like a map
-
-The horizontal strip above the slider — the bird's-eye view of the entire period — is the most important new element in this sprint, and it is where the design has the most opportunity and the most risk.
-
-The opportunity: a strip that shows the distribution of notable moments across the period gives the user something they have never had in this tab. They can look at a month and see immediately that it clusters toward the beginning, quiet in the middle, and has a gold marker and a red cluster in week three. They do not need to drag the slider to learn this. The strip has already told them.
-
-The risk: a strip full of dots is noise. If every other position carries a colored marker, the user loses the ability to distinguish signal from background. The monthly period threshold calibration in the vision document addresses this directly — only mark months where something genuinely significant happens. I want to reinforce this from the felt perspective: a month where two or three markers appear in the strip feels purposeful. A month where eight markers appear feels like the feature is marking everything and therefore marking nothing.
-
-The strip label says "Notable moments" on the left. On the right, the period range. Between them: colored dots at their proportional positions. This is the correct grammar. I would add one refinement: when there are no markers in the strip (every position is neutral), the strip should still appear, but with a single small text label: "Quiet period — no exceptional moments detected." This communicates that the absence of markers is itself a reading, not a failure.
-
-A quiet period has its own meaning in astrology. Not every month should be gold and red. Some months are indeed quiet. Saying so explicitly — "this is a quiet stretch" — is more honest and more useful than showing an empty strip that the user might interpret as a loading failure.
+*"Saturn is pressing on your emotional world"* is incomplete.
+*"Saturn is pressing on your emotional world — and your Moon sits in the 7th house, where your relationship life and commitments live"* is the beginning of something true.
 
 ---
 
-## The Loading State Should Feel Like Preparation
+## The Failure to Evaluate Constellations
 
-When the user first opens the Advance tab, the snapshots are being computed. `useTransition` keeps the main thread responsive, but the visual experience during this computation is currently: grey text saying "Computing transits…" and a placeholder for the chart wheel.
+The scoring engine picks one tightest aspect and writes a sentence about it. This is astrology by spotlight: illuminate one thing, describe it, move on.
 
-The computing state is not a problem to be hidden. It is a moment of genuine activity that the product is doing on the user's behalf. It deserves a treatment that communicates "something real is happening here" rather than "please wait while the interface loads."
+But the user's experience of a week is not produced by one aspect. It is produced by the entire constellation of concurrent forces. A week where Saturn challenges the natal Moon *and* Mars simultaneously activates the natal Sun *and* Jupiter opens a favorable channel to the natal Venus is a completely different week than a week where only the Saturn-Moon aspect is present. The first week has layered pressure in multiple areas, with a simultaneous opening that can be used to balance or navigate the tension. The second is a simpler story.
 
-A specific proposal: during the computing state, show the slider container with the track visible but the markers appearing one by one as each snapshot is scored — a brief sequential appearance of dots materializing from left to right along the track as the calculation proceeds. This requires the pre-calculator to emit results incrementally rather than returning the full array at once, which may be an architectural change worth making or may be too costly. If not, a simpler version: the slider container shows an animation of small glowing points traveling left-to-right along the track, suggesting the computation sweeping through the period. When computation completes, the actual markers resolve into place.
+The current scoring cannot tell these apart. It finds the tightest applying aspect, reads its nature (challenging or harmonious), checks the energy score, and assigns a category. It might score the same category for both weeks. It will say the same sentence about both weeks.
 
-Either version communicates: the product is doing real work for you. You will see the results when it is ready. The stars are being measured.
+The quality bar the vision document sets — "could a thoughtful astrologer friend read this aloud and have it feel personally relevant?" — cannot be met by a system that describes one aspect in isolation and appends a domain label to the end.
 
----
+Combinations carry meaning that their individual parts do not. Jupiter opening to natal Venus in the 5th while Saturn presses on the Moon does not just mean "one good thing and one hard thing." It means: *this is a week where your emotional patterns around attachment are being examined (Saturn-Moon), and simultaneously the universe is reminding you what gives you genuine pleasure and creative joy (Jupiter-Venus-5th). The question the week is asking you: what do you actually want, beyond what you think you're supposed to want?* That is a question a person can work with. That is something to carry into the week.
 
-## The Moment the Slider Reaches a Marked Position
+The current system produces: *"Saturn opposition your natal Moon — tension around structure and discipline."* Then on the next snapshot it finds a favorable window and says: *"Jupiter sextile your natal Venus — a window of expansion and opportunity."* Two labels. No thread connecting them. No recognition that these are happening at the same time, to the same person, in ways that speak to each other.
 
-There is a specific moment in the interaction that deserves particular care: the moment when the user drags the slider and it arrives exactly at a position that carries a marker.
-
-Currently, nothing changes except the aspects list rewrites itself below. If there happens to be a power day at that position, the gold banner appears. But this appearance is not triggered by the arrival — it is simply a coincidence of the snapshot's data.
-
-The moment the slider lands on a marked position should feel like an arrival. A small, immediate response: the dot expands slightly, the tooltip appears, the date display below momentarily brightens or shifts to the marker's color before settling back to gold. This is a half-second event. It is not dramatic. But it communicates: you found something.
-
-This is the difference between a slider that has markers painted on it and a slider that knows where the significant moments are. The first is decoration. The second is intelligence made tactile.
+This is a failure of imagination in the scoring layer. The interpretation is being written aspect by aspect, like a shopping list. It should be written the way a story is told — where the elements speak to each other and the reader understands how they are related.
 
 ---
 
-## What Is Missing That No One Will Ask For
+## The Couple Reading: An Absence Where There Should Be Warmth
 
-These are the details that will not appear in any feature request, because users do not know to ask for them until they experience them:
+The `SynastryTransitPage` has no Advance tab. This is simply stated in the vision document and requires no elaboration. But the *quality of what should exist there* deserves attention, because the couple advance feature has an opportunity that the personal advance feature does not have: it can speak to two people at once about what is happening to them together.
 
-**A "Next notable moment" button.** Next to the slider, a small control: "→ Next." Pressing it advances the slider to the nearest upcoming marked position. This is the fastest way to scan the period — not dragging step by step, but jumping between notable moments. The control should be subtle: not a large button, but a small arrow or a text link. "Jump to next →" in muted gold, which becomes active when markers exist ahead of the current position, and grays out when you have passed all of them.
+The personal advance can say: *Jupiter is expanding your partnership zone — this is a favorable period for deepening commitments or attracting new connection.* This is useful.
 
-**The slider thumb should know where it is.** When the thumb sits at a marked position, its appearance could shift slightly — a faint colored halo behind the gold circle, in the marker's color. When it moves away from the marked position, the halo fades. This requires knowing the current offset's marker status, which is already computable. The implementation is a single CSS variable applied to the thumb's shadow. The effect: the slider thumb itself participates in the reading. It does not just sit there being gold. It tells you: this position has a quality.
+The couple advance can say: *Jupiter is transiting your composite Venus while simultaneously lighting up the Venus-Mars synastry axis between you — this is one of the rarer moments when the relationship's own fortune and the two of you personally are all pointing in the same direction. If there has been anything you have wanted to create together, or to commit to together, or simply to enjoy together, this is when the conditions are genuinely supportive.* This is something a person takes with them.
 
-**The aspect list below should echo the marker category.** When a power day is selected, the aspect list header could say: "Transit Aspects (6) — Power configuration." When a favorable day is selected: "Transit Aspects (8) — Favorable window." When a challenging day: "Transit Aspects (7) — Tense configuration." This is a trivial change — it is adding a text suffix to an existing header — but it creates a continuous thread of meaning from the marker on the slider through the date display through to the aspect list below. The user experiences the categorization not as a dot on a track but as a quality that runs through the entire view.
+The difference is not complexity. It is relationship. The couple reading exists to serve two people who have decided to navigate their lives together. The power moments in a couple's life are not moments when individual transit aspects happen to be favorable. They are moments when the *shared field* — the composite chart, the synastry between them, the concurrent transits affecting both — converges in a way that either amplifies their connection or creates friction between their individual patterns.
 
-**The retrograde activity section should become a shift section on station days.** When the current snapshot is at a "shift" marker — a planet stationing — the retrograde activity section below should have a modified header: "Planetary Shift" rather than "Retrograde Activity." A station is not retrograde activity yet; it is the moment of direction change. The heading should name what is happening, not what category it belongs to.
+What should the couple advance score? Not just "is transit Jupiter harmonious to composite Moon." It should ask: is this a week when the couple's emotional axis is supported AND the romantic axis is lit up AND there is no major simultaneous challenging pressure on the communication axis? If those three things are true together, that is a genuinely favorable couple week. If the emotional and romantic axes are amplified but the communication axis is under Saturn pressure, the week has a different character: intimacy is available but difficult conversations may be unavoidable. A caring product would say so.
 
-**The "Now" label at the left end of the slider should carry the current date.** "Now" is useful as a concept. "Now (May 15)" is more useful as information. A small parenthetical date under "Now" and under the max label ("30 days (Jun 14)") gives the user the period at a glance without having to calculate it themselves. This is a one-line change. It is the kind of detail that a person notices when it is absent — when they look at the slider and realize they have been wondering what the end date is since they opened the tab.
+The synastry interpretation vocabulary already exists in this codebase. `synastryAspectBriefs.ts` contains language like:
 
----
+*"your emotional rhythms overlap — you instinctively know what the other needs, and the shared undercurrent can feel like coming home."*
 
-## The Deeper Question
+That is a line that knows what love feels like. The composite advance scoring should be drawing on this vocabulary — not copying it verbatim, but drawing on the same quality of observation. The composite Venus being lit by transit Jupiter should trigger language that speaks to the couple as a couple, not to "the relationship as a whole" in the distant, administrative voice of `TransitAspectsToComposite`.
 
-The Advance tab is about time. It is about a person standing in the present and looking at what is coming. The experience of doing this should feel like something meaningful — not like operating a data viewer.
-
-A person who sits with a good astrological almanac and turns its pages forward into the coming weeks has a specific feeling: anticipation, recognition, preparation. The almanac tells them what to expect before they arrive at each day. They carry this forward. When the difficult week arrives, they are not surprised — they prepared. When the favorable window opens, they recognize it. They act.
-
-The Advance tab can create this feeling. The markers are not features. They are what enables the user to stop feeling passive about their future and start feeling oriented within it. That is what astrology has always offered, at its best: not prediction but orientation. Not "this will happen" but "here is the shape of what is coming, so that when you walk into it you are not walking blind."
-
-The slider with its colored markers, its breathing gold dots, its quiet green glows, its overview strip that shows the whole period in a glance — this is an invitation to orient. Make it feel like one.
+The raw material is present. It is not being used.
 
 ---
 
-## Specific Proposals by Area
+## The "Quiet Period" Problem
 
-**Slider track:**
-- Add a very soft glow below each marked position along the track — the track should feel inhabited, not empty
-- When the thumb rests at a marked position, add a faint colored shadow (in the marker's color) behind the gold thumb
-- Display the current date below "Now" and the end date below the max value label
+When the overview strip shows no markers — the product currently says: *"Quiet period — no exceptional moments detected."*
 
-**Marker dots:**
-- Rest size: 4–5px diameter, colored but not vivid
-- Approach state (thumb within 3 steps): grow to 7px, opacity increases
-- Hover/active state: 8–9px, full color, tooltip appears
-- Gold (power): slow pulse of outer glow, ~3s period, ease-in-out
-- Red (challenging): slightly faster pulse, ~2s period — active, not alarming
-- Green (favorable): static soft glow, no pulse — an offering, not a demand
-- Blue (shift): slow rotation of diamond shape, ±5° back and forth — communicating reversal
+This is the correct response to the visual question of why the strip is empty. But it is the wrong response to the human question the user is actually asking, which is: *should I be concerned that nothing is happening?*
 
-**Tooltip:**
-- Connected to dot by a thin 1px vertical line
-- Semi-transparent dark panel: `bg-mystic-bg/90 border border-mystic-gold/20`
-- Three lines: date (with weekday), category label, one-line reason
-- Category label in the marker's color; reason in `text-mystic-text/80`
-- Appears on hover or when thumb arrives at marked position
+A quiet period in astrology is not nothing. Saturn in a trine to its natal position, slow-moving, applying — this is a background hum of steady favorable energy that may not trigger any of the current scoring thresholds but is genuinely present. Neptune dissolving quietly over a natal planet in a wide separating aspect — this is a texture to the period that matters to certain users. The absence of dramatic markers does not mean the period is without character. It means the period has a quieter character.
 
-**Overview strip:**
-- Label "Notable moments" left-aligned, period range right-aligned
-- Dots positioned by percentage, sized 4px, same color coding as slider markers
-- When empty: show "Quiet period — no exceptional moments detected" in `text-mystic-muted text-xs`
-- Clicking a dot in the strip jumps slider to that offset
+The current product cannot make this distinction. It has two states: marker (with a label) and neutral (no label). The rich middle ground — *this is a steady period, not an exciting one, use it for consolidation rather than initiation* — is invisible in the current design.
 
-**Navigation:**
-- "→ Next notable moment" control to the right of or below the slider, appearing only when markers exist ahead
-- Subtle: `text-mystic-gold/50 text-xs font-heading` at rest, `text-mystic-gold` on hover
-
-**Aspect list header:**
-- Append the marker category label when the current position is marked: "Transit Aspects (6) — Power configuration"
-
-**Loading state:**
-- Replace "Computing transits…" with a small animation along the slider track or a phrase that communicates the genuine work being done: "Reading the next 30 days…" or "Calculating your sky…"
-
-**Retrograde section header on station days:**
-- When the marker category is "shift," show "Planetary Shift" as the section title instead of "Retrograde Activity"
+I am not proposing that the system compute this for every quiet period. That is too much. But when the system scores a period as neutral, it could ask a single secondary question: what is the most prominent slow-planet transit present, even at a wider orb, and does it have a general character? If Saturn is transiting in a wide harmonious aspect to several natal planets, the quiet period has a Saturnine quality of consolidation. If Jupiter is prominent even at wider orbs, the quiet period has an expansive texture. A single sentence in the empty-strip state — *"The sky is relatively calm — a period of consolidation and quiet preparation rather than dramatic change"* — is more honest than a technical notice that no exceptions were detected.
 
 ---
 
-The difference between the current Advance tab and the one this sprint should produce is the difference between a map that shows terrain and a map that shows terrain with the significant landmarks named. The roads are the same. The scale is the same. But one tells you where to go, and the other merely shows you that somewhere to go exists.
+## The Shift Marker: The Most Neglected Moment
 
-Make the map say where to go.
+The blue shift marker fires when a planet stations. The reason string it produces:
+
+*"Saturn stations retrograde."*
+
+Three words. Technically correct. Humanly useless.
+
+A planet stationing is one of the most distinctive moments in the transit cycle. When Saturn stations retrograde, it has been moving through a specific degree for weeks, and it will continue to occupy the same degree range for weeks afterward, moving slowly backward over territory it has already crossed. This means whatever Saturn is touching in the natal chart is being held, pressed upon, returned to. It is not a passing contact. It is a sustained examination.
+
+The station moment is when the planet's energy is at its most concentrated. An astrologer would say: Saturn stationing on your natal Mars is not a transit that comes and goes in a few days — it comes, sits, backs away, comes forward again, and only then finally leaves. The station is the moment to pay attention, because what begins here will take months to fully resolve.
+
+None of this is in the current reason string.
+
+More specifically: the reason string does not name what natal planet or house this station falls close to. Saturn stationing at 15° Pisces is abstract information. Saturn stationing on your natal Mars in the 10th house — your ambition, your capacity to assert yourself in your career — is personal information. The station degree is already computed; the closest natal planet is already findable. This one addition turns an abstract notice into a personal message.
+
+*"Saturn stations retrograde, slowing directly over your natal Mars in the 10th house — a sustained period of pressure on how you assert yourself in your career is beginning. This is not one difficult week; it is several months of deepened attention to this area."*
+
+That is a sentence a person can act on. That is something they can prepare for.
+
+---
+
+## The Action Guidance Gap
+
+Every favorable marker says: this is favorable. Every challenging marker says: this is challenging. Neither says: and therefore, what?
+
+Astrology at its most useful is not descriptive. It is navigational. A favorable window is most valuable when the user understands what kinds of action are well-supported by it. A challenging period is most useful when the user knows what posture — patience, directness, inwardness, outward effort — is likely to work better than others in that terrain.
+
+The vision document identifies this gap explicitly: *"favorable windows should include what kind of action is well-supported. Challenging windows should name what is likely to be stressed and what coping posture helps."*
+
+This is not a philosophical aspiration. It is craft. A marker that says "Jupiter opens to your natal Venus in the 5th house" and then stops has missed the most important sentence it could say: *"This is a week well-suited to creative output, expressing affection, and taking pleasure seriously — not just enjoying what comes, but actively seeking what brings you alive."*
+
+A marker that says "Saturn opposes your natal Moon in the 7th house" and stops has missed: *"The pressure this week is on your relationship patterns — specifically, the ways you seek emotional security through others. The invitation here is not to withdraw, but to be more honest about what you actually need from your closest relationships."*
+
+The word "invitation" matters. Challenging transits are not punishments. They are questions the universe is asking. A product that treats them as warnings is failing the user. A product that treats them as invitations — difficult ones, sometimes, but invitations nonetheless — is giving the user something to work with.
+
+---
+
+## What the House System Already Knows
+
+The `houseThemes.ts` file contains 12 house descriptions. They are good descriptions. They are written with care:
+
+*"The 4th house is the foundation of your chart — your home, family lineage, emotional roots, and the private self you show only to those closest to you."*
+
+*"The 8th house governs deep transformation, shared finances, intimacy, and the mysteries of life and death. It reveals how you handle crisis and profound change."*
+
+These are real. They carry genuine meaning. And the scoring engine is not using them.
+
+`buildPowerReason` knows the angle (ASC or MC) but not the houses those angles rule. `buildAspectReason` knows the planet name but not its house. The house context that would turn "Saturn is challenging your Moon" into "Saturn is challenging the emotional foundation of your home and family life" is sitting in the codebase, unused by the scoring layer.
+
+The `computeTransitAspectBrief` function already knows how to use this data for individual aspect rows. It composes sentences like: *"Saturn pressing on your House of Home — [house brief]."* This is the architecture that should flow into the scoring engine. The reason strings in `SnapshotScore` should be composed by the same logic that composes the aspect briefs, not by a separate formula that ignores house context.
+
+The data is already there. The function that knows how to use it is already there. The scoring engine is not connected to it. This is not a philosophical problem. It is a wiring problem. But the wiring decision reflects a deeper assumption: that the marker's reason string is a summary label, not an interpretation. It should be an interpretation. A brief one — the marker is not the full reading — but an interpretation: specific, house-aware, personally relevant.
+
+---
+
+## The Synastry Vocabulary Is Already Human
+
+There is a striking contrast in this codebase between the interpretation quality of the synastry vocabulary and the interpretation quality of the advance scoring.
+
+`synastryAspectBriefs.ts` contains sentences like:
+
+*"one of you carries the light, the other feels it — your sense of self and their emotional world fuse into something neither could name alone."*
+
+*"your emotional rhythms overlap — you instinctively know what the other needs, and the shared undercurrent can feel like coming home."*
+
+*"your core energy and their inner life move with each other — no translation is required, the contact sustains itself."*
+
+These are human sentences. They know what it feels like to be in a relationship. They carry warmth. They are written with the assumption that the reader has a body, has felt something, has experienced the specific quality of emotional resonance being described.
+
+The advance scoring sentences:
+
+*"Saturn opposition your natal Moon — tension around structure and discipline."*
+
+*"Jupiter sextile your natal Venus — a window of expansion and opportunity."*
+
+These are not sentences from the same product. They are sentences from a product that has not yet decided to care about the person reading them.
+
+The interpretation quality in `synastryAspectBriefs.ts` and `synastryHouseOverlayBriefs.ts` represents a standard that the advance scoring should aspire to. Not the same voice — the advance reading addresses one person's future, while synastry addresses the space between two people — but the same commitment to specificity, warmth, and recognition that the reader is a human being who will feel something when they encounter these words.
+
+A power day reason string should carry that quality. Not: *"Saturn reaches your Midheaven — a significant moment for career decisions and public commitments."*
+
+Something more like: *"Saturn is arriving at the highest point in your chart — the moment in your cycle when everything you have been building in your career and public life is being weighed. Not to be found wanting, but to understand what is solid and what still needs work. The next few weeks invite honesty with yourself about where you truly stand in the work that matters most to you."*
+
+That sentence has twice the word count and ten times the meaning. A person reading it knows what they are walking into. They know what the week is asking. They know how to use the information.
+
+---
+
+## The Deeper Failure: Treating Scoring As Classification
+
+The advance scoring engine, in its current form, treats the moment as a classification problem. This snapshot is a power day. That snapshot is challenging. A third snapshot is neutral. The categories are assigned, the labels are appended, the system is complete.
+
+But astrology is not a classification system. It is a language for describing the quality of time. The categories are a scaffold — they help the user orient before they can understand — but the scaffold is not the building.
+
+The building is the answer to: what is this specific person walking into, and what should they know before they get there?
+
+The classification — power, favorable, challenging, shift — is the shape of the answer. The interpretation language is the content. Sprint 0018 built the shape. Sprint 0019 must fill it with content that justifies the shape.
+
+When the user lands on a gold power marker, they have already been told that this moment is significant. The system has done the work of identifying it. The failure is in what the system says after that identification. "A significant moment for career decisions" is not content. It is a category label dressed in complete sentences. Real content would be: what is specifically true about this moment, for this person, in this house, given these concurrent aspects?
+
+The system already knows all of this. The natal house of the Midheaven, the natal planets in close aspect to it, the other transits concurrent with this one, the overall energy score of the snapshot, the direction of the transits (applying or separating) — all of this is computed and available. The reason string builder ignores all of it except the planet name, the aspect type, and the angle name.
+
+This is not a limitation of the data. It is a limitation of the ambition of the reason string builder. The builder is asking: what are the most basic facts about this moment? It should be asking: given everything I know about this person's chart and this moment in time, what is the most important and true thing I can say?
+
+---
+
+## Specific Failures Requiring Attention
+
+**Power day reason strings ignore concurrent aspects.** Saturn reaching the Ascendant during a week when Jupiter also trines natal Venus is a different moment than Saturn reaching the Ascendant in an otherwise quiet sky. The power day reason should name the concurrent supportive or complicating forces, not just the angle contact.
+
+**Challenging and favorable reason strings ignore the natal planet's house.** This is the single largest gap. Every reason string involving a natal planet must name that planet's house and what that house governs. The house data is already in `chartData.planets[i].house`.
+
+**Shift reasons name the planet but not what it is sitting on.** A station that falls within 1° of a natal planet is categorically more significant than one that falls between natal planets. The reason string should detect the nearest natal planet to the station degree and name it.
+
+**No combination awareness.** When two or three aspects of different characters are simultaneously tight and applying, the reason should reflect the combination, not just the tightest single aspect.
+
+**No action guidance.** Every reason string should end — or a second sentence should begin — with what this moment invites. Favorable: what to do. Challenging: what posture to hold.
+
+**No couple advance at all.** The synastry page has no slider. No markers. No preview of what is coming. Two people who care about each other are given no way to see when their relationship's best windows are approaching.
+
+**The empty overview strip message is a technical notice, not an interpretation.** "No exceptional moments detected" is a system message. It should be an astrological observation: what is the quiet period's character, even without dramatic markers?
+
+---
+
+## The Standard to Hold
+
+The `synastryHouseOverlayBriefs.ts` file contains this sentence:
+
+*"Your Sun lands in the most private and protected part of their chart. They feel a warmth in your presence that touches their foundations — something about you feels like home."*
+
+That sentence knows something about human experience. It knows what it feels like to encounter someone who makes you feel at home. It earns the reader's attention by giving them something back in return for it.
+
+The advance scoring reason strings should earn the same right. Not with the same emotional register — the advance reading is about navigating time, not about the texture of love — but with the same specificity, the same awareness that the reader is a person with a life, and the same willingness to say something true rather than something merely correct.
+
+A wise friend who knows astrology does not say: "Saturn opposition your natal Moon — tension around structure and discipline." They say: "The next few weeks are going to be asking something specific from you — there's pressure on how you handle your emotional needs, and Saturn doesn't let you skip the question. It's worth thinking now about where you've been carrying feelings that you haven't fully dealt with. That's what this period is going to bring to the surface."
+
+The first sentence is correct. The second one is useful.
+
+The Advance tab should be useful.
+
+---
+
+*Analysis prepared from the lens of craft, care, and the obligation to honor the weight of what is being described.*

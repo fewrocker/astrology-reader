@@ -27,7 +27,7 @@ interface PlanetPhrases {
   neutral: { applying: string; separating: string }
 }
 
-const TRANSIT_PLANET_PHRASES: Record<string, PlanetPhrases> = {
+export const TRANSIT_PLANET_PHRASES: Record<string, PlanetPhrases> = {
   Sun: {
     harmonious: { applying: 'illuminating',         separating: 'having illuminated' },
     challenging: { applying: 'straining',            separating: 'having strained' },

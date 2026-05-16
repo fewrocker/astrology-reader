@@ -1,10 +1,1 @@
-We can get better in helping the user understand what is coming on the future.
-For the transits daily/weekly/monthly reading, we have the Advance tab command
-The main idea of this sprint is to make sure to mark on the Advance slider the most important days and shifts on the journey of the available advance moments in the slider.
-For daily, understand power days
-For weekly, understand most important weeks
-For monthly, understand most impactful months 
-Maybe we can create different types of markers: Green for very favorable, red for very challenging, blue for power shifts, something line that
-You are free to explore the best ways to deepen the Advance feature, meaning that you can define what is important to bring in the future for attention for the person, how to mark them on the slider.
-The marks on the sliders can even have some animations on them to be more impactful and attention
-Devise how to make it incredible for the user, think about the main usability: anticipating when things are coming on the future or understanding best days, weeks and months to do something specific on their lives, then implement
+On the last sprint we delivered a lot of value around the Advance feature on transits . However it feels like the things it predicts are not very exciting and kind of repeated, in a span of months it found only a few points and they were all of the same reading and not exciting. This time we have to find a way to find the points in the future for daily weekly and monthly they advance that really bring a power combination and explains why it it’s important ! Power weeks and months or challenging weeks and months and days, explain why and what to consider for those moments to be better , something really insightful not just random astrology crossings that doesn’t mean anything to people. Focus on practical meaning not planetary names (ofc mention it but focus on meaning) it should be for both personal charts and synastry charts, and for the synastry it has to be important moments for the couple 
