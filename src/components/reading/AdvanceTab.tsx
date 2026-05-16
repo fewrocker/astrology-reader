@@ -372,7 +372,10 @@ function scoreSnapshot(
 
     let shiftReason = `${stationPlanet} stations ${stationDirection}`
     if (nearestNatal) {
-      shiftReason += `, holding near your natal ${nearestNatal.name} in your ${houseOrdinal(nearestNatal.house)} house`
+      const housePart = !chartData.unknownTime && nearestNatal.house > 0
+        ? ` in your ${houseOrdinal(nearestNatal.house)} house`
+        : ''
+      shiftReason += `, holding near your natal ${nearestNatal.name}${housePart}`
     }
     const retroBrief = stationDirection === 'retrograde'
       ? TRANSIT_RETROGRADE[stationPlanet]?.brief
