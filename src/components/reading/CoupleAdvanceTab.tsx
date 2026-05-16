@@ -41,48 +41,97 @@ const COMPOSITE_PLANET_PHRASES: Partial<Record<string, CompositePlanetPhrase>> =
 
 // ─── Couple-voice reason string builders ─────────────────────────────────────
 
+/** Relationship-native guidance by "${planet}|${nature}". Full entries are task-0006; these are minimal stubs. */
+const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
+  'Saturn|challenging':  'Together, face what needs to be restructured rather than working around it — the patterns you address now build a shared foundation that actually holds.',
+  'Saturn|harmonious':   'Commit together to the structure you have been building — patient, deliberate effort made as a pair produces results that last between you.',
+  'Jupiter|harmonious':  'Say yes together — the window is open and what the two of you initiate or reach for now has genuine momentum behind it.',
+  'Jupiter|challenging': 'Pause before the two of you overcommit — the enthusiasm is real but the picture isn\'t complete yet; investigate before expanding together.',
+  'Pluto|challenging':   'Go toward what is being revealed between you rather than away from it — the transformation is happening regardless, and facing it together reduces the cost.',
+  'Pluto|harmonious':    'Act from the deeper bond that difficulty has revealed — this is a window to integrate shared transformation rather than just survive it.',
+  'Uranus|challenging':  'Stay flexible together and don\'t force the disruption into a predetermined shape — what breaks is creating room for the two of you, even if that isn\'t apparent yet.',
+  'Uranus|harmonious':   'Take the unconventional step together — the window for shared change without penalty is open.',
+  'Neptune|challenging': 'Verify rather than assume between you — clarity in the relationship is harder than usual, and decisions made on feeling alone may need revisiting.',
+  'Neptune|harmonious':  'Make space together for creative and spiritual connection — what arrives through shared imagination and inner listening carries unusual depth.',
+  'Mars|challenging':    'Don\'t let the friction between you escalate — the tension here needs to be worked with together, not overcome by force.',
+  'Mars|harmonious':     'Direct your shared energy toward something concrete — the drive available to both of you benefits from a clear, common target.',
+  'Venus|harmonious':    'Reach toward connection and pleasure together — this is a window for what genuinely brings the two of you alive.',
+  'Venus|challenging':   'Resist resolving tension through accommodation — what needs addressing in the relationship isn\'t going to settle on its own.',
+  'Sun|harmonious':      'Bring your shared intentions into the open — this is a window for mutual visibility and creative expression as a pair.',
+  'Sun|challenging':     'Notice where individual ego investment is creating friction between you — the tension points to something worth examining together.',
+  'Mercury|harmonious':  'Say what you mean to each other clearly and promptly — conversations opened now are easier to navigate together.',
+  'Mercury|challenging': 'Slow down communication with each other — what seems clear to one may not be landing as intended; take extra care.',
+  'Moon|harmonious':     'Trust the emotional attunement between you — the feeling the two of you share about this is more reliable than usual.',
+  'Moon|challenging':    'Give each other space before reacting — the emotional intensity in the relationship is informative but not directive.',
+}
+
 function buildCouplePowerReason(
   planet: string,
   aspectType: AspectType,
   angleKey: 'ASC' | 'MC',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const verb = ASPECT_VERB_BANNER[aspectType] ?? 'reaches'
   const angleName = angleKey === 'ASC' ? "the relationship's Ascendant" : "the relationship's Midheaven"
   const domain = angleKey === 'ASC'
     ? 'a significant crossing for how this bond presents itself to the world'
     : 'a significant moment for how this bond is recognized and defined in the world'
-  return `${planet} ${verb} ${angleName} — ${domain}.`
+  return {
+    reason: `${planet} ${verb} ${angleName} — ${domain}.`,
+    bannerBoldFragment: planet,
+  }
 }
 
 function buildCoupleAspectReason(
   tightest: TransitAspect,
   category: 'favorable' | 'challenging',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const phrases = COMPOSITE_PLANET_PHRASES[tightest.natalPlanet]
   const verb = ASPECT_VERB_BANNER[tightest.type as AspectType] ?? 'contacts'
+  const planet = tightest.transitPlanet
+  const nature = category === 'favorable' ? 'harmonious' : 'challenging'
+  const guidance = COUPLE_ASPECT_GUIDANCE[`${planet}|${nature}`]
 
   if (!phrases) {
     if (category === 'favorable') {
-      return `${tightest.transitPlanet} ${verb} the relationship's ${tightest.natalPlanet} — a favorable window for the bond.`
+      return {
+        reason: `${planet} ${verb} the relationship's ${tightest.natalPlanet} — a favorable window for the bond.`,
+        bannerBoldFragment: planet,
+        guidance,
+      }
     } else {
-      return `${tightest.transitPlanet} ${verb} the relationship's ${tightest.natalPlanet} — tension in the bond's ${tightest.natalPlanet} dimension.`
+      return {
+        reason: `${planet} ${verb} the relationship's ${tightest.natalPlanet} — tension in the bond's ${tightest.natalPlanet} dimension.`,
+        bannerBoldFragment: planet,
+        guidance,
+      }
     }
   }
 
   if (category === 'favorable') {
-    return `${tightest.transitPlanet} ${verb} ${phrases.relationship} — a window when ${phrases.brief} is genuinely supported.`
+    return {
+      reason: `${planet} ${verb} ${phrases.relationship} — a window when ${phrases.brief} is genuinely supported.`,
+      bannerBoldFragment: planet,
+      guidance,
+    }
   } else {
-    return `${tightest.transitPlanet} ${verb} ${phrases.relationship} — ${phrases.brief} is under pressure in this period.`
+    return {
+      reason: `${planet} ${verb} ${phrases.relationship} — ${phrases.brief} is under pressure in this period.`,
+      bannerBoldFragment: planet,
+      guidance,
+    }
   }
 }
 
 function buildCoupleShiftReason(
   planet: string,
   direction: 'retrograde' | 'direct',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const interp = TRANSIT_RETROGRADE[planet]
   const brief = interp?.brief ?? 'a significant dimension of the relationship'
-  return `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`
+  return {
+    reason: `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`,
+    bannerBoldFragment: planet,
+  }
 }
 
 // ─── Couple snapshot scoring ──────────────────────────────────────────────────
@@ -149,13 +198,15 @@ function scoreCoupleSnapshot(
 
     if (bestContact) {
       const intensity = Math.max(0, 1.0 - (bestContact.orb / orbs.angleContact))
-      const reason = buildCouplePowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
+      const { reason, bannerBoldFragment, guidance } = buildCouplePowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
       const coShift = !!stationPlanet
       return {
         category: 'power',
         coShift,
         intensity,
         reason,
+        bannerBoldFragment,
+        guidance,
         shiftPlanet: coShift ? stationPlanet : undefined,
         shiftDirection: coShift ? stationDirection : undefined,
         triggerAspect: {
@@ -190,11 +241,14 @@ function scoreCoupleSnapshot(
       const rawScore = Math.abs(rating.score - 3)
       const intensity = rawScore / 2
 
+      const { reason: aspectReason, bannerBoldFragment: aspectBBF, guidance: aspectGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
       return {
         category: primaryCategory,
         coShift: true,
         intensity,
-        reason: buildCoupleAspectReason(tightest, primaryCategory),
+        reason: aspectReason,
+        bannerBoldFragment: aspectBBF,
+        guidance: aspectGuidance,
         shiftPlanet: stationPlanet,
         shiftDirection: stationDirection,
         triggerAspect: {
@@ -206,11 +260,13 @@ function scoreCoupleSnapshot(
       }
     }
 
+    const { reason: shiftReason, bannerBoldFragment: shiftBBF } = buildCoupleShiftReason(stationPlanet, stationDirection)
     return {
       category: 'shift',
       coShift: false,
       intensity: 0.8,
-      reason: buildCoupleShiftReason(stationPlanet, stationDirection),
+      reason: shiftReason,
+      bannerBoldFragment: shiftBBF,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
@@ -229,11 +285,14 @@ function scoreCoupleSnapshot(
       )[0]
       const intensity = Math.abs(rating.score - 3) / 2
 
+      const { reason: favReason, bannerBoldFragment: favBBF, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
       return {
         category: 'favorable',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'favorable'),
+        reason: favReason,
+        bannerBoldFragment: favBBF,
+        guidance: favGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -257,11 +316,14 @@ function scoreCoupleSnapshot(
       )[0]
       const intensity = Math.abs(rating.score - 3) / 2
 
+      const { reason: chalReason, bannerBoldFragment: chalBBF, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
       return {
         category: 'challenging',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'challenging'),
+        reason: chalReason,
+        bannerBoldFragment: chalBBF,
+        guidance: chalGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -675,18 +737,25 @@ export default function CoupleAdvanceTab({
             {snapshot.score.category === 'challenging' ? '⚠' :
              snapshot.score.category === 'shift' ? '◆' : '✦'}
           </span>
-          <p className={`text-sm ${
-            snapshot.score.category === 'power'
-              ? 'text-mystic-gold/90'
-              : snapshot.score.category === 'favorable'
-                ? 'text-green-400/90'
-                : snapshot.score.category === 'challenging'
-                  ? 'text-red-400/90'
-                  : 'text-blue-400/90'
-          }`}>
-            <span className="font-heading">{categoryBanner.split(' ')[0]}</span>
-            {' ' + categoryBanner.split(' ').slice(1).join(' ')}
-          </p>
+          <div>
+            <p className={`text-sm ${
+              snapshot.score.category === 'power'
+                ? 'text-mystic-gold/90'
+                : snapshot.score.category === 'favorable'
+                  ? 'text-green-400/90'
+                  : snapshot.score.category === 'challenging'
+                    ? 'text-red-400/90'
+                    : 'text-blue-400/90'
+            }`}>
+              <span className="font-heading">{snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]}</span>
+              {' ' + categoryBanner.slice((snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]).length).trimStart()}
+            </p>
+            {snapshot.score.guidance && (
+              <p className="text-xs text-mystic-muted/80 mt-1.5 font-light leading-relaxed">
+                {snapshot.score.guidance}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
