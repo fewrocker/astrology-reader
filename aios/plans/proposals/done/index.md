@@ -1,5 +1,17 @@
 # Done Proposals
 
+## Sprint 0019 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-advance-applying-aspect-accuracy](issue-advance-applying-aspect-accuracy.md) | Issue Fix | merged sprint-0019 |
+| [issue-advance-snapshot-cache-key](issue-advance-snapshot-cache-key.md) | Issue Fix | merged sprint-0019 |
+| [issue-advance-tooltip-overflow](issue-advance-tooltip-overflow.md) | Issue Fix | merged sprint-0019 |
+| [code-advance-category-diversity](code-advance-category-diversity.md) | Code Enhancement | merged sprint-0019 |
+| [code-advance-combination-scoring](code-advance-combination-scoring.md) | Code Enhancement | merged sprint-0019 |
+| [code-advance-house-anchored-interpretation](code-advance-house-anchored-interpretation.md) | Code Enhancement | merged sprint-0019 |
+| [feat-advance-couple-tab](feat-advance-couple-tab.md) | Feature | merged sprint-0019 |
+
 ## Sprint 0018 — Completed
 
 | Proposal | Type | Delivered |
