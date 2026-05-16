@@ -168,10 +168,17 @@ export function calculateTransitAspects(
         const maxOrb = def.orb * orbScale
 
         if (orb <= maxOrb) {
-          // Determine if applying (transit planet moving toward exact aspect)
-          const applying = tp.dailyMotion > 0
-            ? (angle > def.angle ? false : true)
-            : (angle > def.angle ? true : false)
+          // Determine if applying (transit planet moving toward exact aspect).
+          // At station (|dailyMotion| < threshold), direction is unreliable — treat as applying
+          // since a stationing planet is maximally active and the sign of dailyMotion can flip
+          // between consecutive snapshots without the planet having moved appreciably.
+          const stationThreshold = STATION_THRESHOLD[tp.name as PlanetName]
+          const isStationing = stationThreshold !== undefined && Math.abs(tp.dailyMotion) < stationThreshold
+          const applying = isStationing
+            ? true
+            : tp.dailyMotion > 0
+              ? (angle > def.angle ? false : true)
+              : (angle > def.angle ? true : false)
 
           aspects.push({
             transitPlanet: tp.name,

@@ -282,7 +282,7 @@ function scoreSnapshot(
   // ── Priority 2: shift — station crossing (when no power) ─────────────────
   if (stationPlanet && stationDirection) {
     // check if favorable or challenging co-occur
-    const rating = computeEnergyRating(snapshot.transitAspects)
+    const rating = computeEnergyRating(snapshot.transitAspects.filter(a => a.applying))
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
@@ -332,7 +332,7 @@ function scoreSnapshot(
 
   // ── Priority 3: favorable ─────────────────────────────────────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
+    const rating = computeEnergyRating(snapshot.transitAspects.filter(a => a.applying))
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
@@ -360,7 +360,7 @@ function scoreSnapshot(
 
   // ── Priority 4: challenging ───────────────────────────────────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
+    const rating = computeEnergyRating(snapshot.transitAspects.filter(a => a.applying))
     const tightApplyingChallenging = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
