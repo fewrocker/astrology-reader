@@ -34,7 +34,7 @@ export interface SnapshotScore {
   }
 }
 
-interface AdvanceSnapshot {
+export interface AdvanceSnapshot {
   offset: number
   date: Date
   dateStr: string
@@ -45,14 +45,14 @@ interface AdvanceSnapshot {
   score: SnapshotScore     // pre-computed once in preCalculateSnapshots
 }
 
-interface AdvanceConfig {
+export interface AdvanceConfig {
   unit: string
   unitPlural: string
   max: number
   msPerStep: number
 }
 
-const ADVANCE_CONFIG: Record<TransitPeriod, AdvanceConfig> = {
+export const ADVANCE_CONFIG: Record<TransitPeriod, AdvanceConfig> = {
   daily: { unit: 'day', unitPlural: 'days', max: 30, msPerStep: 86400000 },
   weekly: { unit: 'week', unitPlural: 'weeks', max: 52, msPerStep: 7 * 86400000 },
   monthly: { unit: 'month', unitPlural: 'months', max: 36, msPerStep: 30.44 * 86400000 }, // average month
@@ -60,7 +60,7 @@ const ADVANCE_CONFIG: Record<TransitPeriod, AdvanceConfig> = {
 
 // ─── Marker Colors ────────────────────────────────────────────────────────────
 
-const MARKER_COLORS: Record<MarkerCategory, string> = {
+export const MARKER_COLORS: Record<MarkerCategory, string> = {
   power:       '#c9a84c', // mystic-gold
   favorable:   '#34d399', // emerald-400
   challenging: '#f87171', // red-400
@@ -68,7 +68,7 @@ const MARKER_COLORS: Record<MarkerCategory, string> = {
   neutral:     'transparent',
 }
 
-const CATEGORY_LABELS: Record<MarkerCategory, string> = {
+export const CATEGORY_LABELS: Record<MarkerCategory, string> = {
   power:       'Power Day',
   favorable:   'Favorable Window',
   challenging: 'Challenging Period',
@@ -77,7 +77,7 @@ const CATEGORY_LABELS: Record<MarkerCategory, string> = {
 }
 
 /** Halo box-shadow value per category — drives the CSS variable --thumb-halo (task-0005). */
-const CATEGORY_HALO: Record<Exclude<MarkerCategory, 'neutral'>, string> = {
+export const CATEGORY_HALO: Record<Exclude<MarkerCategory, 'neutral'>, string> = {
   power:       '0 0 10px 3px rgba(201,168,76,0.35), 0 0 20px 6px rgba(201,168,76,0.20)',
   favorable:   '0 0 10px 3px rgba(52,211,153,0.35), 0 0 20px 6px rgba(52,211,153,0.20)',
   challenging: '0 0 10px 3px rgba(248,113,113,0.35), 0 0 20px 6px rgba(248,113,113,0.20)',
@@ -86,7 +86,7 @@ const CATEGORY_HALO: Record<Exclude<MarkerCategory, 'neutral'>, string> = {
 
 // ─── Orb Thresholds ──────────────────────────────────────────────────────────
 
-const ORB_THRESHOLDS: Record<TransitPeriod, {
+export const ORB_THRESHOLDS: Record<TransitPeriod, {
   angleContact: number
   applyingTight: number
   energyMinAspects: number
@@ -97,10 +97,10 @@ const ORB_THRESHOLDS: Record<TransitPeriod, {
 }
 
 // Threshold for hysteresis post-processing (spec 14.4)
-const MARKER_HYSTERESIS_ORB = 0.5
+export const MARKER_HYSTERESIS_ORB = 0.5
 
 /** Slow planets for angle-contact trigger (Jupiter excluded intentionally). */
-const SLOW_PLANETS_FOR_BANNER = new Set<PlanetName>(['Saturn', 'Uranus', 'Neptune', 'Pluto'])
+export const SLOW_PLANETS_FOR_BANNER = new Set<PlanetName>(['Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
 /** Planets used in combination-weight scoring — includes Jupiter unlike SLOW_PLANETS_FOR_BANNER. */
 const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
@@ -112,7 +112,7 @@ const COMBINATION_WEIGHT_THRESHOLD = 3.0
 const COMBINATION_WEIGHT_NORMALIZE = 12
 
 /** Verb to use in banner text per aspect type. */
-const ASPECT_VERB_BANNER: Record<AspectType, string> = {
+export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
   conjunction: 'reaches',
   opposition: 'opposes',
   square: 'presses',
@@ -454,7 +454,7 @@ const ANGLE_DOMAIN: Record<'ASC' | 'MC', string> = {
 }
 
 /** Planet weight for identifying the trigger aspect (slow planets outrank fast). */
-const PLANET_WEIGHT: Partial<Record<string, number>> = {
+export const PLANET_WEIGHT: Partial<Record<string, number>> = {
   Pluto: 9, Neptune: 8, Uranus: 7, Saturn: 6, Jupiter: 5,
   Mars: 4, Sun: 3, Venus: 2, Mercury: 2, Moon: 1,
 }
@@ -485,7 +485,7 @@ function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number
  * Check whether a transit planet longitude forms a recognized aspect
  * within the given max orb to an angle longitude.
  */
-function detectAngleContact(
+export function detectAngleContact(
   transitLon: number,
   angleLon: number,
   maxOrb: number,
@@ -964,7 +964,7 @@ function preCalculateSnapshots(
 
 // ─── Priority order for marker comparison ────────────────────────────────────
 
-const CATEGORY_PRIORITY: Record<MarkerCategory, number> = {
+export const CATEGORY_PRIORITY: Record<MarkerCategory, number> = {
   power: 4,
   shift: 3,
   favorable: 2,
@@ -983,7 +983,7 @@ interface MarkerDotProps {
   onMouseLeave: () => void
 }
 
-const MarkerDot = memo(function MarkerDot({
+export const MarkerDot = memo(function MarkerDot({
   marker,
   max,
   active,
@@ -1061,7 +1061,7 @@ const MarkerDot = memo(function MarkerDot({
 
 // ─── OverviewStrip Component ─────────────────────────────────────────────────
 
-interface OverviewStripProps {
+export interface OverviewStripProps {
   markers: AdvanceSnapshot[]
   max: number
   offset: number
@@ -1069,9 +1069,11 @@ interface OverviewStripProps {
   isPending: boolean
   config: AdvanceConfig
   unknownTime: boolean
+  quietMessage?: string
+  unknownTimeAnnotation?: string
 }
 
-function OverviewStrip({
+export function OverviewStrip({
   markers,
   max,
   offset,
@@ -1079,6 +1081,8 @@ function OverviewStrip({
   isPending,
   config,
   unknownTime,
+  quietMessage,
+  unknownTimeAnnotation,
 }: OverviewStripProps) {
   if (isPending) {
     return (
@@ -1136,7 +1140,7 @@ function OverviewStrip({
           })
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-mystic-muted text-xs">Quiet period — no exceptional moments detected</span>
+            <span className="text-mystic-muted text-xs">{quietMessage ?? 'Quiet period — no exceptional moments detected'}</span>
           </div>
         )}
 
@@ -1150,7 +1154,7 @@ function OverviewStrip({
       {/* Unknown time annotation (spec 11.2) */}
       {unknownTime && (
         <p className="text-mystic-muted text-[10px] mt-1">
-          Birth time unknown — angle-contact power days not available
+          {unknownTimeAnnotation ?? 'Birth time unknown — angle-contact power days not available'}
         </p>
       )}
     </div>
@@ -1164,7 +1168,7 @@ interface TooltipProps {
   positionX: number   // percentage 0–100 of slider width
 }
 
-function MarkerTooltip({ marker, positionX }: TooltipProps) {
+export function MarkerTooltip({ marker, positionX }: TooltipProps) {
   const { score } = marker
   const color = MARKER_COLORS[score.category]
   const label = CATEGORY_LABELS[score.category]
