@@ -969,7 +969,7 @@ export function runAdvancePreCalculation<S extends AdvanceSnapshot>(
 
 // ─── Pre-calculator ──────────────────────────────────────────────────────────
 
-function preCalculateSnapshots(
+export function preCalculateSnapshots(
   chartData: ChartData,
   period: TransitPeriod,
   baseDate: Date,
@@ -1263,37 +1263,51 @@ export default function AdvanceTab({
   aspects,
   period,
   baseDate,
+  snapshots: snapshotsProp,
+  isPending: isPendingProp,
 }: {
   chartData: ChartData
   aspects: Aspect[]
   period: TransitPeriod
   baseDate: Date
+  /** Pre-computed snapshots from the parent. When provided, internal computation is skipped. */
+  snapshots?: AdvanceSnapshot[]
+  /** Pending state from the parent's useTransition, passed through when snapshots come from the parent. */
+  isPending?: boolean
 }) {
   const config = ADVANCE_CONFIG[period]
 
   // Snapshot cache (spec 10.5): useRef-based cache keyed by chart identity + period + baseDate.
   // Chart identity is derived from ascendant/midheaven longitudes and unknownTime flag so that
   // switching charts (e.g. couple advance) always misses and recomputes instead of serving stale results.
+  // Only used when the parent has not provided snapshots via prop.
   const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
 
-  // Pre-calculate all snapshots with useTransition so main thread stays responsive
-  const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
-  const [isPending, startTransition] = useTransition()
+  // Internal snapshot state — used only when parent does not supply snapshots via prop.
+  const [internalSnapshots, setInternalSnapshots] = useState<AdvanceSnapshot[]>([])
+  const [internalIsPending, startTransition] = useTransition()
 
   useEffect(() => {
+    // If the parent supplies snapshots we skip internal computation entirely.
+    if (snapshotsProp !== undefined) return
+
     const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
     const cacheKey = `${chartKey}:${period}:${baseDate.toISOString()}`
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
-      setSnapshots(cached)
+      setInternalSnapshots(cached)
       return
     }
     startTransition(() => {
       const computed = preCalculateSnapshots(chartData, period, baseDate)
       snapshotCache.current.set(cacheKey, computed)
-      setSnapshots(computed)
+      setInternalSnapshots(computed)
     })
-  }, [chartData, period, baseDate])
+  }, [chartData, period, baseDate, snapshotsProp])
+
+  // Use parent-provided snapshots when available, else fall back to internal state.
+  const snapshots = snapshotsProp ?? internalSnapshots
+  const isPending = snapshotsProp !== undefined ? (isPendingProp ?? false) : internalIsPending
 
   const [offset, setOffset] = useState(0)
 

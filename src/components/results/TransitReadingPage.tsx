@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useTransition } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
 import { assignTransitHouses, buildTransitPrompt } from '../../engine/transits'
@@ -16,6 +16,8 @@ import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
+import type { AdvanceSnapshot, MarkerCategory } from '../reading/AdvanceTab'
+import { preCalculateSnapshots } from '../reading/AdvanceTab'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
@@ -232,6 +234,41 @@ export default function TransitReadingPage() {
     [chartData, transitPeriod, state.transitTargetMonth]
   )
 
+  // ── Lifted snapshot state (shared between AdvanceTab and TransitTimeline) ───
+  // The snapshot cache lives here so that snapshots computed when the user visits
+  // the Advance tab are available to the Timeline tab without recomputation.
+  // The Timeline only consumes the derived scoreByDate map — it never triggers its
+  // own snapshot computation. First-time Timeline viewers whose session has not yet
+  // activated the Advance tab will see the event-count heuristic as a graceful fallback.
+  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const [advanceSnapshots, setAdvanceSnapshots] = useState<AdvanceSnapshot[]>([])
+  const [advanceIsPending, startAdvanceTransition] = useTransition()
+
+  useEffect(() => {
+    if (!chartData || !transitPeriod || !transitData) return
+    const baseDate = new Date(transitData.dateRange.start + 'T12:00:00')
+    const cacheKey = `${transitPeriod}:${baseDate.toISOString()}:${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const cached = snapshotCache.current.get(cacheKey)
+    if (cached) {
+      setAdvanceSnapshots(cached)
+      return
+    }
+    startAdvanceTransition(() => {
+      const computed = preCalculateSnapshots(chartData, transitPeriod, baseDate)
+      snapshotCache.current.set(cacheKey, computed)
+      setAdvanceSnapshots(computed)
+    })
+  }, [chartData, transitPeriod, transitData])
+
+  // Derive a date→category map from non-neutral snapshots for the Timeline to consume.
+  const scoreByDate = useMemo(() => {
+    const m = new Map<string, MarkerCategory>()
+    for (const s of advanceSnapshots) {
+      if (s.score.category !== 'neutral') m.set(s.dateStr, s.score.category)
+    }
+    return m
+  }, [advanceSnapshots])
+
   if (!chartData || !transitData || !transitPeriod) return null
 
   const cityLabel = birthData.city ? `${birthData.city.name}, ${birthData.city.country}` : ''
@@ -358,7 +395,7 @@ export default function TransitReadingPage() {
           <p className="text-mystic-muted text-sm mb-6">
             Key astrological events for your {transitPeriod} period — when each transit perfects, planets change signs, and lunar phases occur.
           </p>
-          <TransitTimeline days={timelineDays} />
+          <TransitTimeline days={timelineDays} scoreByDate={scoreByDate.size > 0 ? scoreByDate : undefined} />
         </div>
       )}
 
@@ -370,6 +407,8 @@ export default function TransitReadingPage() {
             aspects={aspects}
             period={transitPeriod}
             baseDate={new Date(transitData.dateRange.start + 'T12:00:00')}
+            snapshots={advanceSnapshots.length > 0 ? advanceSnapshots : undefined}
+            isPending={advanceIsPending}
           />
         </div>
       )}
