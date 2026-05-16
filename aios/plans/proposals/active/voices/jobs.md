@@ -1,255 +1,169 @@
-# Steve Jobs: Sprint 0019 — The System Knows. Now Make It Mean Something.
+# Steve Jobs: Sprint 0020 — Finish What You Started, Then Go One Floor Higher
 
 ---
 
 ## Where We Are
 
-Sprint 0018 shipped everything I asked for. The marker dots breathe on the slider track. The overview strip gives the bird's-eye view. The click-to-jump navigation works. The architecture is sound — `SnapshotScore` is a first-class type, stored with snapshots, never recomputed on drag.
+Sprint 0019 delivered everything I asked for. The combination scoring is real. The reason strings have houses. The guidance field exists. The couple advance tab exists. Category diversity is enforced. The cache is fingerprinted.
 
-But then I actually used it.
+I opened `CoupleAdvanceTab` and read it front to back. Here is what I found:
 
-I looked at a 36-month monthly strip and saw two markers. Both green. Both labeled "Favorable Window." Both with the same kind of sentence: "Saturn trine your natal Venus — a window of structure and discipline." That is not a window description. That is a Wikipedia entry. Two markers across three years of someone's life, and both say the same thing in slightly different words.
+The couple advance tab is 807 lines of carefully written code. The scoring logic in `scoreCoupleSnapshot()` (lines 90–276) is architecturally sound and uses relational language throughout. The `COMPOSITE_PLANET_PHRASES` map names things like "the relationship's romantic axis" and "the bond's structures and commitments." This is real work and it shows.
 
-The infrastructure is now a beautiful frame around a painting that isn't finished. Sprint 0019 is about painting.
+But there are two things that make it visibly unfinished.
 
----
+First: the banner renders `categoryBanner.split(' ')[0]` as bold (line 678). Not `bannerBoldFragment`. The `SnapshotScore` type has had `bannerBoldFragment` since sprint-0019. The individual `AdvanceTab` uses it correctly at line 1514. The couple tab never sets it in any of its three builder functions — `buildCouplePowerReason`, `buildCoupleAspectReason`, `buildCoupleShiftReason` — and never uses it in the banner render. So the couple banner bolds the first word of any sentence. A reason like "Saturn reaches the relationship's Ascendant" correctly bolds "Saturn." A reason like "Jupiter flows through the relationship's romantic axis" bolds "Jupiter." But a reason like "the relationship's drive and desire is under pressure" bolds "the." That is not acceptable.
 
-## The Fundamental Problem
+Second: there is no `guidance` field. The individual advance tab's banner has two paragraphs — the reason sentence and the guidance sentence. The guidance is what transforms the banner from an observation into a prompt. "Face the pattern directly rather than managing around it — what gets restructured now builds a foundation that actually holds." That second paragraph is what makes the user feel the product is talking *to* them. The couple advance banner has only the reason sentence. It stops where the individual advance continues.
 
-The scoring engine in `scoreSnapshot()` (lines 202–390 of `src/components/reading/AdvanceTab.tsx`) treats every aspect as if it exists in isolation. It looks at the single tightest applying aspect and uses that to define the entire moment. It ignores what else is happening simultaneously. It has no concept of combinations.
-
-This is like diagnosing someone's health by looking at their temperature and ignoring everything else in their chart. Technically you measured something. But you missed the patient.
-
-Real astrological power moments happen when things stack. Jupiter trining natal Venus is pleasant. Jupiter trining natal Venus *while* the Sun conjuncts natal Jupiter *while* both are in the 5th house — that is a week when a romance could start that changes someone's life. The current system cannot tell the difference between these two situations. It calls both "favorable" and writes a single-planet sentence.
-
-The reason string from `buildAspectReason()` (lines 175–196) confirms the problem. It reads: "Saturn trine your natal Moon — a window of structure and discipline." Three failures in one sentence:
-
-1. It doesn't say what house natal Moon is in, so "natal Moon" is abstract.
-2. "Structure and discipline" is Saturn's archetype label, not what this transit *feels like* in a human life.
-3. There is no guidance on what to do with this window.
-
-The vision document calls the quality bar correctly: could a thoughtful astrologer friend read this aloud and have it feel personally relevant? The current output fails that test every time.
+These two gaps are not cosmetic. They represent the couple advance tab being structurally one feature version behind its individual counterpart. That gap must close in sprint 0020 before anything else.
 
 ---
 
-## What Is Mediocre That Should Be Delightful
+## What Is Underwhelming Today vs. What It Should Feel Like
 
-### The Reason String Is a Label, Not an Insight
+### The Solar Return Page Has No Forward Motion
 
-Right now, `buildAspectReason()` at line 175 does this:
+Go to `SolarReturnPage.tsx`. Two tabs: Reading and Chart. The reading tab shows `KeyPlacements`, `SRStaticBriefs`, and the GPT interpretation. The chart tab shows the bi-wheel and a planet table.
 
-```typescript
-return `${planet} ${type} your natal ${natalPlanet} — tension around ${domain}.`
-```
+That is everything. The page presents the Solar Return chart as a static picture of the year. It does not answer the most urgent question anyone reading a Solar Return has: "Which months of this year are going to matter most?"
 
-"Tension around structure and discipline." That is a filing system entry, not a human experience.
+The SR chart has a known start date — the solar return moment is already computed in `solarReturnData.srMoment`. The year has a known end date — the next birthday. The SR chart is a `ChartData` object with planets, angles, and houses. The `preCalculateSnapshots` function already exists in `AdvanceTab.tsx` and accepts any `ChartData`. The density cap, category diversity, marker system, and Prev/Next navigation are all already built.
 
-What does Saturn opposing natal Moon feel like over three weeks? It feels like an emotional pattern you've relied on your whole life is being put under a pressure test. Old ways of seeking comfort — isolation, food, overwork, whatever the pattern is — stop working. You feel a gap between how you *need* to feel and how you *are* feeling, and you cannot close it by doing what you always do. That is the experience. That is what the reason string should describe.
+The Solar Return page right now is a weather report that tells you the climate for the year but never tells you which days are going to rain. "SR Sun in House 5 — a year focused on creativity and self-expression." Fine. But when in this year? Which months are the creative peaks? Which months has the SR chart loaded with challenging pressure? The user has no way to find out.
 
-The fix is not to make the strings longer — it's to make them *accurate*. A tight sentence that names the actual life experience is worth five sentences of planetary vocabulary. "An emotional pattern you have leaned on is being tested this week — what you usually reach for for comfort won't settle it" is better than "Saturn opposition your natal Moon — tension around structure and discipline."
+The advance strip for the SR year — running `preCalculateSnapshots` against the SR chart from the SR date through 12 monthly steps — answers this question in a single bar of colored dots. It reuses every piece of infrastructure this team has spent five sprints building. It gives the Solar Return page genuine forward motion. It transforms a static document into a navigable map of the year.
 
-The `computeTransitAspectBrief()` function in `src/data/interpretations/transitAspectBriefs.ts` already generates house-contextualized briefs for the aspect rows. The `scoreSnapshot` function reinvents this from scratch with less context and worse results. These two systems should converge. The reason string in `SnapshotScore` should draw from the same data structures that feed the transit aspect rows — the `TRANSIT_PLANET_PHRASES`, `HOUSE_THEMES`, and `getPlanetInHouseInterpretation()` are all in place. The scoring engine just refuses to use them.
+The vision document describes this correctly as "high-leverage." I would put it more plainly: it is the feature that makes the Solar Return page feel worth going to. Right now, most users look at it once and don't return. There is nothing actionable in a static year reading. A strip showing which months carry the year's most significant astrological weight — and Prev/Next navigation to jump between them — is the reason someone saves the page and comes back.
 
-### Single-Aspect Scoring Misses All the Interesting Moments
+### The Couple Scoring Uses Inferior Criteria
 
-The favorable and challenging categories in `scoreSnapshot()` (lines 334–390) both work identically: find the tightest applying aspect from the highest-weight planet, write a sentence about it, return.
+`scoreCoupleSnapshot()` in `CoupleAdvanceTab.tsx` evaluates Priorities 3 and 4 (favorable and challenging) using `computeEnergyRating()` plus a raw score gate. Priority 2 (shift co-occur with favorable/challenging) also uses `computeEnergyRating`. This is the pre-sprint-0019 approach.
 
-This means the system is structurally blind to the moments that actually matter most — the ones where multiple signals converge. A transit week where:
-- Jupiter trines natal Venus in the 5th (romance, creativity opening up)
-- Venus trines natal Jupiter (amplifying that signal)
-- The Sun conjuncts natal Moon in the 7th (emotional connection with a partner)
+The individual `AdvanceTab` replaced all of this with `computeCombinedWeight` in sprint-0019. The combined weight model is architecturally better: it sums `PLANET_WEIGHT × (1 − orb/maxOrb)` across all tight applying aspects, applies a slow-planet threshold to distinguish Jupiter+Saturn constellations from Mercury+Mars noise, and derives intensity from the weighted sum rather than from a raw energy score.
 
-...scores identically to a week where only Jupiter trines natal Venus at a wider orb with nothing else notable happening. The second week is a pleasant planetary moment. The first week is when someone falls in love. The system cannot tell the difference.
+The couple tab never got this upgrade. It still fires favorable and challenging markers on weak criteria — the old `rating.score >= 4` gate does not distinguish between a Jupiter-Saturn double that should fire and a Venus-Mercury pair that should not. The couple strip will surface more noise and suppress more signal than the individual strip for the same time window. That is a quality regression in the couple tab relative to what users already experience in individual advance.
 
-The vision document at lines 54–58 of `sprint-0019/vision.md` is precise about this: "a 'power' or 'challenging' moment must be identified by evaluating the *constellation* of concurrent aspects, not just the single tightest one."
+The fix is already documented in the vision: port `computeCombinedWeight` into `scoreCoupleSnapshot` Priorities 2–4, replacing the `computeEnergyRating` gate. The function is exported-compatible in `AdvanceTab.tsx`. This is the kind of fix that takes a few hours and makes the couple strip meaningfully more accurate.
 
-The fix requires a combination scoring pass. When two or more tight applying aspects involve personal natal planets across different life houses, that is a qualitatively different moment than any single aspect. The score should reflect the stack, and the reason should describe the combination — not one planet's role, but the confluence.
+### The Synastry Axis Is Invisible to the Scorer
 
-### The House Is Right There and the System Ignores It
+The composite chart captures the relationship as a midpoint entity. The synastry grid captures the actual interactions between two individual people. When transit Saturn crosses the degree of a tight Venus-Mars synastry conjunction — where person A's Venus and person B's Mars are locked at close orb — that transit is touching one of the relationship's most sensitive live wires. It is categorically more significant than Saturn merely crossing a composite planet at the same degree.
 
-Every `TransitAspect` in the snapshot already carries `natalHouse`. The `HOUSE_THEMES` data in `src/data/interpretations/houseThemes.ts` maps house numbers to plain English life areas. The infrastructure for house-anchored language exists everywhere in this codebase — it just doesn't flow into `scoreSnapshot()`.
+`scoreCoupleSnapshot` evaluates transits against composite chart positions only. It ignores `synastryData.synastryAspects` entirely. The synastry data is already passed into the function signature (line 93: `synastryData: SynastryData`) but the only thing pulled from it is the composite chart and angles (lines 123–128). The entire synastry aspect grid sits unused.
 
-When Saturn challenges natal Mars in the 10th house (career zone), the correct message is: "Pressure on your career and public ambitions — the work you've been doing is being evaluated, and the evaluation may feel harsh before it feels constructive." When Saturn challenges natal Mars in the 7th house (partnership zone), the correct message is: "Friction in close relationships — a partner may push back in ways that feel structural and non-negotiable."
+This means the couple advance strip can score a transit as "favorable" when Jupiter crosses composite Venus, while being completely blind to the fact that this transit is simultaneously sitting on a tight Venus-Mars synastry axis — which would make this not just a "favorable window" but one of the year's most significant moments for this specific couple's dynamic.
 
-Same aspect. Completely different life experience. The current system says "tension around drive and assertion" for both and calls it done.
+The vision document proposes a correct and tight scope for the fix: if a transiting slow planet is within `angleContact` orb of a synastry aspect's midpoint degree AND that synastry aspect has orb ≤ 2.0°, augment the intensity and append a relationship-specific reason suffix naming which cross-chart planetary axis is being activated. This is architecturally additive — it does not rebuild the scoring ladder, it adds a check that increases signal clarity.
 
-Every reason string that involves a natal planet must name the house that planet occupies and say, in plain English, what that house governs. Not "your natal Mars" — "your Mars in your 10th house (career and public reputation)." This is not decorative. It is the difference between astrology that describes something specific about this person and astrology that describes something true of everyone with Saturn-Mars aspects.
+This is the feature that makes the couple advance strip feel specific to this particular couple. Right now, two different couples with different synastry patterns but similar composite charts will see nearly identical advance strips. That is wrong. The synastry axis activation is what makes one couple's favorable window in June different from another couple's favorable window in June. It names the actual relational territory being activated, not just the composite chart echo.
 
-### The Action Guidance Is Missing Everywhere
+### The Timeline Says "Power Day" Without Knowing What the Engine Knows
 
-The vision document identifies this explicitly: "favorable windows should include what kind of action is well-supported. Challenging windows should name what is likely to be stressed and what coping posture helps."
+Open `TransitTimeline.tsx`. The `isPowerDay` flag on a `TimelineDay` is computed in the timeline engine based on event count clustering — three or more events on the same day. It is independent of the `SnapshotScore` system entirely.
 
-Not one single reason string in the current system tells the user what to *do*.
+Open `AdvanceTab.tsx`. The advance strip has pre-computed `SnapshotScore` objects for every snapshot. Some snapshots are `power`. Some are `challenging`. These are computed from actual aspect weight combinations, slow-planet constellations, and angle contacts.
 
-"Jupiter trine your natal Venus — a window of expansion and opportunity." Okay. What do I do with this? Do I ask someone out? Launch something? Send the proposal? Call the person I've been avoiding?
+These two systems operate in parallel with no connection. A date that the advance engine scores as `power` (Saturn reaching the Ascendant, high intensity) may or may not be labeled "Power Day" in the Timeline, depending solely on whether three events happen to cluster there. A date the Timeline labels "Power Day" (three minor transit events clustering) may score as `neutral` in the advance engine.
 
-The answer is yes. But the product doesn't say so. And for a challenging period: "Saturn opposition your natal Moon — tension around structure and discipline." What do I do? Avoid big decisions? Double down on routine? Give myself more space? The product knows the answer — the planetary combination has a posture — but it whispers nothing.
+The user sees both systems on the same reading page. When the advance strip says "Power Day" and the timeline also says "Power Day" for the same date but for different reasons, the user has no reason to distrust either. When the advance strip says "Power Day" but the timeline is silent about it, or vice versa, the user gets a coherent but inaccurate picture. The incoherence is invisible and therefore more damaging than a visible contradiction.
 
-Adding action guidance to the reason strings (or, better, to an extended `brief` field on `SnapshotScore`) is the difference between astrology as a curiosity and astrology as a practical tool. The sprint vision is correct: people showing up to this product are asking "what should I pay attention to, and what should I consider doing?" The current output answers neither.
+The fix is to thread advance scores into the timeline rendering. The snapshots are pre-computed and indexed by date. When `DaySection` renders a date, a lookup into the pre-computed snapshot array for that date's score would let the timeline surface the actual astrological character of the day — "Power Configuration" or "Favorable Window" or "Challenging Period" — rather than the event-count heuristic. The implementation cost is low: the snapshots are available at the transit reading level, where the Timeline component is rendered.
 
 ---
 
-## What Is Missing That Would Make Someone Love This
+## What Is the Most Impactful Thing to Ship Next
 
-### Couple Advance Does Not Exist at All
+The question answers itself if you look at it from the user's actual journey.
 
-Look at `src/components/results/SynastryTransitPage.tsx`. Seventy-five lines of GPT interpretation rendering, a transit aspects table, a planet positions table, navigation buttons. No slider. No advance tab. No way to look ahead.
+A user opens a Solar Return reading. They see the year-ahead reading, the key placements, the bi-wheel chart. They read the GPT interpretation. And then what? They have no way to look ahead across the year. No way to know which months matter. No way to plan. They close the page.
 
-For a couple using this product, the most emotionally compelling question is not "what do my transits look like right now?" It is "when is a good week for us?" When is the couple's emotional connection amplified? When might we be under pressure? Is next month a good time to have the conversation we've been avoiding?
+If the Solar Return page had a "Peak Moments This Solar Year" strip — twelve dots across the SR year, colored by advance category, with Prev/Next navigation to jump to the meaningful months — that user would do something different. They would navigate the strip. They would find the gold dot in October and ask "what is October?" and find out Saturn is sitting on the SR Ascendant that month. They would share that with someone.
 
-None of this is answerable from the current synastry transit page. The individual advance tab doesn't even appear in the synastry context. The `SynastryData` already contains the composite chart, synastry aspects, and house overlays — all the raw material to build a couple advance scoring system. The problem is no one built the coupling layer.
+That experience is available at minimal implementation cost because `preCalculateSnapshots` already works with any `ChartData`. The SR chart is a `ChartData` object. The infrastructure for 12-step monthly advance from a known start date, the marker rendering, the overview strip, the Prev/Next controls — all of it exists. This is the highest-leverage improvement available in this sprint because the effort is low and the experience lift is high.
 
-The vision is precise about what couple advance scoring should evaluate: not just "is transit Jupiter harmonious to composite Moon" but whether the composite chart's relationship planets are simultaneously activated, whether the transit also triggers synastry aspects between the two people's charts. "This week Jupiter transits your composite Venus while also hitting the Venus-Mars synastry axis — favorable for romance, connection, shared pleasure."
-
-This is the feature that makes someone show the app to their partner. "Look at this — it found us a good week." That is a real human moment. That is the kind of product experience people describe to their friends. The individual advance tab is useful. The couple advance tab is where the product becomes something people talk about.
-
-### Variety Enforcement Across the Timeline
-
-The vision document identifies the density cap problem at lines 56–57: the 20% cap should not force five green markers when there's also one red and one gold. The current implementation applies the cap by intensity alone — it keeps the highest-intensity markers regardless of category. So if someone's chart happens to produce seven favorable windows and two challenging periods across 36 months, all seven favorable windows outrank both challenging periods and the cap will sometimes surface only green markers.
-
-The result is a strip that looks like a single-note song. Everything favorable, or everything challenging, or — most commonly — everything neutral with two green dots. The markers communicate less when they all share the same color than when the strip shows a mix of moments with different characters.
-
-The fix is to enforce category diversity in the density pass. Before applying the intensity sort, ensure the cap tries to include at least one marker per non-neutral category present in the full scored set. If the chart produces at least one power marker, at least one challenging marker, and several favorable markers, the final visible set should represent all three categories even if some individual favorable markers are cut.
-
-### The Shift Category Remains Underused and Underexplained
-
-The "shift" category (blue diamond, planetary station) appears perhaps once in a 36-month monthly view — if at all. When it does appear, the reason string says: "Saturn stations retrograde." That is a fact. It is not an experience.
-
-A planetary station is one of the most palpable astrological events in everyday life for people who pay attention to these things. When Saturn stations, decisions that have been moving forward suddenly seem to stall. When Mars stations direct, energy that has felt blocked releases. When Mercury stations retrograde, communication that seemed clear suddenly needs revisiting.
-
-The shift category has rich interpretive territory and the `TRANSIT_RETROGRADE` data in `src/data/interpretations/retrogrades.ts` already exists to support it — but it's only being used in the retrograde activity section at the bottom of the advance tab, not in the `reason` field of the `SnapshotScore` for shift markers. The station marker tooltip should not say "Saturn stations retrograde." It should say something like: "Saturn slows to a stop and reverses — decisions and commitments that have been moving forward are asking to be reconsidered. The next four to six weeks are not the time to finalize anything long-term."
+The `guidance` and `bannerBoldFragment` gap in the couple tab is the second most impactful because it is the most visible quality regression — users who experience both individual and couple advance will notice the couple advance feels less finished. That gap closes first in sequence because it is a pre-condition for the couple advance tab feeling production-ready.
 
 ---
 
-## Specific Proposals
+## Where Are the Moments That Make Someone Tell a Friend
 
-### P1: Combination Scoring in `scoreSnapshot()`
+There are exactly two moments in this product where a user will say "you need to see this."
 
-**File:** `src/components/reading/AdvanceTab.tsx`, the `scoreSnapshot()` function (lines 202–390)
+The first is when they find a marker on the advance strip and read a banner that describes their life accurately. "Saturn pressing your Moon in your 4th house — an emotional pattern you've relied on for stability is being tested this month." If someone is going through something difficult and they see that, and it names what they've been feeling without them having to explain it — they screenshot it. They send it to someone. That already exists in the individual advance tab, and sprint-0019 made it much better.
 
-The function currently evaluates conditions in strict priority order and returns on the first match. That architecture must change to a scoring model before returning.
+The second is when two people look at the couple advance strip together. "Look at this week in November — it's a power marker." What does it say? "Jupiter reaches the relationship's Midheaven — a significant moment for how this bond is recognized and defined in the world. A window for shared ambition, for making a public commitment, for a step the relationship has been building toward." If a couple has been thinking about moving in together or getting engaged, and the app says a specific month is astrologically supported for exactly that kind of step — they will remember that moment. They will tell people about it.
 
-The new approach: collect all signals present in the snapshot into a weighted score, then determine category from the combination. Specifically:
+That moment is dependent on the synastry axis augmentation being in place. Without it, the couple strip is just transits to the composite chart. With it, the couple strip can say "this month Jupiter reaches the relationship's Midheaven AND activates the Venus-Mars axis in your synastry" — and that specificity is what makes the moment feel found rather than generated. The couple will feel the app knows something about their relationship that a generic astrology app does not.
 
-After detecting angle contact (power) and stations (shift), evaluate the full constellation of tight applying aspects. Count how many distinct natal houses are activated. If two or more personal natal planets (Sun, Moon, Mercury, Venus, Mars) are activated simultaneously by tight harmonious aspects, the favorable score escalates. If two or more are activated by challenging aspects, the challenging score escalates. The combination multiplier should drive both intensity and the reason string.
-
-A snapshot with Jupiter trining natal Venus (5th house, pleasure and romance) AND Venus trining natal Jupiter (9th house, meaning and growth) should produce:
-- Category: favorable
-- Intensity: 0.9 (combination)
-- Reason: "Two planets amplify your capacity for joy this week — your 5th house (creativity and romance) and 9th house (meaning and adventure) are both opening. This is a window for pursuing connection, creative work, or an experience that expands how you see yourself."
-
-The reason string for combinations should lead with the life experience (what is opening/closing) before naming the planets. The planets are the *why*, not the *what*.
-
-### P2: House-Anchored Reason Strings
-
-**File:** `src/components/reading/AdvanceTab.tsx`, `buildAspectReason()` (lines 175–196) and `buildPowerReason()` (lines 161–170)
-
-Both functions must be rebuilt to incorporate house context. The `buildAspectReason` function receives a `TransitAspect` which already has `natalHouse`. The `HOUSE_THEMES` data is importable from `src/data/interpretations/houseThemes.ts`.
-
-New pattern for reason strings:
-
-```
-{transit planet} {action phrase} your {natal planet} in your {house number} house ({house theme in plain English}) — {what this combination means in life terms}.
-```
-
-Example output:
-- Before: "Saturn opposition your natal Moon — tension around structure and discipline."
-- After: "Saturn presses your Moon in your 4th house (home and family foundations) — an emotional pattern that has been stable is being tested. What you reach for when you need comfort may not settle the discomfort this time."
-
-The `computeTransitAspectBrief()` function in `transitAspectBriefs.ts` is already doing this work for the aspect rows. The scoring engine should call into the same infrastructure rather than maintaining a separate, inferior string-building system. The duplication between `buildAspectReason` and `computeTransitAspectBrief` is an architectural error that needs to be resolved this sprint.
-
-### P3: Action Guidance Field on `SnapshotScore`
-
-**File:** `src/components/reading/AdvanceTab.tsx`, `SnapshotScore` interface (lines 19–32)
-
-Add an optional `guidance` field:
-
-```typescript
-export interface SnapshotScore {
-  category: MarkerCategory
-  coShift: boolean
-  intensity: number
-  reason: string       // one-line human sentence (unchanged)
-  guidance?: string    // what to consider doing or watching for (new)
-  shiftPlanet?: string
-  shiftDirection?: 'retrograde' | 'direct'
-  triggerAspect?: { ... }
-}
-```
-
-The `guidance` field populates in the banner (the existing `categoryBanner` block at lines 1019–1054) as a second paragraph below the `reason`. It is never shown in the tooltip (too small) — only in the expanded banner when the user has navigated to this position.
-
-Favorable guidance examples by trigger planet:
-- Jupiter: "This is a window for initiating — reaching out, making an ask, starting something new. The energy supports expansion rather than consolidation."
-- Venus: "Prioritize beauty, connection, and what brings you genuine pleasure. This is not a time for discipline; it is a time for receiving what the relationship or the creative work has been offering."
-
-Challenging guidance examples:
-- Saturn challenging personal planets: "This period rewards facing what you have been avoiding. Trying to go around the difficulty will extend it. The pressure eases when you meet it directly."
-- Pluto challenging personal planets: "Something is completing a transformation that has been underway longer than you may realize. Resistance makes it harder; allowing the release makes it cleaner."
-
-### P4: Couple Advance Tab on `SynastryTransitPage`
-
-**File:** `src/components/results/SynastryTransitPage.tsx` (lines 95–183)
-
-Add an "Advance" tab to the synastry transit page, parallel to the individual transit reading's advance tab structure. The couple advance tab needs its own scoring logic that evaluates:
-
-1. Transits to the composite chart's relationship-sensitive planets (composite Venus, composite Moon, composite Sun, composite 7th house cusp)
-2. Whether the transit simultaneously activates synastry aspects between the two individuals — the axis between person A's Venus and person B's Mars, for example
-
-The composite chart is already available in `SynastryData`. The synastry aspects are already computed. The transit aspects to the composite chart are already in `synastryTransitData.transitAspects`.
-
-A new function — `scoreCoupleSnapshot()` — evaluates the composite chart activation in combination with synastry axis activation and returns a `SnapshotScore` using couple-voice reason strings. The reason string voice changes from "your natal Moon" to "the relationship's emotional center" or "the bond's Venus-Mars axis."
-
-The couple advance reason strings should specifically name what the couple is experiencing, not what the planets are doing. "Jupiter amplifies your shared emotional world this week — the relationship's capacity for joy and growth is lit up. This is a good week for shared experiences, for travel together, for conversations about what you both want." That is a couple advance reason string. It answers the question couples actually bring to this product.
-
-### P5: Category Diversity in the Density Cap
-
-**File:** `src/components/reading/AdvanceTab.tsx`, the density cap post-processing pass (lines 492–509)
-
-The current cap sorts by intensity and keeps the top N markers regardless of category. Replace with a two-phase selection:
-
-Phase 1: Reserve one slot for each non-neutral category that has at least one marker. Power takes its highest-intensity marker. Favorable takes its highest. Challenging takes its highest. Shift takes its highest.
-
-Phase 2: Fill remaining slots (up to the 20% cap) by intensity across all remaining markers regardless of category.
-
-This guarantees that if the chart produces at least one challenging marker and at least one power marker, both will appear in the final strip even if they are outnumbered by favorable markers. The timeline strip will tell a more complete story of the period because it will represent the full range of astrological character present — not just the most numerous category.
-
-### P6: Richer Shift Marker Reason Strings
-
-**File:** `src/components/reading/AdvanceTab.tsx`, the shift branch of `scoreSnapshot()` (lines 283–331)
-
-The current pure shift reason: `"${stationPlanet} stations ${stationDirection}."`
-
-This is the astrological fact. It is not the human experience. The `TRANSIT_RETROGRADE` data in `src/data/interpretations/retrogrades.ts` already has `brief` strings per planet for retrograde activity. Those briefs should flow directly into the shift marker reason string, adapted for the station direction.
-
-New shift reason template: `"${planet} is slowing to a station — ${stationBrief}. The next several weeks carry ${planet}'s themes in a more deliberate, introspective key."`
-
-The `guidance` field for a shift marker should note what station periods are historically used for: Mercury retrograde for review and revision, Saturn retrograde for reconsidering commitments, Jupiter retrograde for internal growth rather than external expansion.
+The Solar Return strip creates a third category of shareable moment: "look at this, it found the hardest month of my year." Finding a challenging marker in a specific SR month and reading a reason string that names what is under pressure during that period — and then looking back and recognizing it was accurate — is the moment that converts a one-time user into someone who comes back every year.
 
 ---
 
-## What Must Not Happen
+## On the Four Candidate Areas
 
-Do not add more planetary vocabulary in the reason strings without adding human meaning. Every new adjective that describes a planet ("transformative," "expansive," "disciplining") without describing what the human will experience is a step backward. The sprint's entire value depends on moving from planetary description to life description.
+### Area 1: `guidance` field on `CoupleAdvanceTab` — Must ship, no question
 
-Do not make the couple advance a copy-paste of the individual advance with "the relationship's" substituted for "your." The composite chart activation and the synastry axis activation are different data structures than the individual natal chart activation. Couple advance scoring must be built for the composite context, not retrofitted from individual logic.
+The banner in `CoupleAdvanceTab.tsx` at lines 648–682 renders `categoryBanner.split(' ')[0]` as bold and nothing else. The `AdvanceTab` banner at line 1514 uses `bannerBoldFragment` and renders a second paragraph for `guidance`. The gap is visible. Fix it as described in the vision — add `guidance?: string` returns to the three builder functions, add `bannerBoldFragment` returns, and mirror the render path from `AdvanceTab`.
 
-Do not solve the combination scoring problem with a longer single-aspect sentence. A sentence that mentions two planets while still being structured around one primary aspect is not combination scoring. Combination scoring means the system evaluates the *stack* — what else is happening at the same time — and names that constellation as a unified moment with a single life meaning.
+One additional precision the vision document does not call out explicitly: the guidance strings for couple advance must be genuinely relational in voice. "Face the pattern directly rather than managing around it" is individual voice. The couple guidance should be: "This is a window to talk about what has been unspoken between you — what the bond is being asked to restructure will be easier to work with if named than if managed around." Same structural function, different subject. Every guidance string for the couple tab should have "you two" or "together" or "between you" in it somewhere, or it will read as a copy of the individual advance guidance.
 
-Do not ship reason strings that a user cannot act on. The test for every reason string: after reading it, does the user know something about what the next week or month will feel like, and do they have any sense of how to meet it? If the answer to both is no, the string needs to be rewritten.
+### Area 2: Synastry axis overlay scoring — Most product-distinctive feature in this sprint
+
+This is the feature the product cannot get elsewhere. Every transit-to-composite scorer does what `scoreCoupleSnapshot` already does — it's just planetary arithmetic. Synastry axis activation is the differentiation. It requires knowing both charts and their interaction pattern, not just the composite entity. No other simple astrology product does this calculation.
+
+The vision document's scope constraint is correct: require both (a) a transiting slow planet within tight orb AND (b) a synastry aspect ≤ 2° orb at or near the transit degree. Do not fire on loose synastry aspects. Do not fire on fast transiting planets alone. The false-activation risk is real and the quality bar is "must not fire on noise."
+
+The reason suffix the vision proposes — "and activates the bond between [Person1Planet] and [Person2Planet]" — is the minimum. The better version names the character of that synastry axis: if the axis is Venus-Mars (attraction and desire), the suffix should name that. "and activates the attraction axis between your Venus and their Mars" is more specific than "and activates the bond between Venus and Mars." The synastry aspect object already carries both planet names. Name them in human terms.
+
+### Area 3: `computeCombinedWeight` parity in `scoreCoupleSnapshot` — Necessary quality fix
+
+This is not exciting but it is necessary. The couple advance strip's favorable and challenging markers will fire on inferior criteria until Priorities 2–4 use `computeCombinedWeight`. The current `computeEnergyRating` gate predates the combination scoring architecture. Port the function, replace the gates, match the threshold logic from `AdvanceTab`. This makes the couple strip as accurate as the individual strip. Do it.
+
+### Area 4: Transit Timeline notable-moment integration — Right idea, needs precision on execution
+
+The vision is correct that Power Day incoherence between the Timeline and the advance engine is a product quality problem. But the fix needs care.
+
+The `TransitTimeline` component receives `days: TimelineDay[]` as its only prop (line 143). It knows nothing about `AdvanceSnapshot[]`. Threading advance scores into the timeline requires passing them as a second prop or computing them at the parent level and annotating the `TimelineDay` objects before passing them to the component.
+
+The cleaner approach: at the transit reading page level, where both the `TransitTimeline` and the advance snapshots are available, build a `Map<string, SnapshotScore>` keyed by `dateStr` from the pre-computed snapshots, and pass it as an optional prop to `TransitTimeline`. The `DaySection` component can then look up the score for its date and render the advance category label (or the colored dot) alongside the existing Power Day badge, replacing the event-count heuristic for dates where an advance score is available.
+
+The important nuance: the advance engine operates at weekly or monthly granularity in most views. The timeline operates at daily granularity. On daily period, the snapshots and timeline dates align. On weekly period, the advance score covers seven days — the timeline will need to find the closest advance snapshot within the week, not a same-day match. This is solvable but the matching logic needs to be deliberate, not assumed.
+
+---
+
+## What the Vision Missed
+
+### The Solar Return Page Has No Sense of Duration
+
+The SR "year" technically runs from the SR moment to the next birthday. But the Solar Return page shows the SR date and then... everything is presented as if it applies uniformly across the year. "SR Sun in House 5 — primary focus." For twelve months? All of them equally?
+
+The reality is that transits activate the SR chart's promise and pressure unevenly across the year. Some months, the SR chart is dormant. Others, multiple transiting planets are simultaneously in aspect to SR chart planets, and the SR year's themes express intensely. The advance strip captures exactly this — the 12-step monthly view across the SR year would show which months are astrologically loaded and which are relatively quiet.
+
+The static "year ahead reading" combined with the advance strip creates a two-layer experience: the GPT reading gives the character of the year, and the advance strip shows when that character is most intensely expressed. That is a compelling product story. Sprint 0020 should ship the strip, and a future sprint can deepen the integration between the year-level narrative and the month-level peaks.
+
+### The `CoupleAdvanceTab` Banner Has a Visual Debt
+
+The banner block in `CoupleAdvanceTab.tsx` at lines 648–682 renders the bold fragment as `categoryBanner.split(' ')[0]` — the first word of the sentence. This is the pre-sprint-0019 pattern. The `AdvanceTab` banner at line 1514 renders `bannerBoldFragment` if present, falling back to the first word.
+
+The visual result: a couple banner for a "shift" marker whose reason starts with "Saturn stations retrograde" will bold "Saturn" (correct). But a banner for a favorable marker whose reason starts with "Jupiter flows through the relationship's romantic axis" will bold "Jupiter" (correct by accident, not by design). If `buildCoupleAspectReason` produces a reason starting with "the relationship's drive and desire is supported" — which is currently possible from the else branch at line 65 — then "the" is bolded, which is wrong.
+
+This is a consequence of `buildCoupleAspectReason`, `buildCouplePowerReason`, and `buildCoupleShiftReason` not returning `bannerBoldFragment`. They return `string`, not `{ reason: string; bannerBoldFragment: string; guidance?: string }`. Fix the builder signatures alongside adding guidance, and the banner render path can be aligned with `AdvanceTab`'s pattern.
+
+### The Solar Return Advance Strip Needs Its Own Quiet Message
+
+The `OverviewStrip` component in `AdvanceTab.tsx` accepts a `quietMessage` prop — shown when the strip has no markers. The individual advance tab passes "A steady period — no exceptional signals in this window." The couple advance tab passes "A steady period for the relationship — no exceptional signals in this window." The Solar Return page's advance strip should pass something year-appropriate: "A steady solar year — no concentrated peaks detected in the advance." This is a minor detail but it matters for the SR page to feel considered rather than copy-pasted.
 
 ---
 
 ## The Standard
 
-The test for this sprint is simpler than the last one. Show the product to someone who is thinking about something real — a relationship, a job decision, a creative project they haven't started, a difficult conversation they've been avoiding. Show them the advance tab for the next year.
+The test for this sprint is the same test I've applied to every sprint: take the product to a real person who has something real going on in their life. Show them the couple advance strip. Ask them to navigate to the first marker. Read them the banner.
 
-If they look at a marked moment and say "yeah, that's actually what I've been feeling" or "huh, I didn't think about it that way but that fits" — you succeeded.
+If they hear a guidance sentence that speaks to their relationship — not to planetary mechanics, not to generic astrological wisdom, but to what two people working through something together should consider doing — you succeeded.
 
-If they look at a favorable window banner and say "so what do I do?" and the product already told them — you succeeded.
+Then show them the Solar Return advance strip. Ask them to find the hardest-looking month. Read them what it says. If they say "yeah, that's what that month was" — or, even better, "I should probably clear my calendar for that month" — you built the right product.
 
-If they look at the couple advance strip with their partner and one of them says "should we plan that trip during this week?" — you built the right product.
+The system knows which moments matter. The system now speaks in human language. Sprint 0020 finishes the couple layer and opens the Solar Return layer.
 
-The system already knows which weeks matter. Sprint 0018 made that knowledge visible. Sprint 0019 makes it meaningful.
-
-Meaningful is harder than visible. But visible without meaningful is just noise with better animation.
+Do not stop until both of those surfaces feel as fully realized as the individual advance tab already does.

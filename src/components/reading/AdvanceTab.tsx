@@ -103,13 +103,13 @@ export const MARKER_HYSTERESIS_ORB = 0.5
 export const SLOW_PLANETS_FOR_BANNER = new Set<PlanetName>(['Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
 /** Planets used in combination-weight scoring — includes Jupiter unlike SLOW_PLANETS_FOR_BANNER. */
-const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
+export const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
 /** Minimum combined weight for a constellation to fire a favorable/challenging marker. */
-const COMBINATION_WEIGHT_THRESHOLD = 3.0
+export const COMBINATION_WEIGHT_THRESHOLD = 3.0
 
 /** Reference weight for normalizing intensity (Pluto + Saturn at zero orb). */
-const COMBINATION_WEIGHT_NORMALIZE = 12
+export const COMBINATION_WEIGHT_NORMALIZE = 12
 
 /** Verb to use in banner text per aspect type. */
 export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
@@ -473,7 +473,7 @@ function angularDiff(lon1: number, lon2: number): number {
  * sum(PLANET_WEIGHT[planet] × (1 − orb/maxOrb)) across all aspects.
  * Slow planets dominate due to higher weight values; fast-planet noise stays below threshold.
  */
-function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number {
+export function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number {
   return aspects.reduce((sum, a) => {
     const w = PLANET_WEIGHT[a.transitPlanet as string] ?? 1
     return sum + w * (1 - a.orb / maxOrb)
@@ -841,16 +841,36 @@ function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
   return formatScoreAsBannerText(snapshot.score)
 }
 
-// ─── Pre-calculator ──────────────────────────────────────────────────────────
+// ─── Shared pre-calculation core ─────────────────────────────────────────────
 
-function preCalculateSnapshots(
-  chartData: ChartData,
+/**
+ * Shared advance pre-calculation loop.
+ *
+ * Encapsulates the three invariant phases that both `preCalculateSnapshots` and
+ * `preCalculateCoupleSnapshots` share:
+ *   1. Date-offset loop with monthly noon normalization.
+ *   2. Hysteresis pass (spec 14.4).
+ *   3. Two-phase density cap with category reservation (spec 1.13).
+ *
+ * @param period      Transit period driving the step size / noon-normalization logic.
+ * @param baseDate    Origin date for offset 0.
+ * @param config      Explicit config (allows callers to supply a custom max without
+ *                    modifying ADVANCE_CONFIG — needed by SR advance preview).
+ * @param buildSnapshot  Pure function that constructs every field of S except `score`
+ *                       for a given resolved date and offset index.
+ * @param scoreFunc   Pure function that computes SnapshotScore given the fully
+ *                    constructed (but not yet scored) snapshot and the previous
+ *                    snapshot (needed for station-crossing detection).
+ */
+export function runAdvancePreCalculation<S extends AdvanceSnapshot>(
   period: TransitPeriod,
   baseDate: Date,
-): AdvanceSnapshot[] {
-  const config = ADVANCE_CONFIG[period]
-  // Intermediate array before scoring (needed for previous-snapshot access)
-  const snapshots: AdvanceSnapshot[] = []
+  config: { max: number; msPerStep: number },
+  buildSnapshot: (date: Date, offset: number) => Omit<S, 'score'>,
+  scoreFunc: (snap: S, prev: S | null) => SnapshotScore,
+): S[] {
+  const neutral: SnapshotScore = { category: 'neutral', intensity: 0, reason: '', coShift: false }
+  const snapshots: S[] = []
 
   for (let i = 0; i <= config.max; i++) {
     let targetDate: Date
@@ -868,27 +888,13 @@ function preCalculateSnapshots(
       targetDate = new Date(baseDate.getTime() + i * config.msPerStep)
     }
 
-    const transitPlanets = calculateCurrentPositions(targetDate)
-    const transitAspects = calculateTransitAspects(transitPlanets, chartData.planets, period)
-    const retrogrades = getRetrogradeStatus(targetDate)
-    const housedTransitPlanets = assignTransitHouses(transitPlanets, chartData.houses)
+    // Build everything except score, then attach placeholder score
+    const partial = buildSnapshot(targetDate, i)
+    const snap = { ...partial, score: neutral } as S
 
-    // score is computed after building the snapshot array entry;
-    // we push a placeholder and fill score below
-    const snap: AdvanceSnapshot = {
-      offset: i,
-      date: targetDate,
-      dateStr: targetDate.toISOString().split('T')[0],
-      transitPlanets,
-      housedTransitPlanets,
-      transitAspects,
-      retrogrades,
-      score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
-    }
-
-    // Compute score immediately (spec 1.12) — passing prev snapshot
+    // Compute score immediately (spec 1.12) — passing prev snapshot for station detection
     const prev = snapshots[i - 1] ?? null
-    snap.score = scoreSnapshot(snap, prev, chartData, period)
+    snap.score = scoreFunc(snap, prev)
 
     snapshots.push(snap)
   }
@@ -915,10 +921,7 @@ function preCalculateSnapshots(
         a => a.transitPlanet === triggerPlanet && a.natalPlanet === triggerNatal
       )
       if (currAspect && Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB) {
-        snapshots[i] = {
-          ...curr,
-          score: { ...prev.score },
-        }
+        snapshots[i] = { ...curr, score: { ...prev.score } }
       }
     }
   }
@@ -928,7 +931,9 @@ function preCalculateSnapshots(
   const maxMarkers = Math.ceil(config.max * 0.2)
 
   if (nonNeutral.length > maxMarkers) {
-    // Phase 1: reserve the highest-intensity marker per non-neutral category present
+    // Phase 1: reserve the highest-intensity marker per non-neutral category present.
+    // Iterates NON_NEUTRAL_CATEGORIES in fixed order so reservation is deterministic
+    // regardless of the order categories happen to appear in the snapshot array.
     const NON_NEUTRAL_CATEGORIES: Exclude<MarkerCategory, 'neutral'>[] = [
       'power', 'favorable', 'challenging', 'shift',
     ]
@@ -953,13 +958,45 @@ function preCalculateSnapshots(
       if (snapshots[i].score.category !== 'neutral' && !reservedOffsets.has(snapshots[i].offset)) {
         snapshots[i] = {
           ...snapshots[i],
-          score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
+          score: neutral,
         }
       }
     }
   }
 
   return snapshots
+}
+
+// ─── Pre-calculator ──────────────────────────────────────────────────────────
+
+export function preCalculateSnapshots(
+  chartData: ChartData,
+  period: TransitPeriod,
+  baseDate: Date,
+): AdvanceSnapshot[] {
+  const config = ADVANCE_CONFIG[period]
+
+  return runAdvancePreCalculation<AdvanceSnapshot>(
+    period,
+    baseDate,
+    config,
+    (date, offset) => {
+      const transitPlanets = calculateCurrentPositions(date)
+      const transitAspects = calculateTransitAspects(transitPlanets, chartData.planets, period)
+      const retrogrades = getRetrogradeStatus(date)
+      const housedTransitPlanets = assignTransitHouses(transitPlanets, chartData.houses)
+      return {
+        offset,
+        date,
+        dateStr: date.toISOString().split('T')[0],
+        transitPlanets,
+        housedTransitPlanets,
+        transitAspects,
+        retrogrades,
+      }
+    },
+    (snap, prev) => scoreSnapshot(snap, prev, chartData, period),
+  )
 }
 
 // ─── Priority order for marker comparison ────────────────────────────────────
@@ -1226,37 +1263,51 @@ export default function AdvanceTab({
   aspects,
   period,
   baseDate,
+  snapshots: snapshotsProp,
+  isPending: isPendingProp,
 }: {
   chartData: ChartData
   aspects: Aspect[]
   period: TransitPeriod
   baseDate: Date
+  /** Pre-computed snapshots from the parent. When provided, internal computation is skipped. */
+  snapshots?: AdvanceSnapshot[]
+  /** Pending state from the parent's useTransition, passed through when snapshots come from the parent. */
+  isPending?: boolean
 }) {
   const config = ADVANCE_CONFIG[period]
 
   // Snapshot cache (spec 10.5): useRef-based cache keyed by chart identity + period + baseDate.
   // Chart identity is derived from ascendant/midheaven longitudes and unknownTime flag so that
   // switching charts (e.g. couple advance) always misses and recomputes instead of serving stale results.
+  // Only used when the parent has not provided snapshots via prop.
   const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
 
-  // Pre-calculate all snapshots with useTransition so main thread stays responsive
-  const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
-  const [isPending, startTransition] = useTransition()
+  // Internal snapshot state — used only when parent does not supply snapshots via prop.
+  const [internalSnapshots, setInternalSnapshots] = useState<AdvanceSnapshot[]>([])
+  const [internalIsPending, startTransition] = useTransition()
 
   useEffect(() => {
+    // If the parent supplies snapshots we skip internal computation entirely.
+    if (snapshotsProp !== undefined) return
+
     const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
     const cacheKey = `${chartKey}:${period}:${baseDate.toISOString()}`
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
-      setSnapshots(cached)
+      setInternalSnapshots(cached)
       return
     }
     startTransition(() => {
       const computed = preCalculateSnapshots(chartData, period, baseDate)
       snapshotCache.current.set(cacheKey, computed)
-      setSnapshots(computed)
+      setInternalSnapshots(computed)
     })
-  }, [chartData, period, baseDate])
+  }, [chartData, period, baseDate, snapshotsProp])
+
+  // Use parent-provided snapshots when available, else fall back to internal state.
+  const snapshots = snapshotsProp ?? internalSnapshots
+  const isPending = snapshotsProp !== undefined ? (isPendingProp ?? false) : internalIsPending
 
   const [offset, setOffset] = useState(0)
 

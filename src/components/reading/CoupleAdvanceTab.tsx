@@ -5,16 +5,18 @@ import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { AspectType } from '../../engine/aspects'
-import type { SynastryData } from '../../engine/synastry'
+import type { SynastryData, SynastryAspect } from '../../engine/synastry'
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import AspectRow from './AspectRow'
 
-import type { SnapshotScore, MarkerCategory, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
+import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
 import {
   ADVANCE_CONFIG, CATEGORY_HALO,
   ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
+  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD,
+  computeCombinedWeight,
   detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
 } from './AdvanceTab'
 
@@ -39,50 +41,404 @@ const COMPOSITE_PLANET_PHRASES: Partial<Record<string, CompositePlanetPhrase>> =
   NorthNode: { relationship: "the bond's evolutionary direction", brief: "shared karmic purpose" },
 }
 
+// ─── Couple guidance tables ───────────────────────────────────────────────────
+
+/** Reason and guidance phrases for composite angle-contact power markers.
+ *  Key: "${planet}|${aspectType}|${angleKey}" */
+const COUPLE_POWER_PHRASES: Partial<Record<string, { reason: string; guidance: string }>> = {
+  // Saturn
+  'Saturn|conjunction|ASC': {
+    reason:   "Saturn arrives at the relationship's Ascendant — how this bond presents itself to the world is being restructured.",
+    guidance: "This is a window to talk together about how you show up as a couple — what has felt automatic about the way you move through the world together is being asked to become more intentional.",
+  },
+  'Saturn|conjunction|MC': {
+    reason:   "Saturn reaches the relationship's Midheaven — a significant moment for the shared direction this bond has been building toward.",
+    guidance: "Sit with what you are actually building together — the ambitions and public commitments the relationship has been carrying deserve an honest conversation now.",
+  },
+  'Saturn|opposition|ASC': {
+    reason:   "Saturn pressing opposite the relationship's Ascendant — external structures and others' perceptions are testing the bond's foundations.",
+    guidance: "What others are reflecting about this relationship carries useful information — this is a window to decide together what to keep and what to let go.",
+  },
+  'Saturn|opposition|MC': {
+    reason:   "Saturn pressing opposite the relationship's Midheaven — the gap between the bond's private reality and its public direction is becoming visible.",
+    guidance: "Name the distance between where this relationship actually is and where it has been projecting itself publicly — the two of you can close that gap more honestly now than later.",
+  },
+  'Saturn|square|ASC': {
+    reason:   "Saturn pressing on the relationship's Ascendant axis — the way this couple moves through the world is under significant pressure.",
+    guidance: "Don't try to manage around what is being stressed — naming what is hard between you is more productive than finding ways to look fine.",
+  },
+  'Saturn|square|MC': {
+    reason:   "Saturn pressing on the relationship's Midheaven — the shared structures and long-term commitments of this bond are being stress-tested.",
+    guidance: "Take the audit seriously together — what is working in the structures you share and what isn't is clearer now than it normally is.",
+  },
+  'Saturn|trine|ASC': {
+    reason:   "Saturn supporting the relationship's Ascendant — the work done together on how this couple shows up is producing durable results.",
+    guidance: "This is a window to take the next step in how you present yourselves to the world together — the groundwork is ready to support it.",
+  },
+  'Saturn|trine|MC': {
+    reason:   "Saturn supporting the relationship's Midheaven — the shared direction and commitments this bond has invested in are crystallizing into something real.",
+    guidance: "Commit to the joint goal or shared structure you have been building toward — the conditions are favorable for making it official.",
+  },
+  'Saturn|sextile|ASC': {
+    reason:   "Saturn opening toward the relationship's Ascendant — a practical window to solidify how this couple shows up with real, lasting structure.",
+    guidance: "Act on the shared identity step the two of you have been considering — the conditions are favorable and the timing is practical.",
+  },
+  'Saturn|sextile|MC': {
+    reason:   "Saturn opening toward the relationship's Midheaven — a practical opportunity to advance shared standing through steady, joint effort.",
+    guidance: "Make the deliberate move together toward the shared goal — the opening is available and sustained effort will be recognized.",
+  },
+  // Jupiter
+  'Jupiter|conjunction|ASC': {
+    reason:   "Jupiter arrives at the relationship's Ascendant — a significant expansion of how this bond presents itself and is received by the world.",
+    guidance: "Step into more visible territory together — this is one of the better windows in the year for the two of you to be seen and recognized as a unit.",
+  },
+  'Jupiter|conjunction|MC': {
+    reason:   "Jupiter reaches the relationship's Midheaven — a notable expansion of shared ambition, recognition, and the public chapter this bond is entering.",
+    guidance: "Say yes to the shared opportunity — whether it is a public step, a joint commitment, or a shared project, the conditions are genuinely open right now.",
+  },
+  'Jupiter|opposition|ASC': {
+    reason:   "Jupiter opposite the relationship's Ascendant — the bond is being pulled toward expansion through others and the wider world.",
+    guidance: "Lean into the partnerships and collaborations available to the two of you together — the growth on offer now comes through opening outward, not closing inward.",
+  },
+  'Jupiter|opposition|MC': {
+    reason:   "Jupiter opposite the relationship's Midheaven — private and foundational dimensions of the bond are expanding in ways that shape the shared direction.",
+    guidance: "Let the growth in your shared inner life inform what you build publicly together — the inner expansion is the foundation for what comes next.",
+  },
+  'Jupiter|square|ASC': {
+    reason:   "Jupiter pressing on the relationship's Ascendant — expansion of how this couple shows up may be outrunning the bond's current foundations.",
+    guidance: "Check that the shared confidence is backed by substance — the opportunity is real but overcommitting together has a cost worth accounting for.",
+  },
+  'Jupiter|square|MC': {
+    reason:   "Jupiter pressing on the relationship's Midheaven — joint ambitions are expanding rapidly but may exceed what current shared structures can support.",
+    guidance: "Pursue the joint ambition with one eye on sustainability — investigate the picture fully before either of you overcommits publicly.",
+  },
+  'Jupiter|trine|ASC': {
+    reason:   "Jupiter supporting the relationship's Ascendant — expansion of how the two of you show up together is available with unusual ease.",
+    guidance: "Let the relationship take up more space in the world — the ease available now is genuine and the window won't stay this wide.",
+  },
+  'Jupiter|trine|MC': {
+    reason:   "Jupiter supporting the relationship's Midheaven — shared career, public presence, or joint ambition is available to grow without unusual resistance.",
+    guidance: "Advance the shared goal you have been holding back together — the timing is right and the conditions support it.",
+  },
+  'Jupiter|sextile|ASC': {
+    reason:   "Jupiter opening toward the relationship's Ascendant — an accessible window for expanding how this couple presents and carries itself.",
+    guidance: "Reach toward the opportunity for shared visibility — the opening is modest but real, and the two of you acting on it together will make it count.",
+  },
+  'Jupiter|sextile|MC': {
+    reason:   "Jupiter opening toward the relationship's Midheaven — a practical window for joint reputation or shared professional opportunity.",
+    guidance: "Make the shared professional move the two of you have been considering — the conditions are supportive and the timing is favorable.",
+  },
+  // Pluto
+  'Pluto|conjunction|ASC': {
+    reason:   "Pluto arrives at the relationship's Ascendant — a fundamental, irreversible transformation of how this bond presents itself and moves through the world.",
+    guidance: "Go toward the transformation together rather than managing it separately — what changes about how you show up as a couple is pointing toward something more authentic.",
+  },
+  'Pluto|conjunction|MC': {
+    reason:   "Pluto reaches the relationship's Midheaven — the shared direction and public identity of this bond are undergoing fundamental, permanent restructuring.",
+    guidance: "Don't defend the version of this relationship the world has known — the transformation points toward something more aligned with what the bond actually is.",
+  },
+  'Pluto|opposition|ASC': {
+    reason:   "Pluto opposite the relationship's Ascendant — deep transformation is coming through how the bond meets the world and is perceived by others.",
+    guidance: "Address the power dynamics surfacing between you and the wider world together — avoidance will cost the two of you more than honest engagement.",
+  },
+  'Pluto|opposition|MC': {
+    reason:   "Pluto opposite the relationship's Midheaven — deep transformation in the bond's private foundations is reshaping its shared public direction.",
+    guidance: "Let the inner transformation of this relationship inform what you build publicly together — the work done in private is the real shared move.",
+  },
+  'Pluto|square|ASC': {
+    reason:   "Pluto pressing on the relationship's Ascendant — the identity this couple has carried into the world is being stripped and rebuilt at depth.",
+    guidance: "Let go of what you've outgrown together — the version of this relationship pushing through is more true than the one being released.",
+  },
+  'Pluto|square|MC': {
+    reason:   "Pluto pressing on the relationship's Midheaven — shared trajectory and public identity are being permanently reshaped by deep pressure.",
+    guidance: "Face the shared transformation directly together — what survives this pressure is what the bond is actually built to do.",
+  },
+  'Pluto|trine|ASC': {
+    reason:   "Pluto supporting the relationship's Ascendant — the deep transformation this bond has been undergoing is integrating into how the couple carries itself.",
+    guidance: "Act from the more authentic version of this relationship that difficulty has revealed — the integration is real and expressing it together will land.",
+  },
+  'Pluto|trine|MC': {
+    reason:   "Pluto supporting the relationship's Midheaven — transformation already underway in this bond is now available to express through shared direction and public life.",
+    guidance: "Bring the depth of what this relationship has become into what you build publicly together — what has been revealed between you is the actual shared advantage.",
+  },
+  'Pluto|sextile|ASC': {
+    reason:   "Pluto opening toward the relationship's Ascendant — a window to express transformed shared understanding in how this couple presents to the world.",
+    guidance: "Take one concrete step together toward the relationship you have been becoming — the integration available now is worth acting on jointly.",
+  },
+  'Pluto|sextile|MC': {
+    reason:   "Pluto opening toward the relationship's Midheaven — a window to bring deep relational transformation into the shared public work of this bond.",
+    guidance: "Let the inner work of this relationship shape the outer work — the shared move that reflects what you've become together is the right one.",
+  },
+  // Uranus
+  'Uranus|conjunction|ASC': {
+    reason:   "Uranus arrives at the relationship's Ascendant — a sudden, liberating disruption of how this couple carries itself and who it presents to the world.",
+    guidance: "Allow the change together rather than managing it back into the familiar — what is breaking loose in how you show up is asking to be more freely expressed.",
+  },
+  'Uranus|conjunction|MC': {
+    reason:   "Uranus reaches the relationship's Midheaven — a sudden, unexpected disruption or liberation of the bond's shared direction and public identity.",
+    guidance: "Stay open together to the unconventional path that is emerging — the surprise is the direction, not an obstacle to it.",
+  },
+  'Uranus|opposition|ASC': {
+    reason:   "Uranus opposite the relationship's Ascendant — sudden change and disruption are coming through how the bond meets others and the wider world.",
+    guidance: "Let the changes happening at the edges of this relationship happen — freedom coming through the world around you is still freedom the two of you can work with.",
+  },
+  'Uranus|opposition|MC': {
+    reason:   "Uranus opposite the relationship's Midheaven — a sudden shift in the bond's private or foundational dimensions is disrupting the shared public trajectory.",
+    guidance: "Trust that the disruption is clarifying something — what needs to change about the relationship's shared direction is being shown from the inside out.",
+  },
+  'Uranus|square|ASC': {
+    reason:   "Uranus pressing on the relationship's Ascendant — sudden, unpredictable changes to how this couple shows up are breaking old shared patterns.",
+    guidance: "Stay flexible together and don't force the disruption into a predetermined shape — what breaks in this bond is creating room, even if that isn't apparent to either of you yet.",
+  },
+  'Uranus|square|MC': {
+    reason:   "Uranus pressing on the relationship's Midheaven — shared direction is encountering sudden, disruptive pressure from an unexpected angle.",
+    guidance: "Respond to the disruption creatively together rather than defensively — the unconventional path opening for this bond may be more right than the one being disrupted.",
+  },
+  'Uranus|trine|ASC': {
+    reason:   "Uranus supporting the relationship's Ascendant — a liberating shift in how this couple carries itself is available with unusual ease.",
+    guidance: "Take the unconventional step together — the window for change without penalty is open, and the two of you playing it safe will feel like a missed opportunity.",
+  },
+  'Uranus|trine|MC': {
+    reason:   "Uranus supporting the relationship's Midheaven — a liberating shift in shared direction or public identity is available without major disruption.",
+    guidance: "Move toward the shared change the two of you have been considering — the conditions for an unconventional joint step are favorable.",
+  },
+  'Uranus|sextile|ASC': {
+    reason:   "Uranus opening toward the relationship's Ascendant — a window for a liberating, low-disruption change to how this couple presents itself.",
+    guidance: "Try the unconventional expression together — the small step toward a freer shared self-presentation is easier now than usual.",
+  },
+  'Uranus|sextile|MC': {
+    reason:   "Uranus opening toward the relationship's Midheaven — a modest but real opportunity for an unexpected or unconventional shared move.",
+    guidance: "Consider the joint path that seemed too unusual — the opening is real even if the logic isn't conventional, and the two of you can test it together.",
+  },
+}
+
+/** Guidance phrases for composite aspect markers. Key: "${planet}|${nature}" */
+const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
+  'Saturn|challenging':   "This is a window to talk about what has been building between you — the emotional or structural tension the bond is carrying is easier to work with if named than if managed around separately.",
+  'Saturn|harmonious':    "Commit to the shared structure you have been building together — this is a window where patient, joint effort produces results that last for both of you.",
+  'Jupiter|harmonious':   "Reach toward the shared opportunity together — the window is genuinely open and action taken as a couple now has real momentum behind it.",
+  'Jupiter|challenging':  "Pause before the two of you overcommit together — the enthusiasm you share is real but the picture isn't complete yet; investigate before expanding jointly.",
+  'Pluto|challenging':    "Go toward what is being revealed between you rather than away from it — the transformation in this bond is happening regardless, and facing it together reduces the cost to each of you.",
+  'Pluto|harmonious':     "Act from the deeper version of this relationship that difficulty has revealed — this is a window to integrate together what you've each been through, not just to survive it.",
+  'Uranus|challenging':   "Stay flexible together and don't force the disruption into a predetermined shape — what breaks in this bond is creating room, even if that isn't apparent to either of you yet.",
+  'Uranus|harmonious':    "Take the unconventional step together — the window for change without penalty is open, and the two of you playing it safe will feel like a missed opportunity.",
+  'Neptune|challenging':  "Verify rather than assume what is happening between you — clarity is harder than usual, and decisions made on feeling alone may need revisiting when the picture sharpens.",
+  'Neptune|harmonious':   "Make space for creative and spiritual experiences together — what arrives through imagination and shared inner listening now carries unusual depth for both of you.",
+  'Mars|challenging':     "Don't escalate the tension between you or push through the friction by force — the pressure here needs to be worked with together, not overcome separately.",
+  'Mars|harmonious':      "Direct the shared energy toward something concrete together — the drive available to this bond now benefits from a clear joint target.",
+  'Venus|harmonious':     "Reach toward shared connection, pleasure, and beauty together — this is a window for what genuinely brings you both alive, and it doesn't need justification.",
+  'Venus|challenging':    "Don't try to resolve the tension between you through pleasing or accommodating — what needs addressing between you isn't going to settle on its own.",
+  'Sun|harmonious':       "Take a step toward visibility as a couple — this is a window for shared presence and being seen as you actually are together.",
+  'Sun|challenging':      "Notice where the two of you are each defending rather than seeing clearly — the friction is pointing to something worth examining together.",
+  'Moon|harmonious':      "Let the emotional warmth available between you be expressed rather than assumed — this is a window to tend to the bond's shared feeling and say the things that matter.",
+  'Moon|challenging':     "This is a window to talk about what has gone unspoken between you — the emotional patterns the bond carries are being surfaced, and they're easier to work with if named than if managed around.",
+  'Chiron|challenging':   "The wound surfacing in the relationship isn't asking to be fixed — it's asking to be witnessed. Being seen by each other without judgment is the practice.",
+  'Chiron|harmonious':    "A healing integration is available to the two of you — something that has been tender between you is shifting toward understanding.",
+}
+
+/** Guidance phrases for composite shift markers. Key: planet name */
+const COUPLE_SHIFT_GUIDANCE: Partial<Record<string, string>> = {
+  Saturn:  "The territory Saturn governs in this relationship is asking for your joint attention — what has felt settled in the bond's structures may be shifting, and awareness together is more useful than each of you navigating it privately.",
+  Jupiter: "The area of the relationship Jupiter has been amplifying is now pausing to consolidate — this is a moment to assess together what the expansion has produced before the next forward movement.",
+  Uranus:  "The disruption Uranus carries is arriving in the bond's territory of change and evolution — give each other room for the unexpected rather than insisting on continuity.",
+  Neptune: "The fog or idealism Neptune brings is moving through a sensitive dimension of this bond — be especially honest with each other about what you are actually experiencing versus what you each wish were true.",
+  Pluto:   "The transformation Pluto is working on is moving through deep relational territory — what has been held unconsciously between you is surfacing, and bringing it into shared conversation is the most productive use of this window.",
+  Mars:    "The activation Mars brings is pressing on the bond's drive and assertion — notice where the two of you are channeling energy together versus where it is becoming friction between you.",
+  Mercury: "The disruption to thinking and communication that Mercury's station brings is touching the bond's channel — go slowly in conversations that matter and make extra space for misreading each other during this window.",
+}
+
 // ─── Couple-voice reason string builders ─────────────────────────────────────
 
 function buildCouplePowerReason(
   planet: string,
   aspectType: AspectType,
   angleKey: 'ASC' | 'MC',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
+  const key = `${planet}|${aspectType}|${angleKey}`
+  const entry = COUPLE_POWER_PHRASES[key]
+  if (entry) return { ...entry, bannerBoldFragment: planet }
+
+  // Fallback: use verb table and relationship-angle language
   const verb = ASPECT_VERB_BANNER[aspectType] ?? 'reaches'
   const angleName = angleKey === 'ASC' ? "the relationship's Ascendant" : "the relationship's Midheaven"
   const domain = angleKey === 'ASC'
     ? 'a significant crossing for how this bond presents itself to the world'
     : 'a significant moment for how this bond is recognized and defined in the world'
-  return `${planet} ${verb} ${angleName} — ${domain}.`
+  return {
+    reason: `${planet} ${verb} ${angleName} — ${domain}.`,
+    bannerBoldFragment: planet,
+  }
 }
 
 function buildCoupleAspectReason(
   tightest: TransitAspect,
   category: 'favorable' | 'challenging',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const phrases = COMPOSITE_PLANET_PHRASES[tightest.natalPlanet]
   const verb = ASPECT_VERB_BANNER[tightest.type as AspectType] ?? 'contacts'
+  const planet = tightest.transitPlanet as string
+  const nature = category === 'favorable' ? 'harmonious' : 'challenging'
+  const guidance = COUPLE_ASPECT_GUIDANCE[`${planet}|${nature}`]
 
   if (!phrases) {
     if (category === 'favorable') {
-      return `${tightest.transitPlanet} ${verb} the relationship's ${tightest.natalPlanet} — a favorable window for the bond.`
+      return {
+        reason: `${planet} ${verb} the relationship's ${tightest.natalPlanet} — a favorable window for the bond.`,
+        bannerBoldFragment: planet,
+        guidance,
+      }
     } else {
-      return `${tightest.transitPlanet} ${verb} the relationship's ${tightest.natalPlanet} — tension in the bond's ${tightest.natalPlanet} dimension.`
+      return {
+        reason: `${planet} ${verb} the relationship's ${tightest.natalPlanet} — tension in the bond's ${tightest.natalPlanet} dimension.`,
+        bannerBoldFragment: planet,
+        guidance,
+      }
     }
   }
 
   if (category === 'favorable') {
-    return `${tightest.transitPlanet} ${verb} ${phrases.relationship} — a window when ${phrases.brief} is genuinely supported.`
+    return {
+      reason: `${planet} ${verb} ${phrases.relationship} — a window when ${phrases.brief} is genuinely supported.`,
+      bannerBoldFragment: planet,
+      guidance,
+    }
   } else {
-    return `${tightest.transitPlanet} ${verb} ${phrases.relationship} — ${phrases.brief} is under pressure in this period.`
+    return {
+      reason: `${planet} ${verb} ${phrases.relationship} — ${phrases.brief} is under pressure in this period.`,
+      bannerBoldFragment: planet,
+      guidance,
+    }
   }
 }
 
 function buildCoupleShiftReason(
   planet: string,
   direction: 'retrograde' | 'direct',
-): string {
+): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const interp = TRANSIT_RETROGRADE[planet]
   const brief = interp?.brief ?? 'a significant dimension of the relationship'
-  return `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`
+  return {
+    reason: `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`,
+    bannerBoldFragment: planet,
+    guidance: COUPLE_SHIFT_GUIDANCE[planet],
+  }
+}
+
+// ─── Synastry axis activation ─────────────────────────────────────────────────
+
+/**
+ * Normalize angular difference between two ecliptic longitudes to [0, 180].
+ */
+function angularDiffCouple(lon1: number, lon2: number): number {
+  let diff = Math.abs(lon1 - lon2) % 360
+  if (diff > 180) diff = 360 - diff
+  return diff
+}
+
+interface SynastryAxisActivation {
+  person1Planet: string
+  person2Planet: string
+  aspectType: string
+  synastryNature: 'harmonious' | 'challenging' | 'neutral'
+  activatedPole: 'person1' | 'person2'
+  activatedLongitude: number
+  contactOrb: number
+}
+
+/**
+ * Given a transiting planet longitude and the pre-filtered tight synastry pairs,
+ * returns the closest activated synastry axis, or null if none.
+ * Only slow planets (Saturn, Uranus, Neptune, Pluto) trigger augmentation.
+ */
+function findActivatedSynastryAxis(
+  transitPlanetName: string,
+  transitLon: number,
+  transitOrb: number,
+  tightSynastryPairs: SynastryAspect[],
+  chart1: ChartData,
+  chart2: ChartData,
+): SynastryAxisActivation | null {
+  if (!SLOW_PLANETS_FOR_BANNER.has(transitPlanetName as PlanetName)) return null
+  if (tightSynastryPairs.length === 0) return null
+
+  let best: SynastryAxisActivation | null = null
+
+  for (const aspect of tightSynastryPairs) {
+    const p1Planet = chart1.planets.find(p => p.name === aspect.person1Planet)
+    const p2Planet = chart2.planets.find(p => p.name === aspect.person2Planet)
+    if (!p1Planet || !p2Planet) continue
+
+    const diff1 = angularDiffCouple(transitLon, p1Planet.longitude)
+    const diff2 = angularDiffCouple(transitLon, p2Planet.longitude)
+
+    let candidate: SynastryAxisActivation | null = null
+
+    if (diff1 <= transitOrb && diff2 <= transitOrb) {
+      // Both poles within orb — pick the tighter one
+      const pole = diff1 <= diff2 ? 'person1' : 'person2'
+      const lon = pole === 'person1' ? p1Planet.longitude : p2Planet.longitude
+      const orb = Math.min(diff1, diff2)
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: pole,
+        activatedLongitude: lon,
+        contactOrb: orb,
+      }
+    } else if (diff1 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person1',
+        activatedLongitude: p1Planet.longitude,
+        contactOrb: diff1,
+      }
+    } else if (diff2 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person2',
+        activatedLongitude: p2Planet.longitude,
+        contactOrb: diff2,
+      }
+    }
+
+    if (candidate && (!best || candidate.contactOrb < best.contactOrb)) {
+      best = candidate
+    }
+  }
+
+  return best
+}
+
+/**
+ * Build the reason suffix string for a synastry axis activation.
+ * Format: "— and resonates with the [adjective] [planet1]-[planet2] axis between the two of you."
+ */
+function buildSynastryAxisSuffix(activation: SynastryAxisActivation): string {
+  const adjective =
+    activation.synastryNature === 'harmonious' ? 'harmonious ' :
+    activation.synastryNature === 'challenging' ? 'tense ' :
+    ''
+  return `— and resonates with the ${adjective}${activation.person1Planet}-${activation.person2Planet} axis between the two of you.`
+}
+
+/**
+ * Augment a reason string with a synastry axis suffix, capped at 200 characters.
+ */
+function augmentReasonWithSuffix(baseReason: string, suffix: string): string {
+  const combined = `${baseReason} ${suffix}`
+  if (combined.length <= 200) return combined
+  // Truncate at word boundary within the suffix
+  const truncated = combined.slice(0, 200)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return lastSpace > baseReason.length ? truncated.slice(0, lastSpace) + '.' : baseReason
 }
 
 // ─── Couple snapshot scoring ──────────────────────────────────────────────────
@@ -94,12 +450,14 @@ function scoreCoupleSnapshot(
   chart2: ChartData,
   synastryData: SynastryData,
   period: TransitPeriod,
+  tightSynastryPairs: SynastryAspect[],
 ): SnapshotScore {
   const neutral: SnapshotScore = { category: 'neutral', intensity: 0, reason: '', coShift: false }
 
   if (snapshot.offset === 0) return neutral
 
   const orbs = ORB_THRESHOLDS[period]
+  const rating = computeEnergyRating(snapshot.transitAspects)
 
   // ── Detect station crossing ───────────────────────────────────────────────
   let stationPlanet: string | undefined
@@ -149,13 +507,15 @@ function scoreCoupleSnapshot(
 
     if (bestContact) {
       const intensity = Math.max(0, 1.0 - (bestContact.orb / orbs.angleContact))
-      const reason = buildCouplePowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
+      const { reason, bannerBoldFragment, guidance } = buildCouplePowerReason(bestContact.planet, bestContact.aspectType, bestContact.angleKey)
       const coShift = !!stationPlanet
       return {
         category: 'power',
         coShift,
         intensity,
         reason,
+        bannerBoldFragment,
+        guidance,
         shiftPlanet: coShift ? stationPlanet : undefined,
         shiftDirection: coShift ? stationDirection : undefined,
         triggerAspect: {
@@ -170,7 +530,6 @@ function scoreCoupleSnapshot(
 
   // ── Priority 2: shift — station crossing (when no power) ─────────────────
   if (stationPlanet && stationDirection) {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
@@ -178,23 +537,48 @@ function scoreCoupleSnapshot(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
 
-    const isFavorable = rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects
-    const isChallenging = rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects
+    const harmoniousWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const challengingWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+
+    const harmSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+
+    const isFavorable = harmoniousWeight >= (harmSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
+    const isChallenging = challengingWeight >= (challSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
 
     if (isFavorable || isChallenging) {
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
       const tightest = [...aspects].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const rawScore = Math.abs(rating.score - 3)
-      const intensity = rawScore / 2
+      const baseIntensity = Math.abs(rating.score - 3) / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetCoShift = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationCoShift = transitPlanetCoShift
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetCoShift.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationCoShift ? Math.min(1.0, baseIntensity * 1.25) : baseIntensity
+      const { reason: baseCoShiftReason, bannerBoldFragment: coShiftBold, guidance: coShiftGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
+      const coShiftReason = axisActivationCoShift
+        ? augmentReasonWithSuffix(baseCoShiftReason, buildSynastryAxisSuffix(axisActivationCoShift))
+        : baseCoShiftReason
 
       return {
         category: primaryCategory,
         coShift: true,
         intensity,
-        reason: buildCoupleAspectReason(tightest, primaryCategory),
+        reason: coShiftReason,
+        bannerBoldFragment: coShiftBold,
+        guidance: coShiftGuidance,
         shiftPlanet: stationPlanet,
         shiftDirection: stationDirection,
         triggerAspect: {
@@ -206,34 +590,59 @@ function scoreCoupleSnapshot(
       }
     }
 
+    const { reason: shiftReason, bannerBoldFragment: shiftBold, guidance: shiftGuidance } = buildCoupleShiftReason(stationPlanet, stationDirection)
     return {
       category: 'shift',
       coShift: false,
       intensity: 0.8,
-      reason: buildCoupleShiftReason(stationPlanet, stationDirection),
+      reason: shiftReason,
+      bannerBoldFragment: shiftBold,
+      guidance: shiftGuidance,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
   }
 
-  // ── Priority 3: favorable ─────────────────────────────────────────────────
+  // ── Priority 3: favorable — constellation-weight scoring ─────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const favorableThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= favorableThreshold) {
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const baseIntensityFav = Math.abs(rating.score - 3) / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetFav = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationFav = transitPlanetFav
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetFav.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationFav ? Math.min(1.0, baseIntensityFav * 1.25) : baseIntensityFav
+      const { reason: baseFavReason, bannerBoldFragment: favBold, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
+      const favReason = axisActivationFav
+        ? augmentReasonWithSuffix(baseFavReason, buildSynastryAxisSuffix(axisActivationFav))
+        : baseFavReason
 
       return {
         category: 'favorable',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'favorable'),
+        reason: favReason,
+        bannerBoldFragment: favBold,
+        guidance: favGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -244,24 +653,46 @@ function scoreCoupleSnapshot(
     }
   }
 
-  // ── Priority 4: challenging ───────────────────────────────────────────────
+  // ── Priority 4: challenging — constellation-weight scoring ────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingChallenging = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challengingThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= challengingThreshold) {
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const baseIntensityChal = Math.abs(rating.score - 3) / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetChal = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationChal = transitPlanetChal
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetChal.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationChal ? Math.min(1.0, baseIntensityChal * 1.25) : baseIntensityChal
+      const { reason: baseChalReason, bannerBoldFragment: chalBold, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
+      const chalReason = axisActivationChal
+        ? augmentReasonWithSuffix(baseChalReason, buildSynastryAxisSuffix(axisActivationChal))
+        : baseChalReason
 
       return {
         category: 'challenging',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'challenging'),
+        reason: chalReason,
+        bannerBoldFragment: chalBold,
+        guidance: chalGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -285,6 +716,11 @@ function preCalculateCoupleSnapshots(
   baseDate: Date,
 ): AdvanceSnapshot[] {
   const config: AdvanceConfig = ADVANCE_CONFIG[period]
+
+  // Pre-filter tight synastry pairs once — passed into each scoreCoupleSnapshot call.
+  // Only synastry aspects with orb <= 2.0° qualify as "sensitive relational axes."
+  const tightSynastryPairs = synastryData.synastryAspects.filter(a => a.orb <= 2.0)
+
   const snapshots: AdvanceSnapshot[] = []
 
   for (let i = 0; i <= config.max; i++) {
@@ -315,7 +751,7 @@ function preCalculateCoupleSnapshots(
     }
 
     const prev = snapshots[i - 1] ?? null
-    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period)
+    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period, tightSynastryPairs)
 
     snapshots.push(snap)
   }
@@ -349,23 +785,21 @@ function preCalculateCoupleSnapshots(
   const maxMarkers = Math.ceil(config.max * 0.2)
 
   if (nonNeutral.length > maxMarkers) {
-    const byCategory: Partial<Record<MarkerCategory, AdvanceSnapshot[]>> = {}
+    const byCategory: Partial<Record<string, AdvanceSnapshot[]>> = {}
     for (const s of nonNeutral) {
       const cat = s.score.category
       if (!byCategory[cat]) byCategory[cat] = []
       byCategory[cat]!.push(s)
     }
 
-    const categories = Object.keys(byCategory) as MarkerCategory[]
+    const categories = Object.keys(byCategory)
     const keep = new Set<number>()
 
     if (categories.length > 1) {
-      // Include one representative from each non-neutral category first (highest intensity)
       for (const cat of categories) {
         const catSnaps = byCategory[cat]!.sort((a, b) => b.score.intensity - a.score.intensity)
         keep.add(catSnaps[0].offset)
       }
-      // Fill remaining slots by intensity across all non-neutral
       const remaining = [...nonNeutral]
         .filter(s => !keep.has(s.offset))
         .sort((a, b) => b.score.intensity - a.score.intensity)
@@ -374,7 +808,6 @@ function preCalculateCoupleSnapshots(
         keep.add(s.offset)
       }
     } else {
-      // Single category: top by intensity
       const sorted = [...nonNeutral].sort((a, b) => b.score.intensity - a.score.intensity)
       for (const s of sorted.slice(0, maxMarkers)) keep.add(s.offset)
     }
@@ -417,7 +850,16 @@ export default function CoupleAdvanceTab({
 
   useEffect(() => {
     // Cache key includes both chart identities so partner-switching invalidates cache
-    const cacheKey = `${period}:${baseDate.toISOString()}:${chart1.angles.ascendant.longitude.toFixed(2)}:${chart2.angles.ascendant.longitude.toFixed(2)}`
+    const cacheKey = [
+      period,
+      baseDate.toISOString(),
+      chart1.angles.ascendant.longitude.toFixed(4),
+      chart1.angles.midheaven.longitude.toFixed(4),
+      String(chart1.unknownTime),
+      chart2.angles.ascendant.longitude.toFixed(4),
+      chart2.angles.midheaven.longitude.toFixed(4),
+      String(chart2.unknownTime),
+    ].join(':')
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
       setSnapshots(cached)
@@ -666,18 +1108,25 @@ export default function CoupleAdvanceTab({
             {snapshot.score.category === 'challenging' ? '⚠' :
              snapshot.score.category === 'shift' ? '◆' : '✦'}
           </span>
-          <p className={`text-sm ${
-            snapshot.score.category === 'power'
-              ? 'text-mystic-gold/90'
-              : snapshot.score.category === 'favorable'
-                ? 'text-green-400/90'
-                : snapshot.score.category === 'challenging'
-                  ? 'text-red-400/90'
-                  : 'text-blue-400/90'
-          }`}>
-            <span className="font-heading">{categoryBanner.split(' ')[0]}</span>
-            {' ' + categoryBanner.split(' ').slice(1).join(' ')}
-          </p>
+          <div>
+            <p className={`text-sm ${
+              snapshot.score.category === 'power'
+                ? 'text-mystic-gold/90'
+                : snapshot.score.category === 'favorable'
+                  ? 'text-green-400/90'
+                  : snapshot.score.category === 'challenging'
+                    ? 'text-red-400/90'
+                    : 'text-blue-400/90'
+            }`}>
+              <span className="font-heading">{snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]}</span>
+              {' ' + categoryBanner.slice((snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]).length).trimStart()}
+            </p>
+            {snapshot.score.guidance && (
+              <p className="text-xs text-mystic-muted/80 mt-1.5 font-light leading-relaxed">
+                {snapshot.score.guidance}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
