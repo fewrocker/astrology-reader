@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback, useTransition, useRef } from 'react'
 import type { TransitPeriod, TransitAspect } from '../../engine/transits'
-import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus, computeEnergyRating } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus } from '../../engine/transits'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -15,6 +15,8 @@ import {
   ADVANCE_CONFIG, CATEGORY_HALO,
   ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
+  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD, COMBINATION_WEIGHT_NORMALIZE,
+  computeCombinedWeight,
   detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
 } from './AdvanceTab'
 
@@ -41,7 +43,7 @@ const COMPOSITE_PLANET_PHRASES: Partial<Record<string, CompositePlanetPhrase>> =
 
 // ─── Couple-voice reason string builders ─────────────────────────────────────
 
-/** Relationship-native guidance by "${planet}|${nature}". Full entries are task-0006; these are minimal stubs. */
+/** Guidance phrase by "${planet}|${nature}" for couple-voice navigational sentences. */
 const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
   'Saturn|challenging':  'Together, face what needs to be restructured rather than working around it — the patterns you address now build a shared foundation that actually holds.',
   'Saturn|harmonious':   'Commit together to the structure you have been building — patient, deliberate effort made as a pair produces results that last between you.',
@@ -63,6 +65,8 @@ const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
   'Mercury|challenging': 'Slow down communication with each other — what seems clear to one may not be landing as intended; take extra care.',
   'Moon|harmonious':     'Trust the emotional attunement between you — the feeling the two of you share about this is more reliable than usual.',
   'Moon|challenging':    'Give each other space before reacting — the emotional intensity in the relationship is informative but not directive.',
+  'Chiron|challenging':  'The wound surfacing in the relationship isn\'t asking to be fixed — it\'s asking to be witnessed. Being seen by each other without judgment is the practice.',
+  'Chiron|harmonious':   'A healing integration is available to the two of you — something that has been tender between you is shifting toward understanding.',
 }
 
 function buildCouplePowerReason(
@@ -87,9 +91,10 @@ function buildCoupleAspectReason(
 ): { reason: string; bannerBoldFragment: string; guidance?: string } {
   const phrases = COMPOSITE_PLANET_PHRASES[tightest.natalPlanet]
   const verb = ASPECT_VERB_BANNER[tightest.type as AspectType] ?? 'contacts'
-  const planet = tightest.transitPlanet
+  const planet = tightest.transitPlanet as string
   const nature = category === 'favorable' ? 'harmonious' : 'challenging'
-  const guidance = COUPLE_ASPECT_GUIDANCE[`${planet}|${nature}`]
+  const guidanceKey = `${planet}|${nature}`
+  const guidance = COUPLE_ASPECT_GUIDANCE[guidanceKey]
 
   if (!phrases) {
     if (category === 'favorable') {
@@ -221,7 +226,6 @@ function scoreCoupleSnapshot(
 
   // ── Priority 2: shift — station crossing (when no power) ─────────────────
   if (stationPlanet && stationDirection) {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
@@ -229,26 +233,32 @@ function scoreCoupleSnapshot(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
 
-    const isFavorable = rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects
-    const isChallenging = rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects
+    const harmoniousWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const challengingWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+
+    const harmSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+
+    const isFavorable = harmoniousWeight >= (harmSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
+    const isChallenging = challengingWeight >= (challSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2)
 
     if (isFavorable || isChallenging) {
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
+      const combinedWeight = isFavorable ? harmoniousWeight : challengingWeight
       const tightest = [...aspects].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const rawScore = Math.abs(rating.score - 3)
-      const intensity = rawScore / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
-      const { reason: aspectReason, bannerBoldFragment: aspectBBF, guidance: aspectGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
+      const { reason: coShiftReason, bannerBoldFragment: coShiftBold, guidance: coShiftGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
       return {
         category: primaryCategory,
         coShift: true,
         intensity,
-        reason: aspectReason,
-        bannerBoldFragment: aspectBBF,
-        guidance: aspectGuidance,
+        reason: coShiftReason,
+        bannerBoldFragment: coShiftBold,
+        guidance: coShiftGuidance,
         shiftPlanet: stationPlanet,
         shiftDirection: stationDirection,
         triggerAspect: {
@@ -260,38 +270,40 @@ function scoreCoupleSnapshot(
       }
     }
 
-    const { reason: shiftReason, bannerBoldFragment: shiftBBF } = buildCoupleShiftReason(stationPlanet, stationDirection)
+    const { reason: shiftReason, bannerBoldFragment: shiftBold } = buildCoupleShiftReason(stationPlanet, stationDirection)
     return {
       category: 'shift',
       coShift: false,
       intensity: 0.8,
       reason: shiftReason,
-      bannerBoldFragment: shiftBBF,
+      bannerBoldFragment: shiftBold,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
   }
 
-  // ── Priority 3: favorable ─────────────────────────────────────────────────
+  // ── Priority 3: favorable — constellation-weight scoring ─────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingHarmonious = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'harmonious'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingHarmonious, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingHarmonious.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const favorableThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score >= 4 && tightApplyingHarmonious.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= favorableThreshold) {
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
-      const { reason: favReason, bannerBoldFragment: favBBF, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
+      const { reason: favReason, bannerBoldFragment: favBold, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
       return {
         category: 'favorable',
         coShift: false,
         intensity,
         reason: favReason,
-        bannerBoldFragment: favBBF,
+        bannerBoldFragment: favBold,
         guidance: favGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
@@ -303,26 +315,28 @@ function scoreCoupleSnapshot(
     }
   }
 
-  // ── Priority 4: challenging ───────────────────────────────────────────────
+  // ── Priority 4: challenging — constellation-weight scoring ────────────────
   {
-    const rating = computeEnergyRating(snapshot.transitAspects)
     const tightApplyingChallenging = snapshot.transitAspects.filter(
       a => a.applying && a.orb <= orbs.applyingTight && a.nature === 'challenging'
     )
+    const combinedWeight = computeCombinedWeight(tightApplyingChallenging, orbs.applyingTight)
+    const hasSlowPlanet = tightApplyingChallenging.some(a => COMBINATION_PLANETS.has(a.transitPlanet as string))
+    const challengingThreshold = hasSlowPlanet ? COMBINATION_WEIGHT_THRESHOLD : COMBINATION_WEIGHT_THRESHOLD * 2
 
-    if (rating.score <= 2 && tightApplyingChallenging.length >= orbs.energyMinAspects) {
+    if (combinedWeight >= challengingThreshold) {
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
-        (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
+        (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
-      const { reason: chalReason, bannerBoldFragment: chalBBF, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
+      const { reason: chalReason, bannerBoldFragment: chalBold, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
       return {
         category: 'challenging',
         coShift: false,
         intensity,
         reason: chalReason,
-        bannerBoldFragment: chalBBF,
+        bannerBoldFragment: chalBold,
         guidance: chalGuidance,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,

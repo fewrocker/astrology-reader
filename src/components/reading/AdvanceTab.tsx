@@ -103,13 +103,13 @@ export const MARKER_HYSTERESIS_ORB = 0.5
 export const SLOW_PLANETS_FOR_BANNER = new Set<PlanetName>(['Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
 /** Planets used in combination-weight scoring — includes Jupiter unlike SLOW_PLANETS_FOR_BANNER. */
-const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
+export const COMBINATION_PLANETS = new Set<string>(['Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'])
 
 /** Minimum combined weight for a constellation to fire a favorable/challenging marker. */
-const COMBINATION_WEIGHT_THRESHOLD = 3.0
+export const COMBINATION_WEIGHT_THRESHOLD = 3.0
 
 /** Reference weight for normalizing intensity (Pluto + Saturn at zero orb). */
-const COMBINATION_WEIGHT_NORMALIZE = 12
+export const COMBINATION_WEIGHT_NORMALIZE = 12
 
 /** Verb to use in banner text per aspect type. */
 export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
@@ -473,7 +473,7 @@ function angularDiff(lon1: number, lon2: number): number {
  * sum(PLANET_WEIGHT[planet] × (1 − orb/maxOrb)) across all aspects.
  * Slow planets dominate due to higher weight values; fast-planet noise stays below threshold.
  */
-function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number {
+export function computeCombinedWeight(aspects: TransitAspect[], maxOrb: number): number {
   return aspects.reduce((sum, a) => {
     const w = PLANET_WEIGHT[a.transitPlanet as string] ?? 1
     return sum + w * (1 - a.orb / maxOrb)
