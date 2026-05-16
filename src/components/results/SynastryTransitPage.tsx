@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useApp } from '../../context/AppContext'
 import { resolvePersonLabel } from '../../context/appState'
 import type { TransitData, TransitPeriod } from '../../engine/transits'
@@ -11,6 +11,7 @@ import { track } from '../../services/analytics'
 import CollapsibleSection from '../ui/CollapsibleSection'
 import AspectRow from '../reading/AspectRow'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
+import CoupleAdvanceTab from '../reading/CoupleAdvanceTab'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Couple Reading',
@@ -94,8 +95,15 @@ function CurrentPlanetsTable({ transitData }: { transitData: TransitData }) {
 
 export default function SynastryTransitPage() {
   const { state, dispatch } = useApp()
-  const { birthData, partnerBirthData, synastryTransitData, synastryTransitInterpretation, synastryTransitPeriod } = state
+  const {
+    birthData, partnerBirthData,
+    chartData, partnerChartData, synastryData,
+    synastryTransitData, synastryTransitInterpretation, synastryTransitPeriod,
+  } = state
   const [discussOpen, setDiscussOpen] = useState(false)
+
+  // Stable base date reference for CoupleAdvanceTab cache key
+  const baseDate = useMemo(() => new Date(), [])
 
   useEffect(() => {
     track('reading_viewed', { reading_type: 'synastry_transit', period: synastryTransitPeriod ?? undefined })
@@ -143,6 +151,23 @@ export default function SynastryTransitPage() {
               <p key={i} className="text-mystic-text/90 leading-relaxed text-sm">{p}</p>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Look Ahead — couple advance tab (spec 5.1) */}
+      {chartData && partnerChartData && synastryData && (
+        <div className="mb-8">
+          <div className="mb-4">
+            <h2 className="font-heading text-2xl text-mystic-gold">Look Ahead</h2>
+            <p className="text-mystic-muted text-sm mt-1">Notable moments ahead for this relationship</p>
+          </div>
+          <CoupleAdvanceTab
+            chart1={chartData}
+            chart2={partnerChartData}
+            synastryData={synastryData}
+            period={synastryTransitPeriod}
+            baseDate={baseDate}
+          />
         </div>
       )}
 
