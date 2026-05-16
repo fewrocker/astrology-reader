@@ -10,14 +10,15 @@ import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import AspectRow from './AspectRow'
 
-import type { SnapshotScore, MarkerCategory, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
+import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
 import {
   ADVANCE_CONFIG, CATEGORY_HALO,
-  ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
+  ORB_THRESHOLDS, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
   COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD, COMBINATION_WEIGHT_NORMALIZE,
   computeCombinedWeight,
   detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
+  runAdvancePreCalculation,
 } from './AdvanceTab'
 
 // ─── Composite planet archetype phrases ──────────────────────────────────────
@@ -361,111 +362,28 @@ function preCalculateCoupleSnapshots(
   baseDate: Date,
 ): AdvanceSnapshot[] {
   const config: AdvanceConfig = ADVANCE_CONFIG[period]
-  const snapshots: AdvanceSnapshot[] = []
 
-  for (let i = 0; i <= config.max; i++) {
-    let targetDate: Date
-
-    if (period === 'monthly') {
-      targetDate = i === 0
-        ? new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate())
-        : new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12, 0, 0)
-    } else {
-      targetDate = new Date(baseDate.getTime() + i * config.msPerStep)
-    }
-
-    const transitPlanets = calculateCurrentPositions(targetDate)
-    // Transit aspects computed against composite chart planets (house: 0 by design — guarded below)
-    const transitAspects = calculateTransitAspects(transitPlanets, synastryData.compositeChart.planets, period)
-    const retrogrades = getRetrogradeStatus(targetDate)
-
-    const snap: AdvanceSnapshot = {
-      offset: i,
-      date: targetDate,
-      dateStr: targetDate.toISOString().split('T')[0],
-      transitPlanets,
-      housedTransitPlanets: transitPlanets, // no composite house data — used only for chart wheel which is not rendered
-      transitAspects,
-      retrogrades,
-      score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
-    }
-
-    const prev = snapshots[i - 1] ?? null
-    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period)
-
-    snapshots.push(snap)
-  }
-
-  // ── Post-processing: hysteresis pass ─────────────────────────────────────
-  for (let i = 1; i < snapshots.length - 1; i++) {
-    const prev = snapshots[i - 1]
-    const curr = snapshots[i]
-    const next = snapshots[i + 1]
-
-    if (
-      curr.score.category === 'neutral' &&
-      prev.score.category !== 'neutral' &&
-      prev.score.category === next.score.category &&
-      prev.score.triggerAspect && curr.transitAspects.length > 0
-    ) {
-      const triggerPlanet = prev.score.triggerAspect.transitPlanet
-      const triggerNatal = prev.score.triggerAspect.natalPlanet
-      const prevOrb = prev.score.triggerAspect.orb
-      const currAspect = curr.transitAspects.find(
-        a => a.transitPlanet === triggerPlanet && a.natalPlanet === triggerNatal
-      )
-      if (currAspect && Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB) {
-        snapshots[i] = { ...curr, score: { ...prev.score } }
+  return runAdvancePreCalculation<AdvanceSnapshot>(
+    period,
+    baseDate,
+    config,
+    (date, offset) => {
+      const transitPlanets = calculateCurrentPositions(date)
+      // Transit aspects computed against composite chart planets (house: 0 by design — guarded below)
+      const transitAspects = calculateTransitAspects(transitPlanets, synastryData.compositeChart.planets, period)
+      const retrogrades = getRetrogradeStatus(date)
+      return {
+        offset,
+        date,
+        dateStr: date.toISOString().split('T')[0],
+        transitPlanets,
+        housedTransitPlanets: transitPlanets, // no composite house data — used only for chart wheel which is not rendered
+        transitAspects,
+        retrogrades,
       }
-    }
-  }
-
-  // ── Density cap with category diversity (spec 6.2) ────────────────────────
-  const nonNeutral = snapshots.filter(s => s.score.category !== 'neutral' && s.offset > 0)
-  const maxMarkers = Math.ceil(config.max * 0.2)
-
-  if (nonNeutral.length > maxMarkers) {
-    const byCategory: Partial<Record<MarkerCategory, AdvanceSnapshot[]>> = {}
-    for (const s of nonNeutral) {
-      const cat = s.score.category
-      if (!byCategory[cat]) byCategory[cat] = []
-      byCategory[cat]!.push(s)
-    }
-
-    const categories = Object.keys(byCategory) as MarkerCategory[]
-    const keep = new Set<number>()
-
-    if (categories.length > 1) {
-      // Include one representative from each non-neutral category first (highest intensity)
-      for (const cat of categories) {
-        const catSnaps = byCategory[cat]!.sort((a, b) => b.score.intensity - a.score.intensity)
-        keep.add(catSnaps[0].offset)
-      }
-      // Fill remaining slots by intensity across all non-neutral
-      const remaining = [...nonNeutral]
-        .filter(s => !keep.has(s.offset))
-        .sort((a, b) => b.score.intensity - a.score.intensity)
-      for (const s of remaining) {
-        if (keep.size >= maxMarkers) break
-        keep.add(s.offset)
-      }
-    } else {
-      // Single category: top by intensity
-      const sorted = [...nonNeutral].sort((a, b) => b.score.intensity - a.score.intensity)
-      for (const s of sorted.slice(0, maxMarkers)) keep.add(s.offset)
-    }
-
-    for (let i = 0; i < snapshots.length; i++) {
-      if (snapshots[i].score.category !== 'neutral' && !keep.has(snapshots[i].offset)) {
-        snapshots[i] = {
-          ...snapshots[i],
-          score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
-        }
-      }
-    }
-  }
-
-  return snapshots
+    },
+    (snap, prev) => scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period),
+  )
 }
 
 // ─── CoupleAdvanceTab Component ───────────────────────────────────────────────

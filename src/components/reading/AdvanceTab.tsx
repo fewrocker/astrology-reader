@@ -841,16 +841,36 @@ function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
   return formatScoreAsBannerText(snapshot.score)
 }
 
-// ─── Pre-calculator ──────────────────────────────────────────────────────────
+// ─── Shared pre-calculation core ─────────────────────────────────────────────
 
-function preCalculateSnapshots(
-  chartData: ChartData,
+/**
+ * Shared advance pre-calculation loop.
+ *
+ * Encapsulates the three invariant phases that both `preCalculateSnapshots` and
+ * `preCalculateCoupleSnapshots` share:
+ *   1. Date-offset loop with monthly noon normalization.
+ *   2. Hysteresis pass (spec 14.4).
+ *   3. Two-phase density cap with category reservation (spec 1.13).
+ *
+ * @param period      Transit period driving the step size / noon-normalization logic.
+ * @param baseDate    Origin date for offset 0.
+ * @param config      Explicit config (allows callers to supply a custom max without
+ *                    modifying ADVANCE_CONFIG — needed by SR advance preview).
+ * @param buildSnapshot  Pure function that constructs every field of S except `score`
+ *                       for a given resolved date and offset index.
+ * @param scoreFunc   Pure function that computes SnapshotScore given the fully
+ *                    constructed (but not yet scored) snapshot and the previous
+ *                    snapshot (needed for station-crossing detection).
+ */
+export function runAdvancePreCalculation<S extends AdvanceSnapshot>(
   period: TransitPeriod,
   baseDate: Date,
-): AdvanceSnapshot[] {
-  const config = ADVANCE_CONFIG[period]
-  // Intermediate array before scoring (needed for previous-snapshot access)
-  const snapshots: AdvanceSnapshot[] = []
+  config: { max: number; msPerStep: number },
+  buildSnapshot: (date: Date, offset: number) => Omit<S, 'score'>,
+  scoreFunc: (snap: S, prev: S | null) => SnapshotScore,
+): S[] {
+  const neutral: SnapshotScore = { category: 'neutral', intensity: 0, reason: '', coShift: false }
+  const snapshots: S[] = []
 
   for (let i = 0; i <= config.max; i++) {
     let targetDate: Date
@@ -868,27 +888,13 @@ function preCalculateSnapshots(
       targetDate = new Date(baseDate.getTime() + i * config.msPerStep)
     }
 
-    const transitPlanets = calculateCurrentPositions(targetDate)
-    const transitAspects = calculateTransitAspects(transitPlanets, chartData.planets, period)
-    const retrogrades = getRetrogradeStatus(targetDate)
-    const housedTransitPlanets = assignTransitHouses(transitPlanets, chartData.houses)
+    // Build everything except score, then attach placeholder score
+    const partial = buildSnapshot(targetDate, i)
+    const snap = { ...partial, score: neutral } as S
 
-    // score is computed after building the snapshot array entry;
-    // we push a placeholder and fill score below
-    const snap: AdvanceSnapshot = {
-      offset: i,
-      date: targetDate,
-      dateStr: targetDate.toISOString().split('T')[0],
-      transitPlanets,
-      housedTransitPlanets,
-      transitAspects,
-      retrogrades,
-      score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
-    }
-
-    // Compute score immediately (spec 1.12) — passing prev snapshot
+    // Compute score immediately (spec 1.12) — passing prev snapshot for station detection
     const prev = snapshots[i - 1] ?? null
-    snap.score = scoreSnapshot(snap, prev, chartData, period)
+    snap.score = scoreFunc(snap, prev)
 
     snapshots.push(snap)
   }
@@ -915,10 +921,7 @@ function preCalculateSnapshots(
         a => a.transitPlanet === triggerPlanet && a.natalPlanet === triggerNatal
       )
       if (currAspect && Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB) {
-        snapshots[i] = {
-          ...curr,
-          score: { ...prev.score },
-        }
+        snapshots[i] = { ...curr, score: { ...prev.score } }
       }
     }
   }
@@ -928,7 +931,9 @@ function preCalculateSnapshots(
   const maxMarkers = Math.ceil(config.max * 0.2)
 
   if (nonNeutral.length > maxMarkers) {
-    // Phase 1: reserve the highest-intensity marker per non-neutral category present
+    // Phase 1: reserve the highest-intensity marker per non-neutral category present.
+    // Iterates NON_NEUTRAL_CATEGORIES in fixed order so reservation is deterministic
+    // regardless of the order categories happen to appear in the snapshot array.
     const NON_NEUTRAL_CATEGORIES: Exclude<MarkerCategory, 'neutral'>[] = [
       'power', 'favorable', 'challenging', 'shift',
     ]
@@ -953,13 +958,45 @@ function preCalculateSnapshots(
       if (snapshots[i].score.category !== 'neutral' && !reservedOffsets.has(snapshots[i].offset)) {
         snapshots[i] = {
           ...snapshots[i],
-          score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
+          score: neutral,
         }
       }
     }
   }
 
   return snapshots
+}
+
+// ─── Pre-calculator ──────────────────────────────────────────────────────────
+
+function preCalculateSnapshots(
+  chartData: ChartData,
+  period: TransitPeriod,
+  baseDate: Date,
+): AdvanceSnapshot[] {
+  const config = ADVANCE_CONFIG[period]
+
+  return runAdvancePreCalculation<AdvanceSnapshot>(
+    period,
+    baseDate,
+    config,
+    (date, offset) => {
+      const transitPlanets = calculateCurrentPositions(date)
+      const transitAspects = calculateTransitAspects(transitPlanets, chartData.planets, period)
+      const retrogrades = getRetrogradeStatus(date)
+      const housedTransitPlanets = assignTransitHouses(transitPlanets, chartData.houses)
+      return {
+        offset,
+        date,
+        dateStr: date.toISOString().split('T')[0],
+        transitPlanets,
+        housedTransitPlanets,
+        transitAspects,
+        retrogrades,
+      }
+    },
+    (snap, prev) => scoreSnapshot(snap, prev, chartData, period),
+  )
 }
 
 // ─── Priority order for marker comparison ────────────────────────────────────
