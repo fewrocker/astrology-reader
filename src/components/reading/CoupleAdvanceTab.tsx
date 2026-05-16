@@ -1,11 +1,11 @@
 import { useMemo, useState, useEffect, useCallback, useTransition, useRef } from 'react'
 import type { TransitPeriod, TransitAspect } from '../../engine/transits'
-import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus, computeEnergyRating } from '../../engine/transits'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { AspectType } from '../../engine/aspects'
-import type { SynastryData } from '../../engine/synastry'
+import type { SynastryData, SynastryAspect } from '../../engine/synastry'
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import AspectRow from './AspectRow'
@@ -13,12 +13,11 @@ import AspectRow from './AspectRow'
 import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
 import {
   ADVANCE_CONFIG, CATEGORY_HALO,
-  ORB_THRESHOLDS, SLOW_PLANETS_FOR_BANNER,
+  ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
-  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD, COMBINATION_WEIGHT_NORMALIZE,
+  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD,
   computeCombinedWeight,
   detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
-  runAdvancePreCalculation,
 } from './AdvanceTab'
 
 // ─── Composite planet archetype phrases ──────────────────────────────────────
@@ -325,6 +324,123 @@ function buildCoupleShiftReason(
   }
 }
 
+// ─── Synastry axis activation ─────────────────────────────────────────────────
+
+/**
+ * Normalize angular difference between two ecliptic longitudes to [0, 180].
+ */
+function angularDiffCouple(lon1: number, lon2: number): number {
+  let diff = Math.abs(lon1 - lon2) % 360
+  if (diff > 180) diff = 360 - diff
+  return diff
+}
+
+interface SynastryAxisActivation {
+  person1Planet: string
+  person2Planet: string
+  aspectType: string
+  synastryNature: 'harmonious' | 'challenging' | 'neutral'
+  activatedPole: 'person1' | 'person2'
+  activatedLongitude: number
+  contactOrb: number
+}
+
+/**
+ * Given a transiting planet longitude and the pre-filtered tight synastry pairs,
+ * returns the closest activated synastry axis, or null if none.
+ * Only slow planets (Saturn, Uranus, Neptune, Pluto) trigger augmentation.
+ */
+function findActivatedSynastryAxis(
+  transitPlanetName: string,
+  transitLon: number,
+  transitOrb: number,
+  tightSynastryPairs: SynastryAspect[],
+  chart1: ChartData,
+  chart2: ChartData,
+): SynastryAxisActivation | null {
+  if (!SLOW_PLANETS_FOR_BANNER.has(transitPlanetName as PlanetName)) return null
+  if (tightSynastryPairs.length === 0) return null
+
+  let best: SynastryAxisActivation | null = null
+
+  for (const aspect of tightSynastryPairs) {
+    const p1Planet = chart1.planets.find(p => p.name === aspect.person1Planet)
+    const p2Planet = chart2.planets.find(p => p.name === aspect.person2Planet)
+    if (!p1Planet || !p2Planet) continue
+
+    const diff1 = angularDiffCouple(transitLon, p1Planet.longitude)
+    const diff2 = angularDiffCouple(transitLon, p2Planet.longitude)
+
+    let candidate: SynastryAxisActivation | null = null
+
+    if (diff1 <= transitOrb && diff2 <= transitOrb) {
+      // Both poles within orb — pick the tighter one
+      const pole = diff1 <= diff2 ? 'person1' : 'person2'
+      const lon = pole === 'person1' ? p1Planet.longitude : p2Planet.longitude
+      const orb = Math.min(diff1, diff2)
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: pole,
+        activatedLongitude: lon,
+        contactOrb: orb,
+      }
+    } else if (diff1 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person1',
+        activatedLongitude: p1Planet.longitude,
+        contactOrb: diff1,
+      }
+    } else if (diff2 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person2',
+        activatedLongitude: p2Planet.longitude,
+        contactOrb: diff2,
+      }
+    }
+
+    if (candidate && (!best || candidate.contactOrb < best.contactOrb)) {
+      best = candidate
+    }
+  }
+
+  return best
+}
+
+/**
+ * Build the reason suffix string for a synastry axis activation.
+ * Format: "— and resonates with the [adjective] [planet1]-[planet2] axis between the two of you."
+ */
+function buildSynastryAxisSuffix(activation: SynastryAxisActivation): string {
+  const adjective =
+    activation.synastryNature === 'harmonious' ? 'harmonious ' :
+    activation.synastryNature === 'challenging' ? 'tense ' :
+    ''
+  return `— and resonates with the ${adjective}${activation.person1Planet}-${activation.person2Planet} axis between the two of you.`
+}
+
+/**
+ * Augment a reason string with a synastry axis suffix, capped at 200 characters.
+ */
+function augmentReasonWithSuffix(baseReason: string, suffix: string): string {
+  const combined = `${baseReason} ${suffix}`
+  if (combined.length <= 200) return combined
+  // Truncate at word boundary within the suffix
+  const truncated = combined.slice(0, 200)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return lastSpace > baseReason.length ? truncated.slice(0, lastSpace) + '.' : baseReason
+}
+
 // ─── Couple snapshot scoring ──────────────────────────────────────────────────
 
 function scoreCoupleSnapshot(
@@ -334,12 +450,14 @@ function scoreCoupleSnapshot(
   chart2: ChartData,
   synastryData: SynastryData,
   period: TransitPeriod,
+  tightSynastryPairs: SynastryAspect[],
 ): SnapshotScore {
   const neutral: SnapshotScore = { category: 'neutral', intensity: 0, reason: '', coShift: false }
 
   if (snapshot.offset === 0) return neutral
 
   const orbs = ORB_THRESHOLDS[period]
+  const rating = computeEnergyRating(snapshot.transitAspects)
 
   // ── Detect station crossing ───────────────────────────────────────────────
   let stationPlanet: string | undefined
@@ -431,13 +549,29 @@ function scoreCoupleSnapshot(
     if (isFavorable || isChallenging) {
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
-      const combinedWeight = isFavorable ? harmoniousWeight : challengingWeight
       const tightest = [...aspects].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
+      const baseIntensity = Math.abs(rating.score - 3) / 2
 
-      const { reason: coShiftReason, bannerBoldFragment: coShiftBold, guidance: coShiftGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetCoShift = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationCoShift = transitPlanetCoShift
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetCoShift.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationCoShift ? Math.min(1.0, baseIntensity * 1.25) : baseIntensity
+      const { reason: baseCoShiftReason, bannerBoldFragment: coShiftBold, guidance: coShiftGuidance } = buildCoupleAspectReason(tightest, primaryCategory)
+      const coShiftReason = axisActivationCoShift
+        ? augmentReasonWithSuffix(baseCoShiftReason, buildSynastryAxisSuffix(axisActivationCoShift))
+        : baseCoShiftReason
+
       return {
         category: primaryCategory,
         coShift: true,
@@ -482,9 +616,26 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
+      const baseIntensityFav = Math.abs(rating.score - 3) / 2
 
-      const { reason: favReason, bannerBoldFragment: favBold, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetFav = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationFav = transitPlanetFav
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetFav.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationFav ? Math.min(1.0, baseIntensityFav * 1.25) : baseIntensityFav
+      const { reason: baseFavReason, bannerBoldFragment: favBold, guidance: favGuidance } = buildCoupleAspectReason(tightest, 'favorable')
+      const favReason = axisActivationFav
+        ? augmentReasonWithSuffix(baseFavReason, buildSynastryAxisSuffix(axisActivationFav))
+        : baseFavReason
+
       return {
         category: 'favorable',
         coShift: false,
@@ -515,9 +666,26 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const intensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
+      const baseIntensityChal = Math.abs(rating.score - 3) / 2
 
-      const { reason: chalReason, bannerBoldFragment: chalBold, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanetChal = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivationChal = transitPlanetChal
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanetChal.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivationChal ? Math.min(1.0, baseIntensityChal * 1.25) : baseIntensityChal
+      const { reason: baseChalReason, bannerBoldFragment: chalBold, guidance: chalGuidance } = buildCoupleAspectReason(tightest, 'challenging')
+      const chalReason = axisActivationChal
+        ? augmentReasonWithSuffix(baseChalReason, buildSynastryAxisSuffix(axisActivationChal))
+        : baseChalReason
+
       return {
         category: 'challenging',
         coShift: false,
@@ -549,27 +717,112 @@ function preCalculateCoupleSnapshots(
 ): AdvanceSnapshot[] {
   const config: AdvanceConfig = ADVANCE_CONFIG[period]
 
-  return runAdvancePreCalculation<AdvanceSnapshot>(
-    period,
-    baseDate,
-    config,
-    (date, offset) => {
-      const transitPlanets = calculateCurrentPositions(date)
-      // Transit aspects computed against composite chart planets (house: 0 by design — guarded below)
-      const transitAspects = calculateTransitAspects(transitPlanets, synastryData.compositeChart.planets, period)
-      const retrogrades = getRetrogradeStatus(date)
-      return {
-        offset,
-        date,
-        dateStr: date.toISOString().split('T')[0],
-        transitPlanets,
-        housedTransitPlanets: transitPlanets, // no composite house data — used only for chart wheel which is not rendered
-        transitAspects,
-        retrogrades,
+  // Pre-filter tight synastry pairs once — passed into each scoreCoupleSnapshot call.
+  // Only synastry aspects with orb <= 2.0° qualify as "sensitive relational axes."
+  const tightSynastryPairs = synastryData.synastryAspects.filter(a => a.orb <= 2.0)
+
+  const snapshots: AdvanceSnapshot[] = []
+
+  for (let i = 0; i <= config.max; i++) {
+    let targetDate: Date
+
+    if (period === 'monthly') {
+      targetDate = i === 0
+        ? new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate())
+        : new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12, 0, 0)
+    } else {
+      targetDate = new Date(baseDate.getTime() + i * config.msPerStep)
+    }
+
+    const transitPlanets = calculateCurrentPositions(targetDate)
+    // Transit aspects computed against composite chart planets (house: 0 by design — guarded below)
+    const transitAspects = calculateTransitAspects(transitPlanets, synastryData.compositeChart.planets, period)
+    const retrogrades = getRetrogradeStatus(targetDate)
+
+    const snap: AdvanceSnapshot = {
+      offset: i,
+      date: targetDate,
+      dateStr: targetDate.toISOString().split('T')[0],
+      transitPlanets,
+      housedTransitPlanets: transitPlanets, // no composite house data — used only for chart wheel which is not rendered
+      transitAspects,
+      retrogrades,
+      score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
+    }
+
+    const prev = snapshots[i - 1] ?? null
+    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period, tightSynastryPairs)
+
+    snapshots.push(snap)
+  }
+
+  // ── Post-processing: hysteresis pass ─────────────────────────────────────
+  for (let i = 1; i < snapshots.length - 1; i++) {
+    const prev = snapshots[i - 1]
+    const curr = snapshots[i]
+    const next = snapshots[i + 1]
+
+    if (
+      curr.score.category === 'neutral' &&
+      prev.score.category !== 'neutral' &&
+      prev.score.category === next.score.category &&
+      prev.score.triggerAspect && curr.transitAspects.length > 0
+    ) {
+      const triggerPlanet = prev.score.triggerAspect.transitPlanet
+      const triggerNatal = prev.score.triggerAspect.natalPlanet
+      const prevOrb = prev.score.triggerAspect.orb
+      const currAspect = curr.transitAspects.find(
+        a => a.transitPlanet === triggerPlanet && a.natalPlanet === triggerNatal
+      )
+      if (currAspect && Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB) {
+        snapshots[i] = { ...curr, score: { ...prev.score } }
       }
-    },
-    (snap, prev) => scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period),
-  )
+    }
+  }
+
+  // ── Density cap with category diversity (spec 6.2) ────────────────────────
+  const nonNeutral = snapshots.filter(s => s.score.category !== 'neutral' && s.offset > 0)
+  const maxMarkers = Math.ceil(config.max * 0.2)
+
+  if (nonNeutral.length > maxMarkers) {
+    const byCategory: Partial<Record<string, AdvanceSnapshot[]>> = {}
+    for (const s of nonNeutral) {
+      const cat = s.score.category
+      if (!byCategory[cat]) byCategory[cat] = []
+      byCategory[cat]!.push(s)
+    }
+
+    const categories = Object.keys(byCategory)
+    const keep = new Set<number>()
+
+    if (categories.length > 1) {
+      for (const cat of categories) {
+        const catSnaps = byCategory[cat]!.sort((a, b) => b.score.intensity - a.score.intensity)
+        keep.add(catSnaps[0].offset)
+      }
+      const remaining = [...nonNeutral]
+        .filter(s => !keep.has(s.offset))
+        .sort((a, b) => b.score.intensity - a.score.intensity)
+      for (const s of remaining) {
+        if (keep.size >= maxMarkers) break
+        keep.add(s.offset)
+      }
+    } else {
+      const sorted = [...nonNeutral].sort((a, b) => b.score.intensity - a.score.intensity)
+      for (const s of sorted.slice(0, maxMarkers)) keep.add(s.offset)
+    }
+
+    for (let i = 0; i < snapshots.length; i++) {
+      if (snapshots[i].score.category !== 'neutral' && !keep.has(snapshots[i].offset)) {
+        snapshots[i] = {
+          ...snapshots[i],
+          score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
+        }
+      }
+    }
+  }
+
+  return snapshots
 }
 
 // ─── CoupleAdvanceTab Component ───────────────────────────────────────────────
