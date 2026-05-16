@@ -3,6 +3,8 @@ import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
 import { ZODIAC_GLYPHS, getBodyGlyph, isAsteroid } from '../../engine/types'
 import type { BodyName, PlanetName, ZodiacSign } from '../../engine/types'
 import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
+import type { MarkerCategory } from './AdvanceTab'
+import { CATEGORY_LABELS } from './AdvanceTab'
 
 function formatTimelineDate(date: Date): string {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -95,8 +97,42 @@ function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expand
   )
 }
 
-function DaySection({ day }: { day: TimelineDay }) {
+// Badge styling per advance category — mirrors AdvanceTab's color conventions.
+const CATEGORY_BADGE_STYLE: Record<Exclude<MarkerCategory, 'neutral' | 'shift'>, string> = {
+  power:       'bg-mystic-gold/20 text-mystic-gold border border-mystic-gold/30',
+  favorable:   'bg-green-900/20 text-green-400 border border-green-500/30',
+  challenging: 'bg-red-900/20 text-red-400 border border-red-500/30',
+}
+
+const CATEGORY_DOT_STYLE: Record<Exclude<MarkerCategory, 'neutral' | 'shift'>, string> = {
+  power:       'bg-mystic-gold border-mystic-gold shadow-[0_0_8px_rgba(201,168,76,0.5)]',
+  favorable:   'bg-green-400 border-green-400 shadow-[0_0_8px_rgba(52,211,153,0.4)]',
+  challenging: 'bg-red-400 border-red-400 shadow-[0_0_8px_rgba(248,113,113,0.4)]',
+}
+
+const CATEGORY_ICON: Record<Exclude<MarkerCategory, 'neutral' | 'shift'>, string> = {
+  power:       '✦',
+  favorable:   '◆',
+  challenging: '⚠',
+}
+
+function DaySection({ day, scoreByDate }: { day: TimelineDay; scoreByDate?: Map<string, MarkerCategory> }) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  // When advance snapshot data is available for this date, use its category.
+  // If the category is 'shift' or 'neutral' we fall back to the event-count heuristic
+  // so that the badge remains meaningful (shift has no timeline-visible label).
+  // When scoreByDate is not provided (advance engine hasn't run yet), fall back
+  // to the raw isPowerDay heuristic — acceptable degraded state documented in card.
+  const advanceCategory = scoreByDate?.get(day.dateStr)
+  const badgeCategory: Exclude<MarkerCategory, 'neutral' | 'shift'> | null =
+    advanceCategory && advanceCategory !== 'neutral' && advanceCategory !== 'shift'
+      ? advanceCategory
+      : day.isPowerDay
+        ? 'power'
+        : null
+
+  const dotStyle = badgeCategory ? CATEGORY_DOT_STYLE[badgeCategory] : 'bg-mystic-bg border-mystic-gold/40'
 
   return (
     <div className="relative pl-6 pb-6 last:pb-0">
@@ -104,20 +140,16 @@ function DaySection({ day }: { day: TimelineDay }) {
       <div className="absolute left-[7px] top-0 bottom-0 w-px bg-mystic-gold/15" />
 
       {/* Date dot */}
-      <div className={`absolute left-0 top-0.5 w-[15px] h-[15px] rounded-full border-2 ${
-        day.isPowerDay
-          ? 'bg-mystic-gold border-mystic-gold shadow-[0_0_8px_rgba(201,168,76,0.5)]'
-          : 'bg-mystic-bg border-mystic-gold/40'
-      }`} />
+      <div className={`absolute left-0 top-0.5 w-[15px] h-[15px] rounded-full border-2 ${dotStyle}`} />
 
       {/* Date header */}
       <div className="flex items-center gap-2 mb-2">
         <span className="font-heading text-sm text-mystic-gold">
           {formatTimelineDate(day.date)}
         </span>
-        {day.isPowerDay && (
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-mystic-gold/20 text-mystic-gold border border-mystic-gold/30 font-medium uppercase tracking-wider">
-            ✦ Power Day
+        {badgeCategory && (
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wider ${CATEGORY_BADGE_STYLE[badgeCategory]}`}>
+            {CATEGORY_ICON[badgeCategory]} {CATEGORY_LABELS[badgeCategory]}
           </span>
         )}
         <span className="text-mystic-muted text-xs">
@@ -140,7 +172,7 @@ function DaySection({ day }: { day: TimelineDay }) {
   )
 }
 
-export default function TransitTimeline({ days }: { days: TimelineDay[] }) {
+export default function TransitTimeline({ days, scoreByDate }: { days: TimelineDay[]; scoreByDate?: Map<string, MarkerCategory> }) {
   const [filter, setFilter] = useState<string | null>(null)
 
   if (days.length === 0) {
@@ -169,7 +201,14 @@ export default function TransitTimeline({ days }: { days: TimelineDay[] }) {
 
   // Stats
   const totalEvents = days.reduce((sum, d) => sum + d.events.length, 0)
-  const powerDays = days.filter(d => d.isPowerDay).length
+  // When advance data is available, count notable days from the score map;
+  // otherwise fall back to the raw event-count heuristic.
+  const notableDays = scoreByDate
+    ? days.filter(d => {
+        const cat = scoreByDate.get(d.dateStr)
+        return cat && cat !== 'neutral' && cat !== 'shift'
+      }).length
+    : days.filter(d => d.isPowerDay).length
 
   return (
     <div>
@@ -178,10 +217,10 @@ export default function TransitTimeline({ days }: { days: TimelineDay[] }) {
         <span>{totalEvents} events</span>
         <span>·</span>
         <span>{days.length} days with activity</span>
-        {powerDays > 0 && (
+        {notableDays > 0 && (
           <>
             <span>·</span>
-            <span className="text-mystic-gold">{powerDays} power day{powerDays !== 1 ? 's' : ''}</span>
+            <span className="text-mystic-gold">{notableDays} notable day{notableDays !== 1 ? 's' : ''}</span>
           </>
         )}
       </div>
@@ -206,7 +245,7 @@ export default function TransitTimeline({ days }: { days: TimelineDay[] }) {
       {/* Timeline */}
       <div className="relative">
         {filteredDays.map(day => (
-          <DaySection key={day.dateStr} day={day} />
+          <DaySection key={day.dateStr} day={day} scoreByDate={scoreByDate} />
         ))}
       </div>
     </div>
