@@ -1,5 +1,18 @@
 # Done Proposals
 
+## Sprint 0020 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-couple-advance-cache-key](issue-couple-advance-cache-key.md) | Issue Fix | merged sprint-0020 |
+| [issue-couple-advance-banner-bold-fragment](issue-couple-advance-banner-bold-fragment.md) | Issue Fix | merged sprint-0020 |
+| [code-couple-advance-scoring-parity](code-couple-advance-scoring-parity.md) | Code Enhancement | merged sprint-0020 |
+| [code-advance-precompute-abstraction](code-advance-precompute-abstraction.md) | Code Enhancement | merged sprint-0020 |
+| [code-transit-timeline-advance-coherence](code-transit-timeline-advance-coherence.md) | Code Enhancement | merged sprint-0020 |
+| [feat-couple-advance-guidance](feat-couple-advance-guidance.md) | Feature | merged sprint-0020 |
+| [feat-couple-advance-synastry-axis](feat-couple-advance-synastry-axis.md) | Feature | merged sprint-0020 |
+| [feat-solar-return-advance-preview](feat-solar-return-advance-preview.md) | Feature | merged sprint-0020 |
+
 ## Sprint 0019 — Completed
 
 | Proposal | Type | Delivered |
