@@ -774,8 +774,9 @@ export default function AdvanceTab({
 }) {
   const config = ADVANCE_CONFIG[period]
 
-  // Snapshot cache (spec 10.5): useRef-based cache keyed by (period, baseDate.toISOString()).
-  // Prevents full preCalculateSnapshots re-run on tab remount with same inputs.
+  // Snapshot cache (spec 10.5): useRef-based cache keyed by chart identity + period + baseDate.
+  // Chart identity is derived from ascendant/midheaven longitudes and unknownTime flag so that
+  // switching charts (e.g. couple advance) always misses and recomputes instead of serving stale results.
   const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
 
   // Pre-calculate all snapshots with useTransition so main thread stays responsive
@@ -783,7 +784,8 @@ export default function AdvanceTab({
   const [isPending, startTransition] = useTransition()
 
   useEffect(() => {
-    const cacheKey = `${period}:${baseDate.toISOString()}`
+    const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const cacheKey = `${chartKey}:${period}:${baseDate.toISOString()}`
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
       setSnapshots(cached)
