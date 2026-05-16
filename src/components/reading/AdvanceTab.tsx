@@ -843,7 +843,7 @@ function computePowerDayBanner(snapshot: AdvanceSnapshot): string | null {
 
 // ─── Pre-calculator ──────────────────────────────────────────────────────────
 
-function preCalculateSnapshots(
+export function preCalculateSnapshots(
   chartData: ChartData,
   period: TransitPeriod,
   baseDate: Date,
