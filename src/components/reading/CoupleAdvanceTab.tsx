@@ -42,39 +42,224 @@ const COMPOSITE_PLANET_PHRASES: Partial<Record<string, CompositePlanetPhrase>> =
   NorthNode: { relationship: "the bond's evolutionary direction", brief: "shared karmic purpose" },
 }
 
-// ─── Couple-voice reason string builders ─────────────────────────────────────
+// ─── Couple guidance tables ───────────────────────────────────────────────────
 
-/** Guidance phrase by "${planet}|${nature}" for couple-voice navigational sentences. */
-const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
-  'Saturn|challenging':  'Together, face what needs to be restructured rather than working around it — the patterns you address now build a shared foundation that actually holds.',
-  'Saturn|harmonious':   'Commit together to the structure you have been building — patient, deliberate effort made as a pair produces results that last between you.',
-  'Jupiter|harmonious':  'Say yes together — the window is open and what the two of you initiate or reach for now has genuine momentum behind it.',
-  'Jupiter|challenging': 'Pause before the two of you overcommit — the enthusiasm is real but the picture isn\'t complete yet; investigate before expanding together.',
-  'Pluto|challenging':   'Go toward what is being revealed between you rather than away from it — the transformation is happening regardless, and facing it together reduces the cost.',
-  'Pluto|harmonious':    'Act from the deeper bond that difficulty has revealed — this is a window to integrate shared transformation rather than just survive it.',
-  'Uranus|challenging':  'Stay flexible together and don\'t force the disruption into a predetermined shape — what breaks is creating room for the two of you, even if that isn\'t apparent yet.',
-  'Uranus|harmonious':   'Take the unconventional step together — the window for shared change without penalty is open.',
-  'Neptune|challenging': 'Verify rather than assume between you — clarity in the relationship is harder than usual, and decisions made on feeling alone may need revisiting.',
-  'Neptune|harmonious':  'Make space together for creative and spiritual connection — what arrives through shared imagination and inner listening carries unusual depth.',
-  'Mars|challenging':    'Don\'t let the friction between you escalate — the tension here needs to be worked with together, not overcome by force.',
-  'Mars|harmonious':     'Direct your shared energy toward something concrete — the drive available to both of you benefits from a clear, common target.',
-  'Venus|harmonious':    'Reach toward connection and pleasure together — this is a window for what genuinely brings the two of you alive.',
-  'Venus|challenging':   'Resist resolving tension through accommodation — what needs addressing in the relationship isn\'t going to settle on its own.',
-  'Sun|harmonious':      'Bring your shared intentions into the open — this is a window for mutual visibility and creative expression as a pair.',
-  'Sun|challenging':     'Notice where individual ego investment is creating friction between you — the tension points to something worth examining together.',
-  'Mercury|harmonious':  'Say what you mean to each other clearly and promptly — conversations opened now are easier to navigate together.',
-  'Mercury|challenging': 'Slow down communication with each other — what seems clear to one may not be landing as intended; take extra care.',
-  'Moon|harmonious':     'Trust the emotional attunement between you — the feeling the two of you share about this is more reliable than usual.',
-  'Moon|challenging':    'Give each other space before reacting — the emotional intensity in the relationship is informative but not directive.',
-  'Chiron|challenging':  'The wound surfacing in the relationship isn\'t asking to be fixed — it\'s asking to be witnessed. Being seen by each other without judgment is the practice.',
-  'Chiron|harmonious':   'A healing integration is available to the two of you — something that has been tender between you is shifting toward understanding.',
+/** Reason and guidance phrases for composite angle-contact power markers.
+ *  Key: "${planet}|${aspectType}|${angleKey}" */
+const COUPLE_POWER_PHRASES: Partial<Record<string, { reason: string; guidance: string }>> = {
+  // Saturn
+  'Saturn|conjunction|ASC': {
+    reason:   "Saturn arrives at the relationship's Ascendant — how this bond presents itself to the world is being restructured.",
+    guidance: "This is a window to talk together about how you show up as a couple — what has felt automatic about the way you move through the world together is being asked to become more intentional.",
+  },
+  'Saturn|conjunction|MC': {
+    reason:   "Saturn reaches the relationship's Midheaven — a significant moment for the shared direction this bond has been building toward.",
+    guidance: "Sit with what you are actually building together — the ambitions and public commitments the relationship has been carrying deserve an honest conversation now.",
+  },
+  'Saturn|opposition|ASC': {
+    reason:   "Saturn pressing opposite the relationship's Ascendant — external structures and others' perceptions are testing the bond's foundations.",
+    guidance: "What others are reflecting about this relationship carries useful information — this is a window to decide together what to keep and what to let go.",
+  },
+  'Saturn|opposition|MC': {
+    reason:   "Saturn pressing opposite the relationship's Midheaven — the gap between the bond's private reality and its public direction is becoming visible.",
+    guidance: "Name the distance between where this relationship actually is and where it has been projecting itself publicly — the two of you can close that gap more honestly now than later.",
+  },
+  'Saturn|square|ASC': {
+    reason:   "Saturn pressing on the relationship's Ascendant axis — the way this couple moves through the world is under significant pressure.",
+    guidance: "Don't try to manage around what is being stressed — naming what is hard between you is more productive than finding ways to look fine.",
+  },
+  'Saturn|square|MC': {
+    reason:   "Saturn pressing on the relationship's Midheaven — the shared structures and long-term commitments of this bond are being stress-tested.",
+    guidance: "Take the audit seriously together — what is working in the structures you share and what isn't is clearer now than it normally is.",
+  },
+  'Saturn|trine|ASC': {
+    reason:   "Saturn supporting the relationship's Ascendant — the work done together on how this couple shows up is producing durable results.",
+    guidance: "This is a window to take the next step in how you present yourselves to the world together — the groundwork is ready to support it.",
+  },
+  'Saturn|trine|MC': {
+    reason:   "Saturn supporting the relationship's Midheaven — the shared direction and commitments this bond has invested in are crystallizing into something real.",
+    guidance: "Commit to the joint goal or shared structure you have been building toward — the conditions are favorable for making it official.",
+  },
+  'Saturn|sextile|ASC': {
+    reason:   "Saturn opening toward the relationship's Ascendant — a practical window to solidify how this couple shows up with real, lasting structure.",
+    guidance: "Act on the shared identity step the two of you have been considering — the conditions are favorable and the timing is practical.",
+  },
+  'Saturn|sextile|MC': {
+    reason:   "Saturn opening toward the relationship's Midheaven — a practical opportunity to advance shared standing through steady, joint effort.",
+    guidance: "Make the deliberate move together toward the shared goal — the opening is available and sustained effort will be recognized.",
+  },
+  // Jupiter
+  'Jupiter|conjunction|ASC': {
+    reason:   "Jupiter arrives at the relationship's Ascendant — a significant expansion of how this bond presents itself and is received by the world.",
+    guidance: "Step into more visible territory together — this is one of the better windows in the year for the two of you to be seen and recognized as a unit.",
+  },
+  'Jupiter|conjunction|MC': {
+    reason:   "Jupiter reaches the relationship's Midheaven — a notable expansion of shared ambition, recognition, and the public chapter this bond is entering.",
+    guidance: "Say yes to the shared opportunity — whether it is a public step, a joint commitment, or a shared project, the conditions are genuinely open right now.",
+  },
+  'Jupiter|opposition|ASC': {
+    reason:   "Jupiter opposite the relationship's Ascendant — the bond is being pulled toward expansion through others and the wider world.",
+    guidance: "Lean into the partnerships and collaborations available to the two of you together — the growth on offer now comes through opening outward, not closing inward.",
+  },
+  'Jupiter|opposition|MC': {
+    reason:   "Jupiter opposite the relationship's Midheaven — private and foundational dimensions of the bond are expanding in ways that shape the shared direction.",
+    guidance: "Let the growth in your shared inner life inform what you build publicly together — the inner expansion is the foundation for what comes next.",
+  },
+  'Jupiter|square|ASC': {
+    reason:   "Jupiter pressing on the relationship's Ascendant — expansion of how this couple shows up may be outrunning the bond's current foundations.",
+    guidance: "Check that the shared confidence is backed by substance — the opportunity is real but overcommitting together has a cost worth accounting for.",
+  },
+  'Jupiter|square|MC': {
+    reason:   "Jupiter pressing on the relationship's Midheaven — joint ambitions are expanding rapidly but may exceed what current shared structures can support.",
+    guidance: "Pursue the joint ambition with one eye on sustainability — investigate the picture fully before either of you overcommits publicly.",
+  },
+  'Jupiter|trine|ASC': {
+    reason:   "Jupiter supporting the relationship's Ascendant — expansion of how the two of you show up together is available with unusual ease.",
+    guidance: "Let the relationship take up more space in the world — the ease available now is genuine and the window won't stay this wide.",
+  },
+  'Jupiter|trine|MC': {
+    reason:   "Jupiter supporting the relationship's Midheaven — shared career, public presence, or joint ambition is available to grow without unusual resistance.",
+    guidance: "Advance the shared goal you have been holding back together — the timing is right and the conditions support it.",
+  },
+  'Jupiter|sextile|ASC': {
+    reason:   "Jupiter opening toward the relationship's Ascendant — an accessible window for expanding how this couple presents and carries itself.",
+    guidance: "Reach toward the opportunity for shared visibility — the opening is modest but real, and the two of you acting on it together will make it count.",
+  },
+  'Jupiter|sextile|MC': {
+    reason:   "Jupiter opening toward the relationship's Midheaven — a practical window for joint reputation or shared professional opportunity.",
+    guidance: "Make the shared professional move the two of you have been considering — the conditions are supportive and the timing is favorable.",
+  },
+  // Pluto
+  'Pluto|conjunction|ASC': {
+    reason:   "Pluto arrives at the relationship's Ascendant — a fundamental, irreversible transformation of how this bond presents itself and moves through the world.",
+    guidance: "Go toward the transformation together rather than managing it separately — what changes about how you show up as a couple is pointing toward something more authentic.",
+  },
+  'Pluto|conjunction|MC': {
+    reason:   "Pluto reaches the relationship's Midheaven — the shared direction and public identity of this bond are undergoing fundamental, permanent restructuring.",
+    guidance: "Don't defend the version of this relationship the world has known — the transformation points toward something more aligned with what the bond actually is.",
+  },
+  'Pluto|opposition|ASC': {
+    reason:   "Pluto opposite the relationship's Ascendant — deep transformation is coming through how the bond meets the world and is perceived by others.",
+    guidance: "Address the power dynamics surfacing between you and the wider world together — avoidance will cost the two of you more than honest engagement.",
+  },
+  'Pluto|opposition|MC': {
+    reason:   "Pluto opposite the relationship's Midheaven — deep transformation in the bond's private foundations is reshaping its shared public direction.",
+    guidance: "Let the inner transformation of this relationship inform what you build publicly together — the work done in private is the real shared move.",
+  },
+  'Pluto|square|ASC': {
+    reason:   "Pluto pressing on the relationship's Ascendant — the identity this couple has carried into the world is being stripped and rebuilt at depth.",
+    guidance: "Let go of what you've outgrown together — the version of this relationship pushing through is more true than the one being released.",
+  },
+  'Pluto|square|MC': {
+    reason:   "Pluto pressing on the relationship's Midheaven — shared trajectory and public identity are being permanently reshaped by deep pressure.",
+    guidance: "Face the shared transformation directly together — what survives this pressure is what the bond is actually built to do.",
+  },
+  'Pluto|trine|ASC': {
+    reason:   "Pluto supporting the relationship's Ascendant — the deep transformation this bond has been undergoing is integrating into how the couple carries itself.",
+    guidance: "Act from the more authentic version of this relationship that difficulty has revealed — the integration is real and expressing it together will land.",
+  },
+  'Pluto|trine|MC': {
+    reason:   "Pluto supporting the relationship's Midheaven — transformation already underway in this bond is now available to express through shared direction and public life.",
+    guidance: "Bring the depth of what this relationship has become into what you build publicly together — what has been revealed between you is the actual shared advantage.",
+  },
+  'Pluto|sextile|ASC': {
+    reason:   "Pluto opening toward the relationship's Ascendant — a window to express transformed shared understanding in how this couple presents to the world.",
+    guidance: "Take one concrete step together toward the relationship you have been becoming — the integration available now is worth acting on jointly.",
+  },
+  'Pluto|sextile|MC': {
+    reason:   "Pluto opening toward the relationship's Midheaven — a window to bring deep relational transformation into the shared public work of this bond.",
+    guidance: "Let the inner work of this relationship shape the outer work — the shared move that reflects what you've become together is the right one.",
+  },
+  // Uranus
+  'Uranus|conjunction|ASC': {
+    reason:   "Uranus arrives at the relationship's Ascendant — a sudden, liberating disruption of how this couple carries itself and who it presents to the world.",
+    guidance: "Allow the change together rather than managing it back into the familiar — what is breaking loose in how you show up is asking to be more freely expressed.",
+  },
+  'Uranus|conjunction|MC': {
+    reason:   "Uranus reaches the relationship's Midheaven — a sudden, unexpected disruption or liberation of the bond's shared direction and public identity.",
+    guidance: "Stay open together to the unconventional path that is emerging — the surprise is the direction, not an obstacle to it.",
+  },
+  'Uranus|opposition|ASC': {
+    reason:   "Uranus opposite the relationship's Ascendant — sudden change and disruption are coming through how the bond meets others and the wider world.",
+    guidance: "Let the changes happening at the edges of this relationship happen — freedom coming through the world around you is still freedom the two of you can work with.",
+  },
+  'Uranus|opposition|MC': {
+    reason:   "Uranus opposite the relationship's Midheaven — a sudden shift in the bond's private or foundational dimensions is disrupting the shared public trajectory.",
+    guidance: "Trust that the disruption is clarifying something — what needs to change about the relationship's shared direction is being shown from the inside out.",
+  },
+  'Uranus|square|ASC': {
+    reason:   "Uranus pressing on the relationship's Ascendant — sudden, unpredictable changes to how this couple shows up are breaking old shared patterns.",
+    guidance: "Stay flexible together and don't force the disruption into a predetermined shape — what breaks in this bond is creating room, even if that isn't apparent to either of you yet.",
+  },
+  'Uranus|square|MC': {
+    reason:   "Uranus pressing on the relationship's Midheaven — shared direction is encountering sudden, disruptive pressure from an unexpected angle.",
+    guidance: "Respond to the disruption creatively together rather than defensively — the unconventional path opening for this bond may be more right than the one being disrupted.",
+  },
+  'Uranus|trine|ASC': {
+    reason:   "Uranus supporting the relationship's Ascendant — a liberating shift in how this couple carries itself is available with unusual ease.",
+    guidance: "Take the unconventional step together — the window for change without penalty is open, and the two of you playing it safe will feel like a missed opportunity.",
+  },
+  'Uranus|trine|MC': {
+    reason:   "Uranus supporting the relationship's Midheaven — a liberating shift in shared direction or public identity is available without major disruption.",
+    guidance: "Move toward the shared change the two of you have been considering — the conditions for an unconventional joint step are favorable.",
+  },
+  'Uranus|sextile|ASC': {
+    reason:   "Uranus opening toward the relationship's Ascendant — a window for a liberating, low-disruption change to how this couple presents itself.",
+    guidance: "Try the unconventional expression together — the small step toward a freer shared self-presentation is easier now than usual.",
+  },
+  'Uranus|sextile|MC': {
+    reason:   "Uranus opening toward the relationship's Midheaven — a modest but real opportunity for an unexpected or unconventional shared move.",
+    guidance: "Consider the joint path that seemed too unusual — the opening is real even if the logic isn't conventional, and the two of you can test it together.",
+  },
 }
+
+/** Guidance phrases for composite aspect markers. Key: "${planet}|${nature}" */
+const COUPLE_ASPECT_GUIDANCE: Partial<Record<string, string>> = {
+  'Saturn|challenging':   "This is a window to talk about what has been building between you — the emotional or structural tension the bond is carrying is easier to work with if named than if managed around separately.",
+  'Saturn|harmonious':    "Commit to the shared structure you have been building together — this is a window where patient, joint effort produces results that last for both of you.",
+  'Jupiter|harmonious':   "Reach toward the shared opportunity together — the window is genuinely open and action taken as a couple now has real momentum behind it.",
+  'Jupiter|challenging':  "Pause before the two of you overcommit together — the enthusiasm you share is real but the picture isn't complete yet; investigate before expanding jointly.",
+  'Pluto|challenging':    "Go toward what is being revealed between you rather than away from it — the transformation in this bond is happening regardless, and facing it together reduces the cost to each of you.",
+  'Pluto|harmonious':     "Act from the deeper version of this relationship that difficulty has revealed — this is a window to integrate together what you've each been through, not just to survive it.",
+  'Uranus|challenging':   "Stay flexible together and don't force the disruption into a predetermined shape — what breaks in this bond is creating room, even if that isn't apparent to either of you yet.",
+  'Uranus|harmonious':    "Take the unconventional step together — the window for change without penalty is open, and the two of you playing it safe will feel like a missed opportunity.",
+  'Neptune|challenging':  "Verify rather than assume what is happening between you — clarity is harder than usual, and decisions made on feeling alone may need revisiting when the picture sharpens.",
+  'Neptune|harmonious':   "Make space for creative and spiritual experiences together — what arrives through imagination and shared inner listening now carries unusual depth for both of you.",
+  'Mars|challenging':     "Don't escalate the tension between you or push through the friction by force — the pressure here needs to be worked with together, not overcome separately.",
+  'Mars|harmonious':      "Direct the shared energy toward something concrete together — the drive available to this bond now benefits from a clear joint target.",
+  'Venus|harmonious':     "Reach toward shared connection, pleasure, and beauty together — this is a window for what genuinely brings you both alive, and it doesn't need justification.",
+  'Venus|challenging':    "Don't try to resolve the tension between you through pleasing or accommodating — what needs addressing between you isn't going to settle on its own.",
+  'Sun|harmonious':       "Take a step toward visibility as a couple — this is a window for shared presence and being seen as you actually are together.",
+  'Sun|challenging':      "Notice where the two of you are each defending rather than seeing clearly — the friction is pointing to something worth examining together.",
+  'Moon|harmonious':      "Let the emotional warmth available between you be expressed rather than assumed — this is a window to tend to the bond's shared feeling and say the things that matter.",
+  'Moon|challenging':     "This is a window to talk about what has gone unspoken between you — the emotional patterns the bond carries are being surfaced, and they're easier to work with if named than if managed around.",
+  'Chiron|challenging':   "The wound surfacing in the relationship isn't asking to be fixed — it's asking to be witnessed. Being seen by each other without judgment is the practice.",
+  'Chiron|harmonious':    "A healing integration is available to the two of you — something that has been tender between you is shifting toward understanding.",
+}
+
+/** Guidance phrases for composite shift markers. Key: planet name */
+const COUPLE_SHIFT_GUIDANCE: Partial<Record<string, string>> = {
+  Saturn:  "The territory Saturn governs in this relationship is asking for your joint attention — what has felt settled in the bond's structures may be shifting, and awareness together is more useful than each of you navigating it privately.",
+  Jupiter: "The area of the relationship Jupiter has been amplifying is now pausing to consolidate — this is a moment to assess together what the expansion has produced before the next forward movement.",
+  Uranus:  "The disruption Uranus carries is arriving in the bond's territory of change and evolution — give each other room for the unexpected rather than insisting on continuity.",
+  Neptune: "The fog or idealism Neptune brings is moving through a sensitive dimension of this bond — be especially honest with each other about what you are actually experiencing versus what you each wish were true.",
+  Pluto:   "The transformation Pluto is working on is moving through deep relational territory — what has been held unconsciously between you is surfacing, and bringing it into shared conversation is the most productive use of this window.",
+  Mars:    "The activation Mars brings is pressing on the bond's drive and assertion — notice where the two of you are channeling energy together versus where it is becoming friction between you.",
+  Mercury: "The disruption to thinking and communication that Mercury's station brings is touching the bond's channel — go slowly in conversations that matter and make extra space for misreading each other during this window.",
+}
+
+// ─── Couple-voice reason string builders ─────────────────────────────────────
 
 function buildCouplePowerReason(
   planet: string,
   aspectType: AspectType,
   angleKey: 'ASC' | 'MC',
 ): { reason: string; bannerBoldFragment: string; guidance?: string } {
+  const key = `${planet}|${aspectType}|${angleKey}`
+  const entry = COUPLE_POWER_PHRASES[key]
+  if (entry) return { ...entry, bannerBoldFragment: planet }
+
+  // Fallback: use verb table and relationship-angle language
   const verb = ASPECT_VERB_BANNER[aspectType] ?? 'reaches'
   const angleName = angleKey === 'ASC' ? "the relationship's Ascendant" : "the relationship's Midheaven"
   const domain = angleKey === 'ASC'
@@ -94,8 +279,7 @@ function buildCoupleAspectReason(
   const verb = ASPECT_VERB_BANNER[tightest.type as AspectType] ?? 'contacts'
   const planet = tightest.transitPlanet as string
   const nature = category === 'favorable' ? 'harmonious' : 'challenging'
-  const guidanceKey = `${planet}|${nature}`
-  const guidance = COUPLE_ASPECT_GUIDANCE[guidanceKey]
+  const guidance = COUPLE_ASPECT_GUIDANCE[`${planet}|${nature}`]
 
   if (!phrases) {
     if (category === 'favorable') {
@@ -137,6 +321,7 @@ function buildCoupleShiftReason(
   return {
     reason: `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`,
     bannerBoldFragment: planet,
+    guidance: COUPLE_SHIFT_GUIDANCE[planet],
   }
 }
 
@@ -271,13 +456,14 @@ function scoreCoupleSnapshot(
       }
     }
 
-    const { reason: shiftReason, bannerBoldFragment: shiftBold } = buildCoupleShiftReason(stationPlanet, stationDirection)
+    const { reason: shiftReason, bannerBoldFragment: shiftBold, guidance: shiftGuidance } = buildCoupleShiftReason(stationPlanet, stationDirection)
     return {
       category: 'shift',
       coShift: false,
       intensity: 0.8,
       reason: shiftReason,
       bannerBoldFragment: shiftBold,
+      guidance: shiftGuidance,
       shiftPlanet: stationPlanet,
       shiftDirection: stationDirection,
     }
