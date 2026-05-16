@@ -504,19 +504,19 @@ export default function CoupleAdvanceTab({
           0%, 100% { transform: rotate(40deg); opacity: 0.80; }
           50%       { transform: rotate(50deg); opacity: 1.0; }
         }
-        .couple-marker-anim-power {
+        .marker-anim-power {
           animation: glow-breathe-gold 3s ease-in-out infinite;
         }
-        .couple-marker-anim-challenging {
+        .marker-anim-challenging {
           animation: glow-breathe-red 2s ease-in-out infinite;
         }
-        .couple-marker-anim-shift {
+        .marker-anim-shift {
           animation: shift-rotate 4s ease-in-out infinite;
         }
         @media (prefers-reduced-motion: reduce) {
-          .couple-marker-anim-power,
-          .couple-marker-anim-challenging,
-          .couple-marker-anim-shift {
+          .marker-anim-power,
+          .marker-anim-challenging,
+          .marker-anim-shift {
             animation: none;
             opacity: 0.85;
           }
