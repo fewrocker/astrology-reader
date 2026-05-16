@@ -505,12 +505,29 @@ function preCalculateSnapshots(
   const maxMarkers = Math.ceil(config.max * 0.2)
 
   if (nonNeutral.length > maxMarkers) {
-    // Sort by intensity descending, keep top maxMarkers
-    const sorted = [...nonNeutral].sort((a, b) => b.score.intensity - a.score.intensity)
-    const keep = new Set(sorted.slice(0, maxMarkers).map(s => s.offset))
+    // Phase 1: reserve the highest-intensity marker per non-neutral category present
+    const NON_NEUTRAL_CATEGORIES: Exclude<MarkerCategory, 'neutral'>[] = [
+      'power', 'favorable', 'challenging', 'shift',
+    ]
+    const reservedOffsets = new Set<number>()
+    for (const cat of NON_NEUTRAL_CATEGORIES) {
+      const best = nonNeutral
+        .filter(s => s.score.category === cat)
+        .sort((a, b) => b.score.intensity - a.score.intensity)[0]
+      if (best) reservedOffsets.add(best.offset)
+    }
+
+    // Phase 2: fill remaining capacity from non-reserved markers by intensity
+    const remaining = nonNeutral
+      .filter(s => !reservedOffsets.has(s.offset))
+      .sort((a, b) => b.score.intensity - a.score.intensity)
+    const fillCount = maxMarkers - reservedOffsets.size
+    for (let i = 0; i < fillCount && i < remaining.length; i++) {
+      reservedOffsets.add(remaining[i].offset)
+    }
 
     for (let i = 0; i < snapshots.length; i++) {
-      if (snapshots[i].score.category !== 'neutral' && !keep.has(snapshots[i].offset)) {
+      if (snapshots[i].score.category !== 'neutral' && !reservedOffsets.has(snapshots[i].offset)) {
         snapshots[i] = {
           ...snapshots[i],
           score: { category: 'neutral', intensity: 0, reason: '', coShift: false },
