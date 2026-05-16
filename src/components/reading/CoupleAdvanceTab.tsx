@@ -5,7 +5,7 @@ import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
 import type { AspectType } from '../../engine/aspects'
-import type { SynastryData } from '../../engine/synastry'
+import type { SynastryData, SynastryAspect } from '../../engine/synastry'
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import AspectRow from './AspectRow'
@@ -85,6 +85,123 @@ function buildCoupleShiftReason(
   return `${planet} stations ${direction} — the relationship feels this shift; ${brief} is the territory.`
 }
 
+// ─── Synastry axis activation ─────────────────────────────────────────────────
+
+/**
+ * Normalize angular difference between two ecliptic longitudes to [0, 180].
+ */
+function angularDiffCouple(lon1: number, lon2: number): number {
+  let diff = Math.abs(lon1 - lon2) % 360
+  if (diff > 180) diff = 360 - diff
+  return diff
+}
+
+interface SynastryAxisActivation {
+  person1Planet: string
+  person2Planet: string
+  aspectType: string
+  synastryNature: 'harmonious' | 'challenging' | 'neutral'
+  activatedPole: 'person1' | 'person2'
+  activatedLongitude: number
+  contactOrb: number
+}
+
+/**
+ * Given a transiting planet longitude and the pre-filtered tight synastry pairs,
+ * returns the closest activated synastry axis, or null if none.
+ * Only slow planets (Saturn, Uranus, Neptune, Pluto) trigger augmentation.
+ */
+function findActivatedSynastryAxis(
+  transitPlanetName: string,
+  transitLon: number,
+  transitOrb: number,
+  tightSynastryPairs: SynastryAspect[],
+  chart1: ChartData,
+  chart2: ChartData,
+): SynastryAxisActivation | null {
+  if (!SLOW_PLANETS_FOR_BANNER.has(transitPlanetName as PlanetName)) return null
+  if (tightSynastryPairs.length === 0) return null
+
+  let best: SynastryAxisActivation | null = null
+
+  for (const aspect of tightSynastryPairs) {
+    const p1Planet = chart1.planets.find(p => p.name === aspect.person1Planet)
+    const p2Planet = chart2.planets.find(p => p.name === aspect.person2Planet)
+    if (!p1Planet || !p2Planet) continue
+
+    const diff1 = angularDiffCouple(transitLon, p1Planet.longitude)
+    const diff2 = angularDiffCouple(transitLon, p2Planet.longitude)
+
+    let candidate: SynastryAxisActivation | null = null
+
+    if (diff1 <= transitOrb && diff2 <= transitOrb) {
+      // Both poles within orb — pick the tighter one
+      const pole = diff1 <= diff2 ? 'person1' : 'person2'
+      const lon = pole === 'person1' ? p1Planet.longitude : p2Planet.longitude
+      const orb = Math.min(diff1, diff2)
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: pole,
+        activatedLongitude: lon,
+        contactOrb: orb,
+      }
+    } else if (diff1 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person1',
+        activatedLongitude: p1Planet.longitude,
+        contactOrb: diff1,
+      }
+    } else if (diff2 <= transitOrb) {
+      candidate = {
+        person1Planet: aspect.person1Planet as string,
+        person2Planet: aspect.person2Planet as string,
+        aspectType: aspect.type,
+        synastryNature: aspect.nature,
+        activatedPole: 'person2',
+        activatedLongitude: p2Planet.longitude,
+        contactOrb: diff2,
+      }
+    }
+
+    if (candidate && (!best || candidate.contactOrb < best.contactOrb)) {
+      best = candidate
+    }
+  }
+
+  return best
+}
+
+/**
+ * Build the reason suffix string for a synastry axis activation.
+ * Format: "— and resonates with the [adjective] [planet1]-[planet2] axis between the two of you."
+ */
+function buildSynastryAxisSuffix(activation: SynastryAxisActivation): string {
+  const adjective =
+    activation.synastryNature === 'harmonious' ? 'harmonious ' :
+    activation.synastryNature === 'challenging' ? 'tense ' :
+    ''
+  return `— and resonates with the ${adjective}${activation.person1Planet}-${activation.person2Planet} axis between the two of you.`
+}
+
+/**
+ * Augment a reason string with a synastry axis suffix, capped at 200 characters.
+ */
+function augmentReasonWithSuffix(baseReason: string, suffix: string): string {
+  const combined = `${baseReason} ${suffix}`
+  if (combined.length <= 200) return combined
+  // Truncate at word boundary within the suffix
+  const truncated = combined.slice(0, 200)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return lastSpace > baseReason.length ? truncated.slice(0, lastSpace) + '.' : baseReason
+}
+
 // ─── Couple snapshot scoring ──────────────────────────────────────────────────
 
 function scoreCoupleSnapshot(
@@ -94,6 +211,7 @@ function scoreCoupleSnapshot(
   chart2: ChartData,
   synastryData: SynastryData,
   period: TransitPeriod,
+  tightSynastryPairs: SynastryAspect[],
 ): SnapshotScore {
   const neutral: SnapshotScore = { category: 'neutral', intensity: 0, reason: '', coShift: false }
 
@@ -188,13 +306,31 @@ function scoreCoupleSnapshot(
         (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
       )[0]
       const rawScore = Math.abs(rating.score - 3)
-      const intensity = rawScore / 2
+      const baseIntensity = rawScore / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanet = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivation = transitPlanet
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanet.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivation ? Math.min(1.0, baseIntensity * 1.25) : baseIntensity
+      const baseReason = buildCoupleAspectReason(tightest, primaryCategory)
+      const reason = axisActivation
+        ? augmentReasonWithSuffix(baseReason, buildSynastryAxisSuffix(axisActivation))
+        : baseReason
 
       return {
         category: primaryCategory,
         coShift: true,
         intensity,
-        reason: buildCoupleAspectReason(tightest, primaryCategory),
+        reason,
         shiftPlanet: stationPlanet,
         shiftDirection: stationDirection,
         triggerAspect: {
@@ -227,13 +363,31 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const baseIntensity = Math.abs(rating.score - 3) / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanet = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivation = transitPlanet
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanet.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivation ? Math.min(1.0, baseIntensity * 1.25) : baseIntensity
+      const baseReason = buildCoupleAspectReason(tightest, 'favorable')
+      const reason = axisActivation
+        ? augmentReasonWithSuffix(baseReason, buildSynastryAxisSuffix(axisActivation))
+        : baseReason
 
       return {
         category: 'favorable',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'favorable'),
+        reason,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -255,13 +409,31 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet] ?? 0) - (PLANET_WEIGHT[a.transitPlanet] ?? 0)
       )[0]
-      const intensity = Math.abs(rating.score - 3) / 2
+      const baseIntensity = Math.abs(rating.score - 3) / 2
+
+      // ── Synastry axis augmentation ──────────────────────────────────────
+      const transitPlanet = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
+      const axisActivation = transitPlanet
+        ? findActivatedSynastryAxis(
+            tightest.transitPlanet,
+            transitPlanet.longitude,
+            orbs.angleContact,
+            tightSynastryPairs,
+            chart1,
+            chart2,
+          )
+        : null
+      const intensity = axisActivation ? Math.min(1.0, baseIntensity * 1.25) : baseIntensity
+      const baseReason = buildCoupleAspectReason(tightest, 'challenging')
+      const reason = axisActivation
+        ? augmentReasonWithSuffix(baseReason, buildSynastryAxisSuffix(axisActivation))
+        : baseReason
 
       return {
         category: 'challenging',
         coShift: false,
         intensity,
-        reason: buildCoupleAspectReason(tightest, 'challenging'),
+        reason,
         triggerAspect: {
           transitPlanet: tightest.transitPlanet,
           natalPlanet: tightest.natalPlanet,
@@ -286,6 +458,10 @@ function preCalculateCoupleSnapshots(
 ): AdvanceSnapshot[] {
   const config: AdvanceConfig = ADVANCE_CONFIG[period]
   const snapshots: AdvanceSnapshot[] = []
+
+  // Pre-filter tight synastry pairs once — passed into each scoreCoupleSnapshot call.
+  // Only synastry aspects with orb <= 2.0° qualify as "sensitive relational axes."
+  const tightSynastryPairs = synastryData.synastryAspects.filter(a => a.orb <= 2.0)
 
   for (let i = 0; i <= config.max; i++) {
     let targetDate: Date
@@ -315,7 +491,7 @@ function preCalculateCoupleSnapshots(
     }
 
     const prev = snapshots[i - 1] ?? null
-    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period)
+    snap.score = scoreCoupleSnapshot(snap, prev, chart1, chart2, synastryData, period, tightSynastryPairs)
 
     snapshots.push(snap)
   }
