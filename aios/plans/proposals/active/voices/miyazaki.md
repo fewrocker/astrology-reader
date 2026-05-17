@@ -1,4 +1,4 @@
-# Miyazaki's Craft Analysis: Sprint 0020 — The Inheritance Problem
+# Hayao Miyazaki: Sprint 0021 — On Craft, Care, and the Small Things Nobody Notices But Everyone Feels
 
 ---
 

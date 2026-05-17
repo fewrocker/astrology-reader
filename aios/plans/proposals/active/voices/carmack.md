@@ -1,10 +1,4 @@
-# Sprint 0020 — Technical Analysis (Carmack Voice)
-
-## Overview
-
-Sprint-0019 delivered real improvements to the individual advance engine: applying-aspect filtering, combination weight scoring, house-anchored reason strings, and the guidance field. The couple advance (`CoupleAdvanceTab`) did not receive the same upgrades. The result is two parallel advance surfaces that diverge at the scoring layer — the individual path is correct, the couple path is using the logic that was replaced last sprint.
-
-The four sprint-0020 candidates are all sound. Below is an analysis of what's technically correct, what's fragile, and what hidden complexity exists.
+# John Carmack: Sprint 0021 — Technical Assessment
 
 ---
 

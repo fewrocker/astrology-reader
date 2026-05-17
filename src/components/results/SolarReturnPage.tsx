@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useTransition, useRef } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { SolarReturnData } from '../../engine/solarReturn'
 import type { ZodiacSign, PlanetName } from '../../engine/types'
-import { PLANET_GLYPHS, ZODIAC_GLYPHS } from '../../engine/types'
+import { PLANET_GLYPHS, PLANET_NAMES, ZODIAC_GLYPHS } from '../../engine/types'
 import { PLANET_IN_HOUSE } from '../../data/interpretations/planetInHouse'
 import SolarReturnBiWheel from '../chart/SolarReturnBiWheel'
 import DiscussModal from '../discuss/DiscussModal'
@@ -11,6 +11,7 @@ import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSolarReturnInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import type { AdvanceConfig, AdvanceSnapshot } from '../reading/AdvanceTab'
+import { LruMap } from '../../utils/lruMap'
 import {
   preCalculateSnapshots,
   OverviewStrip,
@@ -40,7 +41,7 @@ function SolarReturnAdvancePreview({ srData }: { srData: SolarReturnData }) {
   }, [srMoment])
 
   // Snapshot cache keyed by SR chart identity + target year
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
   const [isPending, startTransition] = useTransition()
 
@@ -387,6 +388,55 @@ function SRStaticBriefs({ srData }: { srData: SolarReturnData }) {
   )
 }
 
+const ANGULAR_HOUSES = new Set([1, 4, 7, 10])
+const SR_THEME_EXCLUDED = new Set(['Sun', 'Moon', 'NorthNode'])
+const SR_THEME_PRIORITY = ['Saturn', 'Jupiter', 'Uranus', 'Neptune', 'Pluto', 'Mercury', 'Venus', 'Mars']
+
+function SRThemeBriefs({ srData }: { srData: SolarReturnData }) {
+  const placements = useMemo(() => {
+    return srData.srChart.planets
+      .filter(p =>
+        !SR_THEME_EXCLUDED.has(p.name) &&
+        PLANET_NAMES.includes(p.name as PlanetName) &&
+        ANGULAR_HOUSES.has(p.house) &&
+        !!PLANET_IN_HOUSE[`${p.name}_H${p.house}`]?.brief
+      )
+      .sort((a, b) => {
+        const ai = SR_THEME_PRIORITY.indexOf(a.name)
+        const bi = SR_THEME_PRIORITY.indexOf(b.name)
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+      })
+      .slice(0, 6)
+  }, [srData.srChart])
+
+  if (placements.length === 0) return null
+
+  return (
+    <section aria-label="This year's SR themes" className="mb-6">
+      <h3 className="font-heading text-amber-300/80 text-xs uppercase tracking-wider mb-3">
+        This Year's Themes
+      </h3>
+      {placements.map(planet => {
+        const brief = PLANET_IN_HOUSE[`${planet.name}_H${planet.house}`]?.brief
+        return (
+          <div key={planet.name} className="bg-amber-900/5 border border-amber-500/10 rounded-lg px-4 py-3 mb-2 flex items-start">
+            <span className="text-amber-400 text-base mr-2 shrink-0">{PLANET_GLYPHS[planet.name as PlanetName]}</span>
+            <div>
+              <p className="text-amber-300/80 font-heading text-sm font-semibold">SR {planet.name} in House {planet.house}</p>
+              <p className="text-mystic-text/70 text-sm leading-relaxed mt-0.5">This year: {brief}</p>
+            </div>
+          </div>
+        )
+      })}
+      {srData.srChart.unknownTime && (
+        <p className="text-mystic-muted/60 text-xs mt-2 italic">
+          House placements are approximate — birth time was not provided.
+        </p>
+      )}
+    </section>
+  )
+}
+
 export default function SolarReturnPage() {
   const { state, dispatch } = useApp()
   const { solarReturnData, solarReturnInterpretation, birthData, solarReturnError } = state
@@ -516,6 +566,7 @@ export default function SolarReturnPage() {
       {activeTab === 'reading' && (
         <div>
           <SRStaticBriefs srData={solarReturnData} />
+          <SRThemeBriefs srData={solarReturnData} />
           {solarReturnInterpretation === null || retrying ? (
             <GptSkeleton label="Tracking the Sun's return..." accentColor="amber" />
           ) : isGptError(solarReturnInterpretation) ? (

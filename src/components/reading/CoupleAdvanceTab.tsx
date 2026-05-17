@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useCallback, useTransition, useRef } from 'react'
 import type { TransitPeriod, TransitAspect } from '../../engine/transits'
-import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus, computeEnergyRating } from '../../engine/transits'
+import { calculateCurrentPositions, calculateTransitAspects, getRetrogradeStatus } from '../../engine/transits'
 import type { ChartData, PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
@@ -11,11 +11,12 @@ import { computeTransitAspectBrief } from '../../data/interpretations/transitAsp
 import AspectRow from './AspectRow'
 
 import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
+import { LruMap } from '../../utils/lruMap'
 import {
   ADVANCE_CONFIG, CATEGORY_HALO,
   ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
-  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD,
+  COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD, COMBINATION_WEIGHT_NORMALIZE,
   computeCombinedWeight,
   detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
 } from './AdvanceTab'
@@ -457,7 +458,6 @@ function scoreCoupleSnapshot(
   if (snapshot.offset === 0) return neutral
 
   const orbs = ORB_THRESHOLDS[period]
-  const rating = computeEnergyRating(snapshot.transitAspects)
 
   // ── Detect station crossing ───────────────────────────────────────────────
   let stationPlanet: string | undefined
@@ -549,10 +549,11 @@ function scoreCoupleSnapshot(
     if (isFavorable || isChallenging) {
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
+      const combinedWeight = isFavorable ? harmoniousWeight : challengingWeight
       const tightest = [...aspects].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const baseIntensity = Math.abs(rating.score - 3) / 2
+      const baseIntensity = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       // ── Synastry axis augmentation ──────────────────────────────────────
       const transitPlanetCoShift = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
@@ -616,7 +617,7 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingHarmonious].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const baseIntensityFav = Math.abs(rating.score - 3) / 2
+      const baseIntensityFav = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       // ── Synastry axis augmentation ──────────────────────────────────────
       const transitPlanetFav = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
@@ -666,7 +667,7 @@ function scoreCoupleSnapshot(
       const tightest = [...tightApplyingChallenging].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
-      const baseIntensityChal = Math.abs(rating.score - 3) / 2
+      const baseIntensityChal = Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)
 
       // ── Synastry axis augmentation ──────────────────────────────────────
       const transitPlanetChal = snapshot.transitPlanets.find(tp => tp.name === tightest.transitPlanet)
@@ -844,7 +845,7 @@ export default function CoupleAdvanceTab({
 }: CoupleAdvanceTabProps) {
   const config = ADVANCE_CONFIG[period]
 
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
   const [isPending, startTransition] = useTransition()
 

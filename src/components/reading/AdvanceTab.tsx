@@ -12,6 +12,8 @@ import AspectRow from './AspectRow'
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief, TRANSIT_PLANET_PHRASES } from '../../data/interpretations/transitAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
+import { LruMap } from '../../utils/lruMap'
+import { isQuotaError } from '../../utils/storage'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,9 @@ export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
   'semi-sextile': 'touches',
   quincunx: 'adjusts toward',
 }
+
+// ─── Session-level singleton cache (shared with TodayPage) ───────────────────
+export const advanceSnapshotSessionCache = new Map<string, AdvanceSnapshot[]>()
 
 // ─── House ordinal helper ─────────────────────────────────────────────────────
 
@@ -1281,7 +1286,7 @@ export default function AdvanceTab({
   // Chart identity is derived from ascendant/midheaven longitudes and unknownTime flag so that
   // switching charts (e.g. couple advance) always misses and recomputes instead of serving stale results.
   // Only used when the parent has not provided snapshots via prop.
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
 
   // Internal snapshot state — used only when parent does not supply snapshots via prop.
   const [internalSnapshots, setInternalSnapshots] = useState<AdvanceSnapshot[]>([])
@@ -1301,7 +1306,27 @@ export default function AdvanceTab({
     startTransition(() => {
       const computed = preCalculateSnapshots(chartData, period, baseDate)
       snapshotCache.current.set(cacheKey, computed)
+      advanceSnapshotSessionCache.set(cacheKey, computed)
       setInternalSnapshots(computed)
+
+      if (period === 'daily' && computed.length > 0) {
+        const todayStr = new Date().toISOString().split('T')[0]
+        if (baseDate.toISOString().split('T')[0] === todayStr) {
+          const signal = computed[0].score
+          if (signal.category !== 'neutral') {
+            try {
+              localStorage.setItem(
+                `advance-today-signal-${todayStr}`,
+                JSON.stringify({ category: signal.category, intensity: signal.intensity, reason: signal.reason })
+              )
+            } catch (e) {
+              if (isQuotaError(e)) {
+                console.warn('[AdvanceTab] localStorage quota exceeded — advance signal not written.')
+              }
+            }
+          }
+        }
+      }
     })
   }, [chartData, period, baseDate, snapshotsProp])
 

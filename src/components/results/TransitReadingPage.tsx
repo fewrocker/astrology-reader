@@ -17,10 +17,11 @@ import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import type { AdvanceSnapshot, MarkerCategory } from '../reading/AdvanceTab'
-import { preCalculateSnapshots } from '../reading/AdvanceTab'
+import { preCalculateSnapshots, advanceSnapshotSessionCache } from '../reading/AdvanceTab'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
+import { LruMap } from '../../utils/lruMap'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Reading',
@@ -240,14 +241,15 @@ export default function TransitReadingPage() {
   // The Timeline only consumes the derived scoreByDate map — it never triggers its
   // own snapshot computation. First-time Timeline viewers whose session has not yet
   // activated the Advance tab will see the event-count heuristic as a graceful fallback.
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [advanceSnapshots, setAdvanceSnapshots] = useState<AdvanceSnapshot[]>([])
   const [advanceIsPending, startAdvanceTransition] = useTransition()
 
   useEffect(() => {
     if (!chartData || !transitPeriod || !transitData) return
     const baseDate = new Date(transitData.dateRange.start + 'T12:00:00')
-    const cacheKey = `${transitPeriod}:${baseDate.toISOString()}:${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const cacheKey = `${chartKey}:${transitPeriod}:${baseDate.toISOString()}`
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
       setAdvanceSnapshots(cached)
@@ -256,6 +258,7 @@ export default function TransitReadingPage() {
     startAdvanceTransition(() => {
       const computed = preCalculateSnapshots(chartData, transitPeriod, baseDate)
       snapshotCache.current.set(cacheKey, computed)
+      advanceSnapshotSessionCache.set(cacheKey, computed)
       setAdvanceSnapshots(computed)
     })
   }, [chartData, transitPeriod, transitData])
