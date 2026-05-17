@@ -548,6 +548,7 @@ function scoreCoupleSnapshot(
     if (isFavorable || isChallenging) {
       const primaryCategory = isFavorable ? 'favorable' : 'challenging'
       const aspects = isFavorable ? tightApplyingHarmonious : tightApplyingChallenging
+      const combinedWeight = isFavorable ? harmoniousWeight : challengingWeight
       const tightest = [...aspects].sort((a, b) =>
         (PLANET_WEIGHT[b.transitPlanet as string] ?? 0) - (PLANET_WEIGHT[a.transitPlanet as string] ?? 0)
       )[0]
