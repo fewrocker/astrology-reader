@@ -12,6 +12,7 @@ import AspectRow from './AspectRow'
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief, TRANSIT_PLANET_PHRASES } from '../../data/interpretations/transitAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
+import { LruMap } from '../../utils/lruMap'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1281,7 +1282,7 @@ export default function AdvanceTab({
   // Chart identity is derived from ascendant/midheaven longitudes and unknownTime flag so that
   // switching charts (e.g. couple advance) always misses and recomputes instead of serving stale results.
   // Only used when the parent has not provided snapshots via prop.
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
 
   // Internal snapshot state — used only when parent does not supply snapshots via prop.
   const [internalSnapshots, setInternalSnapshots] = useState<AdvanceSnapshot[]>([])
