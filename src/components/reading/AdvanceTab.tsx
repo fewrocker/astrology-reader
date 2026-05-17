@@ -13,6 +13,7 @@ import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief, TRANSIT_PLANET_PHRASES } from '../../data/interpretations/transitAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
 import { LruMap } from '../../utils/lruMap'
+import { isQuotaError } from '../../utils/storage'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -1303,6 +1304,25 @@ export default function AdvanceTab({
       const computed = preCalculateSnapshots(chartData, period, baseDate)
       snapshotCache.current.set(cacheKey, computed)
       setInternalSnapshots(computed)
+
+      if (period === 'daily' && computed.length > 0) {
+        const todayStr = new Date().toISOString().split('T')[0]
+        if (baseDate.toISOString().split('T')[0] === todayStr) {
+          const signal = computed[0].score
+          if (signal.category !== 'neutral') {
+            try {
+              localStorage.setItem(
+                `advance-today-signal-${todayStr}`,
+                JSON.stringify({ category: signal.category, intensity: signal.intensity, reason: signal.reason })
+              )
+            } catch (e) {
+              if (isQuotaError(e)) {
+                console.warn('[AdvanceTab] localStorage quota exceeded — advance signal not written.')
+              }
+            }
+          }
+        }
+      }
     })
   }, [chartData, period, baseDate, snapshotsProp])
 

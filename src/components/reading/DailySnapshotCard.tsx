@@ -9,6 +9,8 @@ import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptI
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
 import { buildKeyAspectSentence } from '../../data/interpretations/aspectKeywords'
+import type { MarkerCategory } from './AdvanceTab'
+import { CATEGORY_LABELS } from './AdvanceTab'
 
 const PHASE_EMOJIS: Record<string, string> = {
   'New Moon': '🌑',
@@ -59,6 +61,20 @@ function personalDayArchetype(n: number): string {
   return archetypes[n] ?? ''
 }
 
+const ADVANCE_SIGNAL_GLYPHS: Partial<Record<MarkerCategory, string>> = {
+  power: '✦',
+  favorable: '◆',
+  challenging: '◆',
+  shift: '◆',
+}
+
+const ADVANCE_SIGNAL_COLORS: Partial<Record<MarkerCategory, string>> = {
+  power: 'text-mystic-gold',
+  favorable: 'text-emerald-400',
+  challenging: 'text-red-400',
+  shift: 'text-blue-400',
+}
+
 const CACHE_PREFIX = 'daily-snapshot-'
 
 function getCacheKey(chart: ChartData): string {
@@ -79,6 +95,7 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshTick, setRefreshTick] = useState(0)
+  const [advanceSignal, setAdvanceSignal] = useState<{ category: MarkerCategory; intensity: number; reason: string } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -86,6 +103,27 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
     async function load() {
       setLoading(true)
       setError(null)
+
+      const todayStr = new Date().toISOString().split('T')[0]
+      try {
+        const raw = localStorage.getItem(`advance-today-signal-${todayStr}`)
+        if (raw) {
+          const parsed = JSON.parse(raw) as { category: MarkerCategory; intensity: number; reason: string }
+          if (parsed.category !== 'neutral' && parsed.intensity >= 0.25) {
+            if (!cancelled) setAdvanceSignal({ category: parsed.category, intensity: parsed.intensity, reason: parsed.reason })
+          } else {
+            if (!cancelled) setAdvanceSignal(null)
+          }
+        } else {
+          if (!cancelled) setAdvanceSignal(null)
+        }
+        // Opportunistic cleanup of yesterday's stale key
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        try { localStorage.removeItem(`advance-today-signal-${yesterday.toISOString().split('T')[0]}`) } catch { /* ignore */ }
+      } catch {
+        // ignore advance signal read errors
+      }
 
       const cacheKey = getCacheKey(chart)
 
@@ -219,6 +257,17 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
             <div className="flex items-center gap-1.5 bg-mystic-gold/8 border border-mystic-gold/20 rounded-full px-3 py-1">
               <span className="text-mystic-muted text-xs italic">
                 {buildKeyAspectSentence(topAspect)}
+              </span>
+            </div>
+          )}
+
+          {advanceSignal && (
+            <div className="flex items-center gap-1.5 bg-mystic-gold/8 border border-mystic-gold/20 rounded-full px-3 py-1">
+              <span className={`${ADVANCE_SIGNAL_COLORS[advanceSignal.category]} text-xs`}>
+                {ADVANCE_SIGNAL_GLYPHS[advanceSignal.category]}
+              </span>
+              <span className={`${ADVANCE_SIGNAL_COLORS[advanceSignal.category]} text-xs font-medium`}>
+                {CATEGORY_LABELS[advanceSignal.category]}
               </span>
             </div>
           )}
