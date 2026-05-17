@@ -247,7 +247,8 @@ export default function TransitReadingPage() {
   useEffect(() => {
     if (!chartData || !transitPeriod || !transitData) return
     const baseDate = new Date(transitData.dateRange.start + 'T12:00:00')
-    const cacheKey = `${transitPeriod}:${baseDate.toISOString()}:${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+    const cacheKey = `${chartKey}:${transitPeriod}:${baseDate.toISOString()}`
     const cached = snapshotCache.current.get(cacheKey)
     if (cached) {
       setAdvanceSnapshots(cached)
