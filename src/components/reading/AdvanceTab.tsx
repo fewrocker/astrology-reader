@@ -122,6 +122,9 @@ export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
   quincunx: 'adjusts toward',
 }
 
+// ─── Session-level singleton cache (shared with TodayPage) ───────────────────
+export const advanceSnapshotSessionCache = new Map<string, AdvanceSnapshot[]>()
+
 // ─── House ordinal helper ─────────────────────────────────────────────────────
 
 function houseOrdinal(n: number): string {
@@ -1301,6 +1304,7 @@ export default function AdvanceTab({
     startTransition(() => {
       const computed = preCalculateSnapshots(chartData, period, baseDate)
       snapshotCache.current.set(cacheKey, computed)
+      advanceSnapshotSessionCache.set(cacheKey, computed)
       setInternalSnapshots(computed)
     })
   }, [chartData, period, baseDate, snapshotsProp])

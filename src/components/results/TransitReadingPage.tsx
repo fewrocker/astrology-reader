@@ -17,7 +17,7 @@ import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import type { AdvanceSnapshot, MarkerCategory } from '../reading/AdvanceTab'
-import { preCalculateSnapshots } from '../reading/AdvanceTab'
+import { preCalculateSnapshots, advanceSnapshotSessionCache } from '../reading/AdvanceTab'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
@@ -256,6 +256,7 @@ export default function TransitReadingPage() {
     startAdvanceTransition(() => {
       const computed = preCalculateSnapshots(chartData, transitPeriod, baseDate)
       snapshotCache.current.set(cacheKey, computed)
+      advanceSnapshotSessionCache.set(cacheKey, computed)
       setAdvanceSnapshots(computed)
     })
   }, [chartData, transitPeriod, transitData])
