@@ -21,6 +21,7 @@ import { preCalculateSnapshots } from '../reading/AdvanceTab'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
+import { LruMap } from '../../utils/lruMap'
 
 const PERIOD_LABELS: Record<TransitPeriod, string> = {
   daily: 'Daily Reading',
@@ -240,7 +241,7 @@ export default function TransitReadingPage() {
   // The Timeline only consumes the derived scoreByDate map — it never triggers its
   // own snapshot computation. First-time Timeline viewers whose session has not yet
   // activated the Advance tab will see the event-count heuristic as a graceful fallback.
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [advanceSnapshots, setAdvanceSnapshots] = useState<AdvanceSnapshot[]>([])
   const [advanceIsPending, startAdvanceTransition] = useTransition()
 

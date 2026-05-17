@@ -11,6 +11,7 @@ import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSolarReturnInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import type { AdvanceConfig, AdvanceSnapshot } from '../reading/AdvanceTab'
+import { LruMap } from '../../utils/lruMap'
 import {
   preCalculateSnapshots,
   OverviewStrip,
@@ -40,7 +41,7 @@ function SolarReturnAdvancePreview({ srData }: { srData: SolarReturnData }) {
   }, [srMoment])
 
   // Snapshot cache keyed by SR chart identity + target year
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
   const [isPending, startTransition] = useTransition()
 

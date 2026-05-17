@@ -11,6 +11,7 @@ import { computeTransitAspectBrief } from '../../data/interpretations/transitAsp
 import AspectRow from './AspectRow'
 
 import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
+import { LruMap } from '../../utils/lruMap'
 import {
   ADVANCE_CONFIG, CATEGORY_HALO,
   ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
@@ -844,7 +845,7 @@ export default function CoupleAdvanceTab({
 }: CoupleAdvanceTabProps) {
   const config = ADVANCE_CONFIG[period]
 
-  const snapshotCache = useRef<Map<string, AdvanceSnapshot[]>>(new Map())
+  const snapshotCache = useRef<LruMap<string, AdvanceSnapshot[]>>(new LruMap(6))
   const [snapshots, setSnapshots] = useState<AdvanceSnapshot[]>([])
   const [isPending, startTransition] = useTransition()
 
