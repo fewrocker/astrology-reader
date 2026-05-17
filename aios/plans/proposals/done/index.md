@@ -1,5 +1,15 @@
 # Done Proposals
 
+## Sprint 0021 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-couple-advance-intensity-parity](issue-couple-advance-intensity-parity.md) | Issue Fix | merged sprint-0021 |
+| [code-snapshot-cache-lru-bound](code-snapshot-cache-lru-bound.md) | Code Enhancement | merged sprint-0021 |
+| [feat-solar-return-house-briefs](feat-solar-return-house-briefs.md) | Feature | merged sprint-0021 |
+| [feat-daily-snapshot-advance-signal](feat-daily-snapshot-advance-signal.md) | Feature | merged sprint-0021 |
+| [feat-today-advance-signal](feat-today-advance-signal.md) | Feature | merged sprint-0021 |
+
 ## Sprint 0020 — Completed
 
 | Proposal | Type | Delivered |
