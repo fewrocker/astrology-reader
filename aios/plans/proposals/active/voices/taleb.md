@@ -1,193 +1,184 @@
-# Fragility Analysis: Sprint 0020
-## By Nassim Taleb's Lens
+# Sprint 0021 — Fragility Analysis (Taleb Voice)
 
-Sprint 0019 shipped real fixes. The cache collision bug — where two users with identical periods and base dates could share snapshots silently — was resolved by including ascendant/midheaven fingerprints in the individual advance cache key. The applying-flag station flip was fixed by forcing stationing planets to `applying: true`. The combination-weight scoring replaced the fast-planet-dominated `computeEnergyRating` gate for Priorities 3 and 4. The house-anchored reason strings are now live. These were not small repairs; they changed the product's scoring character substantially.
+## Opening Observation
 
-Sprint 0020 builds on this improved foundation. What follows is the adversarial reading. I am looking for what is still broken, what the new proposals introduce that will break, and what everyone is treating as low-cost that isn't.
-
----
-
-## 1. The Couple Advance Cache Key Is Still Wrong
-
-Sprint 0019 fixed the individual advance cache key to use `.toFixed(4)` precision for ascendant and midheaven fingerprints. The individual cache key in `AdvanceTab.tsx` (line 1247): `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`.
-
-The couple advance cache key in `CoupleAdvanceTab.tsx` (line 421): `${period}:${baseDate.toISOString()}:${chart1.angles.ascendant.longitude.toFixed(2)}:${chart2.angles.ascendant.longitude.toFixed(2)}`.
-
-The precision is `.toFixed(2)` — two decimal places instead of four. Two different couples whose first partners have ascendants at 43.178° and 43.183° produce identical fingerprints: `43.18` in both cases. Their cached snapshots collide. The cache collision bug sprint 0019 eliminated for individuals is still present for couple advance, just at a lower per-pair collision probability. In a session where a user has multiple saved couples — a completely normal use case for a couple compatibility product — this fires silently.
-
-This is the same silent data corruption class as the sprint 0019 fix. One character: `.toFixed(2)` → `.toFixed(4)` on line 421 of `CoupleAdvanceTab.tsx`. This should be fixed before sprint 0020 ships any new couple advance features on top of it.
-
-**Severity: high. Silent data corruption. No error thrown. Undetectable from the UI.**
+This codebase exhibits a pattern I find everywhere: the happy path is well-tested and extensively documented, while the failure modes accumulate silently in the margins. The advance engine has been through five sprints of iteration, and each sprint has fixed a bug that was invisible until someone looked. That is not a sign of careful engineering. That is a sign that the system is too complex to reason about correctly, and that bugs are found by accident rather than by design. Let me be specific.
 
 ---
 
-## 2. `computeEnergyRating` Still Drives Couple Priorities 2–4 — This Is Not Just Code Quality, It Creates Incoherence
+## 1. The Couple Advance Intensity Bug Is Not Just Wrong — It Is Visibly Inconsistent Right Now
 
-The vision correctly identifies that `scoreCoupleSnapshot` still uses `computeEnergyRating` (Priorities 2, 3, 4) while `scoreSnapshot` was upgraded to `computeCombinedWeight` in sprint 0019. The vision labels this a "code quality — scoring parity" issue. I label it a scoring incoherence issue that matters for the product.
+**Files:** `src/components/reading/CoupleAdvanceTab.tsx` lines 555, 619, 669; `src/components/reading/AdvanceTab.tsx` lines 696, 771, 804
 
-Here is the concrete failure mode a user will observe:
+The sprint-0020 changelog entry for `code-couple-advance-scoring-parity` states it fixed the gate logic for Priorities 2–4. What it did not fix — and what the sprint-0020 deferred note and the sprint-0021 vision both acknowledge — is `baseIntensity`. At lines 555, 619, and 669 of `CoupleAdvanceTab.tsx`, `baseIntensity` is computed as `Math.abs(rating.score - 3) / 2`. The `rating` variable on line 460 still comes from `computeEnergyRating`, which is still imported at line 3.
 
-A user has both the individual transit tab and the couple transit tab open. The same sky, same date, same planets. The individual advance system (using `computeCombinedWeight`) requires a slow planet in the aspect constellation plus a combined weight above `COMBINATION_WEIGHT_THRESHOLD = 3.0` to fire a favorable or challenging marker. A Mercury+Sun cluster at tight orbs produces weight ~5.0, which falls below `COMBINATION_WEIGHT_THRESHOLD * 2 = 6.0` (the fast-planet-only threshold), so the individual advance does not fire.
+In `AdvanceTab.tsx`, the corresponding path uses `Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)` (lines 696, 771, 804), where `COMBINATION_WEIGHT_NORMALIZE = 12`.
 
-The couple advance system (using `computeEnergyRating`) for the same sky gives `score = 4` for two harmonious aspects regardless of which planets they are, and fires a favorable marker because `rating.score >= 4 && tightApplyingHarmonious.length >= 2`.
+The consequence is not abstract. `computeEnergyRating` returns a score from 1 to 5 based on raw aspect counts. `Math.abs(rating.score - 3) / 2` produces values in `{0, 0.5, 1}` — a three-state intensity system. The individual path produces a continuous value bounded by actual slow-planet weight. A Saturn+Pluto cluster at 0.5° orb that passes the gate produces `combinedWeight ≈ 14` on the individual path, yielding `intensity = Math.min(1, 14/12) = 1.0`. On the couple path the same sky can produce `baseIntensity = 0.5` if energy score happens to be 4, or `0` if it is 3. This is not a small drift. The dot size, the glow strength, and the density-cap priority sort all derive from `intensity`. A Saturn+Pluto couple marker can be rendered as a faint, small dot while a moderate Jupiter trine on an individual chart shows as a large, glowing marker. Users who compare the two surfaces see contradictory emphasis for the same sky. This is already happening in production.
 
-Same sky. Individual advance: quiet. Couple advance: green marker. Users who use both will notice this. The product claims to tell the truth about the sky; it is telling two different truths about the same sky.
+The synastry axis augmentation introduced in sprint-0020 task-0007 multiplies `baseIntensity * 1.25` (lines 569, 633, 683). When `baseIntensity` is already wrong, the augmentation amplifies the error. A 25% boost on a structurally incorrect baseline produces a value that is confidently wrong rather than quietly wrong.
 
-Beyond the user experience: sprint 0020 plans to add synastry axis overlay scoring on top of `scoreCoupleSnapshot`. Synastry axis scoring is an augment — it layers additional intensity onto markers that already fired. If those base markers are firing on Mercury+Sun noise, the synastry augment will claim to be elevating noise to "this also activates the bond between your Venus and their Mars." This is worse than noise. It is confident-sounding misinformation.
-
-The `computeCombinedWeight` function is already in `AdvanceTab.tsx` and is exported-compatible. Porting it to the couple path is mechanical. The vision is correct that it must be done. I am saying it must be done **as a prerequisite to synastry axis scoring**, not as a parallel optional task.
-
-**Severity: high. Produces inconsistent outputs across individual and couple views. Makes synastry axis augmentation build on bad inputs.**
+**What to fix:** Import `COMBINATION_WEIGHT_NORMALIZE` from `AdvanceTab` (already exported at line 112) and replace the three `baseIntensity` derivations with `Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)`. Remove the `computeEnergyRating` import (line 3) and the `rating` variable (line 460) — they are dead code in `scoreCoupleSnapshot` once this is done.
 
 ---
 
-## 3. The Synastry Axis Midpoint Is a Ghost Target
+## 2. The Snapshot Cache Is a Component-Level Ref With No Cross-Component Sharing
 
-The vision specifies: "if the transiting planet's degree is within `angleContact` orb of a synastry aspect's midpoint degree AND that synastry aspect has `orb <= 2.0`."
+**Files:** `src/components/reading/AdvanceTab.tsx` line 1284; `src/components/reading/CoupleAdvanceTab.tsx` line 847; `src/components/results/SolarReturnPage.tsx` line 43
 
-The "synastry aspect's midpoint degree" is not a real astrological concept with established meaning. A synastry aspect is a relationship between two natal planets — Person 1's Venus at 15° Aries and Person 2's Mars at 17° Aries form a 2° conjunction. The "midpoint" of this aspect, computed as `(15 + 17) / 2 = 16°`, is simply the average of two longitudes. This is not the same as the composite Venus (which is the midpoint of BOTH charts' Venus positions, not the midpoint of a cross-chart aspect). It is not a sensitive point in any established astrological technique.
+Each component that runs advance pre-calculation holds its cache in a `useRef<Map<string, AdvanceSnapshot[]>>`. This means:
 
-What the implementation would actually detect: a transiting planet near 16° Aries. But near 16° Aries means within `angleContact` orb of both 15° and 17° (since they are only 2° apart and `angleContact` at weekly resolution is 2°). Which means the correct formulation — "the transit is within orb of EITHER the person 1 planet OR the person 2 planet in a tight synastry pair" — would detect the same transit, but without inventing a ghost degree.
+1. The cache is destroyed when the component unmounts. If a user visits the Advance tab, builds a 36-month snapshot array, then navigates to TodayPage, then returns to the Advance tab, the cache is gone and computation runs again.
 
-The midpoint formulation fails silently in one edge case the direct formulation does not: when `angleContact` orb is smaller than the synastry aspect orb. If `angleContact = 1.0` (daily resolution) and the synastry aspect orb is 2.0°, the transit at the midpoint (1.0° from each natal planet) fires the augment. The transit at exactly 15° Aries (0.0° from P1 Venus, 2.0° from P2 Mars) does NOT fire the augment because it is 1.0° from the midpoint — outside the `angleContact` threshold. But this is the transit that most directly activates P1's natal Venus, the first pole of the synastry pair. The midpoint formulation misses the most direct activation.
+2. More importantly: the sprint-0021 vision proposes integrating advance snapshot data into TodayPage and DailySnapshotCard. The vision notes: "if the advance snapshots are already in the component-level cache (from an Advance tab visit), the Today page should read from that cache." But the Today page does not have access to AdvanceTab's `useRef` cache. The two components are siblings, not parent-child, and there is no shared cache. The stated design intent cannot be achieved without either lifting the cache to a shared parent or storing snapshots in application state.
 
-The implementation should check: for each tight synastry aspect (orb ≤ 2.0°), look up the natal longitudes of both planets in their respective charts, and check whether the transiting slow planet is within `angleContact` orb of either one. This is directly computable from `synastryData.synastryAspects` paired with `chart1.planets` and `chart2.planets` lookups.
-
-**Severity: medium. Produces plausible-looking augment activations that are systematically wrong for certain transit positions. The error is invisible without auditing the underlying longitudes.**
+3. `TodayPage.tsx` renders independently of whether the user has visited the Advance tab. The vision says "if no cache exists, the signal is simply absent." That is a safe default, but it means the TodayPage advance integration is unreliable by design — users who open TodayPage directly (the most common mobile pattern for daily users) will never see the advance signal unless an independent snapshot computation path is added for TodayPage. Adding that computation would be a blocking call on TodayPage mount, which is why the vision avoids it. The result is a feature that works only for users with specific navigation patterns, with no visible indication of the difference.
 
 ---
 
-## 4. The Solar Return Advance Has a UTC/Local Time Mismatch
+## 3. The Solar Return Advance Preview Cache Key Omits `unknownTime`
 
-The SR advance proposal says: "run the existing advance marker engine against the SR chart data across the SR year's 12 months" using `preCalculateSnapshots` with `srMoment` as `baseDate` and 12 monthly steps.
+**File:** `src/components/results/SolarReturnPage.tsx` lines 47–52
 
-`preCalculateSnapshots` for the monthly period constructs step 0 as:
+The SR advance preview cache key is built from `'sr'`, `targetYear`, and the SR chart's ascendant and midheaven longitudes at `.toFixed(4)` precision. The `unknownTime` flag is absent.
+
+The SR chart is always computed with `unknownTime = false` (see `src/engine/solarReturn.ts` line 49: `calculateChart(srDate, srTime, birthLat, birthLng, 'UTC', false)`). So the missing field is not an active cache collision risk today. But the oversight reveals a structural assumption: the cache key was designed by copying the advance cache pattern and dropping `unknownTime` because the SR chart always has time. If the SR engine ever changes to support unknown-time charts, or if this pattern is copied for a new advance surface, the missing field becomes a silent cache collision.
+
+Compare with the individual advance cache key in `AdvanceTab.tsx` line 1294: `${asc.toFixed(4)}:${mc.toFixed(4)}:${unknownTime}:${period}:${baseDate}`. The SR key also omits `period` (hardcoded to `monthly`) and `baseDate` (derived deterministically from `srMoment` and `targetYear`). Those omissions are defensible. The `unknownTime` omission is not, because it is a factual property of the chart and belongs in any identity fingerprint.
+
+---
+
+## 4. The SR Advance Preview Runs a 36-Step Computation to Produce a 12-Step Output
+
+**File:** `src/components/results/SolarReturnPage.tsx` lines 61–63
+
+The preview calls `preCalculateSnapshots(srChart, 'monthly', srBaseDate)` with no custom config, which runs the full 36-month computation (the default `ADVANCE_CONFIG.monthly.max = 36`). It then slices to 13 snapshots (offsets 0–12) and applies a secondary density cap to those 13. The 24 discarded snapshots were computed, scored, and density-capped by the generic engine — computation time was spent and their results thrown away.
+
+The deeper problem is the density cap interaction. `runAdvancePreCalculation` in `AdvanceTab.tsx` applies its density cap to all 36 snapshots before the slice. The cap allows `Math.ceil(36 * 0.2) = 8` markers across the full 36 months. A power marker at month 5 may be displaced by a higher-intensity marker at month 20 — which is then discarded by the slice. The secondary density cap in the SR preview (lines 66–92) operates on the already-capped 13-snapshot slice, not on the raw scored set. This means the SR preview applies two sequential density caps: one calibrated for 36 months, one for 12. A year where markers cluster in months 1–6 can be under-represented because the first cap suppressed some of those months in favor of high-intensity markers at months 7–36 that are then discarded.
+
+**What should happen:** Pass `SR_ADVANCE_CONFIG` (with `max: 12`) directly to `runAdvancePreCalculation` via the `config` override parameter that the function already accepts. This eliminates the 36-step waste, removes the slice, and removes the secondary density cap entirely — the primary cap will be calibrated for 12 months from the start.
+
+---
+
+## 5. The Solar Return Calculation Has a Silent Dead Parameter
+
+**File:** `src/engine/solarReturn.ts` line 20
+
+The `calculateSolarReturn` function signature accepts `_birthDate: string` as its second parameter. It is prefixed with underscore, which in TypeScript convention signals intentional non-use. It is never read inside the function — the SR is computed from `natalSun.longitude`, `birthLat`, `birthLng`, and `targetYear` only.
+
+The birth date is not an input to the solar return calculation. But the function name and the public API imply it should be: `calculateSolarReturn(natalChart, birthDate, lat, lng)` reads like birth date matters. Any future developer calling this function may pass incorrect birth data and receive no error. Any future developer modifying the function to actually use the birth date (for age validation, birth year reference, etc.) will discover that callers are passing stale or misformatted dates with no indication of the breakage.
+
+A dead parameter in a public API is not a style issue. It is an invitation for future corruption.
+
+---
+
+## 6. `TodayPage` Uses a Stale `now` Constant That Does Not Update
+
+**File:** `src/components/reading/TodayPage.tsx` line 38
+
 ```typescript
-new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate())
+const now = new Date()
 ```
 
-This interprets `baseDate` in **local time**. `baseDate.getFullYear()` returns the local-time year; `baseDate.getMonth()` returns the local-time month.
+This is computed once at render time. The `useEffect` on line 53 also runs once (dependency array is `[]`). If a user opens TodayPage at 11:58 PM and leaves it open, the page shows yesterday's data at 12:01 AM. The moon phase, transit aspects, energy rating, and date header are all stale. There is no visible indication, no "last updated" timestamp, no automatic refresh.
 
-`srMoment` in `calculateSolarReturn` (`solarReturn.ts` line 41) is returned by `findSolarReturn` — a Date object representing the precise UTC moment the Sun returns to its natal degree. It is a UTC astronomical event. `formatSRMoment` in `SolarReturnPage.tsx` (line 159) displays it using `.getUTCMonth()`, `.getUTCDate()`, etc. — correctly reading it as UTC.
+The GPT morning synthesis (line 64) is also computed once at mount and goes stale. A user reading their "morning synthesis" in the afternoon after leaving the tab open overnight is reading yesterday's sky read through yesterday's aspects. The GPT text says "today" but means yesterday.
 
-When `srMoment` is passed as `baseDate` to `preCalculateSnapshots`, and `preCalculateSnapshots` reads `baseDate.getFullYear()` (local time), the step-0 date is in local time. For a user in UTC+3 whose SR occurs at 22:00 UTC on March 14 (which is 01:00 AM March 15 in UTC+3), the local-time reading of that Date gives March 15 as the start of the SR advance strip. The SR advance runs from March 15 through next March — but the actual SR year runs from March 14 through next March 14. The strip is offset by one day at the start, and this is invisible unless the user looks carefully at the displayed start date.
-
-This affects all users in UTC-offset timezones when their SR falls after 9 PM UTC (UTC+3 and later) or before 3 AM UTC for the following day (UTC-3 and earlier). This is not a rare edge case — it is structural.
-
-The fix: pass the SR advance a `baseDate` that is explicitly normalized to UTC midnight of the SR day (use `srMoment.toISOString().split('T')[0]` to extract the UTC date, then construct `new Date(utcDateString)` with no time offset). The monthly step construction will then be consistent with the UTC SR date.
-
-**Severity: medium. Incorrect advance window start for users in UTC-offset timezones. Silent — no error, just subtly wrong dates.**
+This is a product trust issue. A daily-use app that lies about what day it is erodes the user's confidence that it is computing anything correctly.
 
 ---
 
-## 5. The In-Memory Cache Is Unbounded and Has No Eviction
+## 7. The Advance Engine Has No Guard for Charts With Empty or Malformed House Arrays
 
-Both `AdvanceTab.tsx` and `CoupleAdvanceTab.tsx` use `useRef<Map<string, AdvanceSnapshot[]>>(new Map())` as the snapshot cache. The Map is written to on every new period/baseDate/chart combination. Nothing is ever evicted.
+**Files:** `src/engine/transits.ts` `assignTransitHouses` line 308; `src/engine/astronomy.ts` line 270
 
-Each `AdvanceSnapshot` contains: `transitPlanets` (~15 objects), `transitAspects` (~40–60 objects at monthly), `retrogrades` (8 objects), `housedTransitPlanets` (~15 objects), and the `score` struct. A 36-month monthly cache entry is 37 snapshots × ~100 JS objects = ~3,700 objects. At 64 bytes per object reference estimate, one monthly cache entry is ~240 KB.
+`assignTransitHouses` iterates over `natalHouses` and calls `getHouseForLongitude`. If `natalHouses` is empty or contains malformed entries, the function returns all transit planets with `house: 0`. This propagates silently through `calculateTransitAspects` where the guard `unknownTime ? null : (np.house > 0 ? np.house : null)` (line 186) then sets `natalHouse: null` for all aspects — identical to the expected `unknownTime = true` behavior.
 
-A user who compares multiple couples (3 partners × 3 periods = 9 cache entries × 240 KB) accumulates ~2 MB. A user who navigates back and forth with different baseDates (session persists across navigations while component is mounted) accumulates more. The cache lives on the component ref and is cleared only when the component unmounts. On a mobile device with 4 GB RAM where the browser has 1–2 GB working set, this degrades performance over a long session.
+The symptom of a malformed chart (empty houses from a bad city coordinate) looks identical to a legitimate unknown-time chart. The house-anchored reason strings in `buildAspectReason` fall back to archetype-only phrases in both cases. The advance engine degrades gracefully, but it degrades without diagnostic visibility. A user with a corrupted chart who sees generic phrases instead of house-specific guidance has no way to know why, and the developer has no error to catch.
 
-The bound is behavioral (users don't cycle through 50 combinations), not architectural. A simple LRU cap of 6 entries (2 couples × 3 periods) would fix this with a 4-line change. Sprint 0020 is adding the SR advance, which creates a third component with its own unbounded cache. The accumulation compounds.
-
-**Severity: low-medium. Memory bloat in extended sessions on mobile. Does not crash; degrades performance gradually.**
+The city database is a bundled JSON of ~40,000 entries. Coordinates are not validated on input. A lat/lng of 0.0/0.0 (Gulf of Guinea) is valid JSON but would produce Placidus houses for a location that has no population. This does not crash; it produces wrong angles silently.
 
 ---
 
-## 6. The Couple Banner Still Uses the Fragile First-Word Split
+## 8. The Hysteresis Pass Has a Directional Assumption That Can Bridge Separating Aspects
 
-Sprint 0019 added `bannerBoldFragment` to `SnapshotScore` specifically to fix the problem of `split(' ')[0]` bolding meaningless words like "The" or "A." The individual advance banner (line 1513 of `AdvanceTab.tsx`) now uses `snapshot.score.bannerBoldFragment ?? categoryBanner.split(' ')[0]`, so if the builder explicitly sets the bold fragment (all current individual builders do), the split is never used.
+**File:** `src/components/reading/AdvanceTab.tsx` lines 902–927 (in `runAdvancePreCalculation`)
 
-The couple advance banner (line 678 of `CoupleAdvanceTab.tsx`) uses the legacy pattern directly:
+The hysteresis pass bridges a neutral snapshot gap between two identically-scored non-neutral snapshots. The check at line 923: `Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB`. If the orb difference between the current snapshot and the previous snapshot is less than 0.5°, the neutral snapshot inherits the previous score.
+
+This check is directionally blind. It compares current orb to previous orb but does not verify that the aspect at `curr` is still applying. A separating aspect — expressly excluded from firing markers by the `a.applying` filter — can be bridged into a marker via hysteresis if the orb change is gradual enough.
+
+The failing scenario: An aspect applies and fires a marker at offset N. At offset N+1 the planet crosses exactness — the aspect is now separating and `applying = false`, so no marker fires. At offset N+2 the aspect is still separating and another marker fires for a different reason. The hysteresis pass runs: prev (N) and next (N+2) both have the same category, curr (N+1) is neutral, and the orb at N+1 is within 0.5° of N's orb. Hysteresis bridges N+1. The banner then describes a transit as ongoing when it peaked and is receding. At the monthly orb threshold of 4.0°, a slowly separating outer planet can produce orb deltas well under 0.5° per step, making this scenario common rather than rare.
+
+---
+
+## 9. `scoreCoupleSnapshot` Calls `computeEnergyRating` Unconditionally on Every Snapshot
+
+**File:** `src/components/reading/CoupleAdvanceTab.tsx` line 460
+
 ```typescript
-<span className="font-heading">{categoryBanner.split(' ')[0]}</span>
-{' ' + categoryBanner.split(' ').slice(1).join(' ')}
+const rating = computeEnergyRating(snapshot.transitAspects)
 ```
 
-There is no `bannerBoldFragment` usage. The current couple reason strings happen to start with planet names ("Saturn reaches the relationship's Ascendant..."), so the split currently produces correct bolding. But sprint 0020 adds guidance text and may modify the couple reason string vocabulary. If any couple reason string ever begins with "A" or "The" or "During" — a natural phrasing for relational context — the banner bolds a meaningless word.
+This is called at the top of `scoreCoupleSnapshot` for every snapshot — including offset 0, which is immediately returned as `neutral` on line 457 without ever reading `rating`. It is also called for every Priority 1 power marker, which short-circuits before reaching the `baseIntensity` lines that consume `rating`.
 
-The sprint 0019 fix exists precisely because this pattern is fragile. The couple banner should use the same `bannerBoldFragment` field and render path as the individual banner. The fix is 3 lines.
+`computeEnergyRating` iterates all transit aspects, categorizes them by nature, and produces a score. At the monthly period this can be 40–60 aspects. Multiplied by 37 snapshots, this is overhead on approximately 37 × 50 = 1,850 aspect categorizations per computation run, of which the majority produce a `rating` value that is thrown away before it is read.
 
-**Severity: low. Latent fragility. Will break when couple reason string phrasing changes, which sprint 0020 plans to do (guidance language).**
-
----
-
-## 7. The Timeline/Advance Coherence Proposal Has Unexamined State Coupling
-
-The vision calls Timeline/advance coherence "low code cost." This estimate ignores the state synchronization problem.
-
-The TransitTimeline renders synchronously from precomputed timeline events. The advance snapshots compute asynchronously under `useTransition`. These two systems are currently independent.
-
-Adding advance score annotations to Timeline event cards creates a dependency: the Timeline needs the snapshots to decide which events to annotate. Two cases:
-
-**Case A: user opens Timeline first, without having opened Advance tab.** Snapshots are not cached (the cache is in `AdvanceTab`'s `useRef`, which does not exist until the Advance tab mounts). The Timeline has no snapshot data. The annotation cannot appear. The implementation must either show nothing (invisible degraded state, no loading indicator), show a loading indicator that resolves when... nothing triggers the computation, or trigger snapshot computation from the Timeline component (a new computation surface with its own pending state).
-
-**Case B: user opens Advance tab first, then Timeline.** Snapshots are cached in `AdvanceTab`'s `useRef`. But that ref is inside the `AdvanceTab` component. The Timeline component has no access to it. To share cached snapshot data between components, the cache must be lifted to a shared context or passed down through props. This is a component architecture change.
-
-The vision says "the snapshots are pre-computed and accessible." They are accessible only if the Advance tab has already run and its internal cache ref is not in a separate component tree. The "accessibility" assumption is false for Case A and requires architecture changes for Case B.
-
-The easy version — annotate timeline cards when snapshots happen to be available via some shared state — is possible. But it requires deciding what "shared state" means here: a new context, a prop-drilled snapshot array, or nothing (annotations simply never appear on first load). None of these are zero-cost, and the vision does not name which one.
-
-**Severity: medium. The "low code cost" estimate will not survive first implementation contact.**
+Once the intensity bug is fixed and `rating` is removed, this call disappears entirely. Until then it runs on every snapshot unconditionally.
 
 ---
 
-## 8. What Nobody Is Naming: Composite Houses Have Been Deferred for Nine Sprints
+## 10. The SR Advance Preview `srBaseDate` Is UTC-Normalized in the UI but the Monthly Step Logic Reads Local Time
 
-`synastry.ts` line 200: `house: 0, // Deferred: composite house cusps require Placidus derivation from composite Ascendant. Until computed, computeTransitAspectBrief falls to generic ASPECT_BRIEFS fallback. See feat-couple-transit-aspect-rows proposal — known gap, sprint 0011.`
+**File:** `src/components/results/SolarReturnPage.tsx` lines 37–40
 
-That note was written in sprint 0011. This is sprint 0020. The composite chart has had `house: 0` on every planet for nine sprints.
+The component correctly normalizes `srBaseDate` to UTC midnight:
+```typescript
+const utcDateStr = srMoment.toISOString().split('T')[0]
+return new Date(utcDateStr) // parsed as UTC midnight
+```
 
-`CoupleAdvanceTab.tsx` handles this defensively (line 699: `const natalHouse: number | null = null`). The aspect briefs shown in the couple advance transit list fall back to generic archetype phrases: "planetary energy," "shared vitality," etc. The individual advance transit list shows house-anchored sentences like "Saturn pressing on your Moon in your 7th house (partnership)." A user who reads both will notice the couple briefs are qualitatively weaker.
+This is the fix applied in sprint-0020 for the UTC offset problem noted in the sprint-0019 analysis. The fix is correct: `new Date('2025-05-18')` (no time component) is parsed as UTC midnight, so `getFullYear()`, `getMonth()`, and `getDate()` return the UTC date components regardless of the user's local timezone.
 
-Sprint 0020 adds synastry axis scoring, which produces reason strings naming the synastry aspect ("and activates the bond between your Venus and their Mars"). This new layer is house-aware at the synastry level. But the underlying composite transit briefs are still house-blind. The product will have a split quality floor: relationship-specific language from synastry augment, archetype-only language from composite aspect rows. The contrast makes the archetype language look more generic by comparison.
+However, this is only safe because the monthly step construction in `runAdvancePreCalculation` at line 886 uses:
+```typescript
+new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12, 0, 0)
+```
 
-This is not sprint 0020's problem to solve — computing composite house cusps from the composite Ascendant is a non-trivial astronomical calculation. But sprint 0020 should not add features that make the gap more visible without acknowledging that the gap exists and will eventually need to be closed. The nine-sprint deferral has accumulated enough surface area that the next sprint that adds couple advance features should put composite house computation on the explicit roadmap, not continue to defer it silently.
+`getFullYear()`, `getMonth()`, and `getDate()` without `UTC` variants read local time. If `baseDate` is UTC midnight for May 18, then in UTC+5:30 it is actually May 18 at 05:30 AM local — so `getDate()` returns 18, which is correct. In UTC-5 it is May 17 at 7:00 PM local — so `getDate()` returns 17, which is wrong. The UTC normalization of `srBaseDate` is undone by the local-time reads inside the step construction.
 
----
-
-## Evaluation of the Four Sprint 0020 Candidates
-
-### Candidate 1: Guidance field on `CoupleAdvanceTab`
-
-Straightforward. The `SnapshotScore.guidance` field exists, the render path in `AdvanceTab` is the reference implementation. The fragility is in the guidance content: the vision specifies couple guidance must use relational language, not individual language. If the implementation simply calls the existing `ASPECT_GUIDANCE` table from `AdvanceTab.tsx`, it will produce "Face the pattern directly rather than managing around it" for a couple's Saturn challenging marker. That sentence speaks to an individual. A couple guidance table with relational framings must be explicitly written. The task spec should require this table before implementation.
-
-Also: the couple banner currently uses `split(' ')[0]` for bolding (fragility point 6 above). Adding guidance text to the couple banner without fixing the bold logic is building on a known fragility. Fix both together.
-
-**Verdict: ship, but require the couple guidance table to be specified in the task and fix the banner bold logic in the same task.**
-
-### Candidate 2: Synastry axis overlay scoring
-
-See fragility points 2 and 3. The combination weight parity (Candidate 3) must be done first — building synastry augmentation on top of `computeEnergyRating` paths produces augmented noise, not augmented signal. The midpoint design should be replaced with the correct formulation (transit within orb of either natal planet in a tight synastry pair).
-
-Performance note: the synastry aspects list can be 50–100 entries. Pre-filtering to `orb <= 2.0` aspects before entering the snapshot loop avoids iterating the full list for each of the 52 weekly (or 37 monthly) snapshots. This filter should run once when `preCalculateCoupleSnapshots` is called, not inside `scoreCoupleSnapshot`.
-
-**Verdict: ship, contingent on Candidate 3 first, and with the midpoint formulation corrected.**
-
-### Candidate 3: `computeCombinedWeight` parity for couple scoring
-
-This is not optional and is not a code quality task. It is a prerequisite for Candidate 2 and a product correctness requirement for the couple advance system standing on its own. The inconsistency between individual and couple scoring (fragility point 2) is a user-visible problem for any user who uses both tabs.
-
-**Verdict: must ship. Prerequisite for Candidate 2. Should be listed first in sprint execution order.**
-
-### Candidate 4: Timeline/advance coherence
-
-The value is real — a date that shows as a power advance marker should mean something in the Timeline view. But the vision's "low code cost" estimate is wrong (fragility point 7). The state-sharing problem must be resolved. The easiest correct solution: the Timeline reads advance scores from application state (a new context field), which gets populated when the Advance tab computes its snapshots. The Timeline annotates from that state if present, shows nothing if absent. This requires lifting the snapshot cache out of the Advance tab's `useRef` into shared state — which is the architecture change the vision is not naming.
-
-Alternatively, scope it to: the Timeline generates its own power-day heuristic (currently: 3+ events on a date) and adds the advance score label as an optional augment shown only when the advance strip has already been loaded in the same session. This avoids the state-sharing architecture change and degrades gracefully. But it means first-time Timeline viewers never see advance annotations.
-
-**Verdict: ship the degraded version (annotate from cached data when available, nothing when not). Document the limitation explicitly. Do not trigger snapshot computation from the Timeline.**
+The fix from the sprint-0020 analysis was applied at the component level but the underlying `runAdvancePreCalculation` still reads local time. Users in UTC-5 to UTC-12 whose SR occurs in the first 12 hours UTC will see a one-day-early SR Start anchor on the strip. The per-step dates in the monthly strip will also be offset by one day for those users.
 
 ---
 
-## The Risk Nobody Is Naming
+## 11. The Density Cap Produces Counterintuitive Results at Small `max` Values
 
-The cache precision asymmetry (fragility point 1) is a silent data corruption defect that will affect couple advance users in the current sprint's deliverables. Every other fragility in this analysis degrades quality or creates edge case failures. This one swaps one user's data for another user's data silently. It should be treated as a bug fix, not a code quality item, and should be verified fixed before any other couple advance features ship.
+**Files:** `src/components/results/SolarReturnPage.tsx` line 66; `src/components/reading/AdvanceTab.tsx` line 931
 
-The composite house deferral (fragility point 8) is not a sprint 0020 task, but the compound effect of nine sprints of couple advance features on top of house-blind composite planets is creating a widening quality gap between individual and couple advance outputs. At some point the deferral cost exceeds the implementation cost. Sprint 0020 is not that sprint, but it is moving closer.
+`Math.ceil(12 * 0.2) = Math.ceil(2.4) = 3`. The SR preview allows 3 markers across 12 months. The reservation phase of the density cap attempts to reserve one slot per non-neutral category present. If power, favorable, challenging, and shift markers all exist, the reservation alone fills all 3 slots. The fill phase in Phase 2 adds zero additional markers regardless of how many remain.
+
+The result: in a year with all four category types, exactly one marker per category is shown — never more. A year with three consecutive favorable windows and one challenging period shows one favorable and one challenging. The highest-intensity favorable markers beyond the first are discarded to make room for one marker from each other category. The density cap is supposed to guarantee variety while preserving significance; at `max = 12` and `maxMarkers = 3`, it guarantees variety at the direct expense of significance.
+
+The 20% density cap was calibrated for `max = 36` (monthly) and `max = 52` (weekly), where 20% is 7 or 11 markers — enough room for category reservation and additional high-intensity fills. At `max = 12`, 20% is 3. The algorithm was not designed for this parameter regime.
 
 ---
 
-*—Nassim Taleb*
+## Summary: What Breaks and When
 
-*A system that speaks with confidence about the wrong data is more damaging than a system that speaks tentatively about correct data. The cache collision and the scoring asymmetry are not polish items. They are trust items. Fix them before building on them.*
+The table below organizes by severity and trigger condition:
+
+| # | File | What | Triggering condition | Severity |
+|---|------|------|---------------------|---------|
+| 1 | `CoupleAdvanceTab.tsx:555,619,669` | Intensity divergence from `computeEnergyRating` | Any couple advance view — always wrong | High |
+| 8 | `runAdvancePreCalculation:902-927` | Hysteresis bridges separating aspects | Slowly separating outer planet at monthly orbs | High |
+| 2 | Cache design | TodayPage advance signal absent for direct navigation | User opens TodayPage without prior Advance tab visit | Medium |
+| 4 | `SolarReturnPage.tsx:61-63` | 36-step computation for 12-step output; double density cap | SR with clustered markers in months 1–6 | Medium |
+| 10 | `runAdvancePreCalculation:886` | Local-time reads undo UTC `srBaseDate` normalization | UTC-5 to UTC-12 users with SR in first 12 hours UTC | Medium |
+| 6 | `TodayPage.tsx:38` | Stale `now` constant across midnight | Session left open overnight or across midnight | Medium |
+| 11 | Density cap math | Significance suppressed at `max=12` | SR year with all four category types present | Medium |
+| 3 | `SolarReturnPage.tsx:47-52` | SR cache key missing `unknownTime` | If SR engine ever supports unknown-time charts | Low (latent) |
+| 5 | `solarReturn.ts:20` | `_birthDate` is dead parameter | Silent API confusion; no runtime failure | Low (latent) |
+| 7 | `assignTransitHouses` | Malformed chart indistinguishable from unknown-time | Bad city coordinate data | Low (degraded gracefully) |
+| 9 | `CoupleAdvanceTab.tsx:460` | Unnecessary `computeEnergyRating` call | Every couple advance computation; pure overhead | Low |
+
+Items 1 and 8 are active correctness failures. Item 2 is a feature that cannot work as described for the most common navigation pattern. Items 4, 10, and 6 produce wrong outputs under normal conditions for a meaningful fraction of users.
