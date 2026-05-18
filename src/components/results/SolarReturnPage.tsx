@@ -10,15 +10,10 @@ import GptSkeleton from '../ui/GptSkeleton'
 import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
 import { getSolarReturnInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
-import type { AdvanceConfig, AdvanceSnapshot } from '../reading/AdvanceTab'
+import type { AdvanceConfig, AdvanceSnapshot } from '../../engine/advanceScoring'
+import { ADVANCE_CONFIG, preCalculateSnapshots } from '../../engine/advanceScoring'
 import { LruMap } from '../../utils/lruMap'
-import {
-  preCalculateSnapshots,
-  OverviewStrip,
-  ADVANCE_CONFIG,
-  MARKER_COLORS,
-  CATEGORY_LABELS,
-} from '../reading/AdvanceTab'
+import { OverviewStrip, MARKER_COLORS, CATEGORY_LABELS } from '../reading/AdvanceTab'
 
 // ─── SR Advance Config ───────────────────────────────────────────────────────
 

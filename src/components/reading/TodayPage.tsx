@@ -13,7 +13,7 @@ import GptSkeleton from '../ui/GptSkeleton'
 import AspectRow from '../reading/AspectRow'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import { track } from '../../services/analytics'
-import type { SnapshotScore } from './AdvanceTab'
+import type { SnapshotScore } from '../../engine/advanceScoring'
 import { advanceSnapshotSessionCache, CATEGORY_LABELS } from './AdvanceTab'
 
 const PHASE_EMOJIS: Record<string, string> = {
