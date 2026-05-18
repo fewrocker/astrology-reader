@@ -248,8 +248,8 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
         )}
       </div>
 
-      {/* Transit Energy card (only when chart available) */}
-      {chartData && energy && (
+      {/* Transit Energy card (only when chart available and advance score is absent or neutral) */}
+      {chartData && energy && !(advanceScore && advanceScore.category !== 'neutral') && (
         <div className="border border-mystic-border rounded-xl bg-mystic-surface/50 p-5 mb-6">
           <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Transit Energy</p>
           <div className="flex items-center gap-3">
