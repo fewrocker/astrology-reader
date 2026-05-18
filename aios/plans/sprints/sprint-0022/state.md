@@ -1,8 +1,10 @@
 # Sprint 0022 — State
 
-**Status:** in-progress
+**Status:** merged
 **Branch:** sprint-0022
 **Started:** 2026-05-18
+**Merged:** 2026-05-18
+**Merge commit:** bab1556 (Merge branch 'sprint-0022')
 
 ## Tasks
 
@@ -14,9 +16,9 @@
 | sprint-0022-task-0004-issue-today-back-navigation | completed | sprint-0022-task-0004-issue-today-back-navigation |
 | sprint-0022-task-0005-issue-today-energy-rating-contradiction | completed | sprint-0022-task-0005-issue-today-energy-rating-contradiction |
 | sprint-0022-task-0006-issue-transit-skeleton-label-warmth | completed | sprint-0022-task-0006-issue-transit-skeleton-label-warmth |
-| sprint-0022-task-0007-code-advance-scoring-extraction | pending | sprint-0022-task-0007-code-advance-scoring-extraction |
-| sprint-0022-task-0008-code-timeline-aspect-brief-consolidation | pending | sprint-0022-task-0008-code-timeline-aspect-brief-consolidation |
-| sprint-0022-task-0009-code-today-synthesis-timezone | pending | sprint-0022-task-0009-code-today-synthesis-timezone |
-| sprint-0022-task-0010-feat-gpt-request-timeout | pending | sprint-0022-task-0010-feat-gpt-request-timeout |
-| sprint-0022-task-0011-feat-synastry-aspect-house-note | pending | sprint-0022-task-0011-feat-synastry-aspect-house-note |
-| sprint-0022-task-0012-feat-today-gpt-prompt-enrichment | pending | sprint-0022-task-0012-feat-today-gpt-prompt-enrichment |
+| sprint-0022-task-0007-code-advance-scoring-extraction | completed | sprint-0022-task-0007-code-advance-scoring-extraction |
+| sprint-0022-task-0008-code-timeline-aspect-brief-consolidation | completed | sprint-0022-task-0008-code-timeline-aspect-brief-consolidation |
+| sprint-0022-task-0009-code-today-synthesis-timezone | completed | sprint-0022-task-0009-code-today-synthesis-timezone |
+| sprint-0022-task-0010-feat-gpt-request-timeout | completed | sprint-0022-task-0010-feat-gpt-request-timeout |
+| sprint-0022-task-0011-feat-synastry-aspect-house-note | completed | sprint-0022-task-0011-feat-synastry-aspect-house-note |
+| sprint-0022-task-0012-feat-today-gpt-prompt-enrichment | completed | sprint-0022-task-0012-feat-today-gpt-prompt-enrichment |
