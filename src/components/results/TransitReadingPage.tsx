@@ -13,11 +13,12 @@ import AspectRow from '../reading/AspectRow'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
-import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
+import { isGptError, getGptErrorMessage, GPT_TIMEOUT } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
-import type { AdvanceSnapshot, MarkerCategory } from '../reading/AdvanceTab'
-import { preCalculateSnapshots, advanceSnapshotSessionCache } from '../reading/AdvanceTab'
+import type { AdvanceSnapshot, MarkerCategory } from '../../engine/advanceScoring'
+import { preCalculateSnapshots } from '../../engine/advanceScoring'
+import { advanceSnapshotSessionCache } from '../reading/AdvanceTab'
 
 import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
@@ -33,6 +34,12 @@ const PERIOD_DESCRIPTIONS: Record<TransitPeriod, string> = {
   daily: 'What the stars have in store for you today',
   weekly: 'Key energies and themes for your week ahead',
   monthly: 'Major influences shaping your month',
+}
+
+const SKELETON_LABELS: Record<TransitPeriod, string> = {
+  daily: "Listening to today's sky for your chart...",
+  weekly: "Reading this week's currents for your birth pattern...",
+  monthly: "Tracing this month's movements across your natal chart...",
 }
 
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -361,7 +368,7 @@ export default function TransitReadingPage() {
 
           {/* GPT interpretation */}
           {transitInterpretation === null || retrying ? (
-            <GptSkeleton label="Consulting the stars..." accentColor="gold" />
+            <GptSkeleton label={SKELETON_LABELS[transitPeriod]} accentColor="gold" />
           ) : isGptError(transitInterpretation) ? (
             <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3 mb-6">
               <p className="text-mystic-muted text-sm">{getGptErrorMessage(transitInterpretation)}</p>
@@ -370,7 +377,7 @@ export default function TransitReadingPage() {
                 onClick={handleRetryGpt}
                 className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
               >
-                ✦ Ask again
+                {transitInterpretation === GPT_TIMEOUT ? '✦ Try again' : '✦ Ask again'}
               </button>
             </div>
           ) : (

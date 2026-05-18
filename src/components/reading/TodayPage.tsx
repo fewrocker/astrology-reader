@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { ChartData, PlanetName } from '../../engine/types'
 import { ZODIAC_GLYPHS } from '../../engine/types'
@@ -9,11 +9,12 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import { isGptError, getGptErrorMessage, GPT_TIMEOUT } from '../../services/gptErrors'
 import GptSkeleton from '../ui/GptSkeleton'
 import AspectRow from '../reading/AspectRow'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import { track } from '../../services/analytics'
-import type { SnapshotScore } from './AdvanceTab'
+import type { SnapshotScore } from '../../engine/advanceScoring'
 import { advanceSnapshotSessionCache, CATEGORY_LABELS } from './AdvanceTab'
 
 const PHASE_EMOJIS: Record<string, string> = {
@@ -53,13 +54,84 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
   const [gptLoading, setGptLoading] = useState(false)
   const [advanceScore, setAdvanceScore] = useState<SnapshotScore | null>(null)
 
+  // Stable refs so the retry callback can access the latest moon/transits without stale closures
+  const moonRef = useRef<CurrentMoonPhase | null>(null)
+  const transitsRef = useRef<TransitAspect[]>([])
+
+  const fetchGptSynthesis = useCallback((currentMoon: CurrentMoonPhase, top: TransitAspect[]) => {
+    setGptLoading(true)
+    setGptText(null)
+    // Derive enrichment fields from chartData (may be null on retry if chart unloaded).
+    const natalSunSign = chartData?.planets.find(p => p.name === 'Sun')?.sign ?? ''
+    const natalMoonPlanet = chartData?.planets.find(p => p.name === 'Moon')
+    const natalMoonSign = natalMoonPlanet?.sign ?? ''
+    const natalMoonHouse = (natalMoonPlanet?.house || null) as number | null
+    const natalAscSign = chartData?.angles.ascendant.sign ?? ''
+    const natalSunLon = chartData?.planets.find(p => p.name === 'Sun')?.longitude
+    const natalMoonLon = natalMoonPlanet?.longitude
+    let natalMoonPhase: string | null = null
+    if (natalSunLon !== undefined && natalMoonLon !== undefined) {
+      const elongation = ((natalMoonLon - natalSunLon) % 360 + 360) % 360
+      if (elongation < 22.5 || elongation >= 337.5) natalMoonPhase = 'New Moon'
+      else if (elongation < 67.5) natalMoonPhase = 'Waxing Crescent'
+      else if (elongation < 112.5) natalMoonPhase = 'First Quarter'
+      else if (elongation < 157.5) natalMoonPhase = 'Waxing Gibbous'
+      else if (elongation < 202.5) natalMoonPhase = 'Full Moon'
+      else if (elongation < 247.5) natalMoonPhase = 'Waning Gibbous'
+      else if (elongation < 292.5) natalMoonPhase = 'Last Quarter'
+      else natalMoonPhase = 'Waning Crescent'
+    }
+    const aspectBriefSentences = top.map(a =>
+      computeTransitAspectBrief(
+        a.transitPlanet as (PlanetName | 'NorthNode'),
+        a.type,
+        a.natalPlanet as (PlanetName | 'NorthNode'),
+        a.natalHouse,
+        a.nature,
+        a.applying,
+      )
+    )
+    const enrichedAspects = top.map(a => ({
+      transitPlanet: a.transitPlanet,
+      symbol: a.symbol,
+      natalPlanet: a.natalPlanet,
+      orb: a.orb,
+      nature: a.nature,
+      natalHouse: a.natalHouse,
+      applying: a.applying,
+    }))
+    getTodayPageInterpretation(
+      currentMoon,
+      enrichedAspects,
+      aspectBriefSentences,
+      personalDayNum,
+      interpretation?.archetype ?? '',
+      firstSentence ?? '',
+      natalSunSign,
+      natalMoonSign,
+      natalMoonHouse,
+      natalAscSign,
+      natalMoonPhase,
+      null,
+      null,
+    ).then(text => {
+      setGptText(text)
+    }).catch(() => {
+      // silently hide if API call fails entirely
+    }).finally(() => {
+      setGptLoading(false)
+    })
+  }, [chartData, personalDayNum, interpretation?.archetype, firstSentence]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const currentMoon = getCurrentMoonPhase(now)
     setMoon(currentMoon)
+    moonRef.current = currentMoon
 
     if (chartData) {
       const top = getTopActiveTransits(chartData, 3, 5)
       setTransits(top)
+      transitsRef.current = top
       const all = calculateTransitAspects(calculateCurrentPositions(now), chartData.planets, 'daily')
       setEnergy(computeEnergyRating(all))
 
@@ -67,22 +139,90 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
       // Synchronous Map iteration — no computation triggered here.
       const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
       const todayStr = new Date().toISOString().slice(0, 10)
+      let localAdvanceScore: SnapshotScore | null = null
       outer: for (const period of ['daily', 'weekly', 'monthly'] as const) {
         for (const [key, snapshots] of advanceSnapshotSessionCache.entries()) {
           if (!key.startsWith(`${chartKey}:${period}:`)) continue
           const todaySnap = snapshots.find(s => s.dateStr === todayStr)
           if (!todaySnap || todaySnap.score.category === 'neutral') continue
+          localAdvanceScore = todaySnap.score
           setAdvanceScore(todaySnap.score)
           break outer
         }
       }
 
+      // Derive natal Big Three from chartData (always non-null inside this block).
+      const natalSunSign = chartData.planets.find(p => p.name === 'Sun')?.sign ?? ''
+      const natalMoonPlanet = chartData.planets.find(p => p.name === 'Moon')
+      const natalMoonSign = natalMoonPlanet?.sign ?? ''
+      // Treat house 0 (unknownTime) as null.
+      const natalMoonHouse = (natalMoonPlanet?.house || null) as number | null
+      const natalAscSign = chartData.angles.ascendant.sign
+
+      // Derive natal moon phase from Sun-Moon elongation.
+      const natalSunLon = chartData.planets.find(p => p.name === 'Sun')?.longitude
+      const natalMoonLon = natalMoonPlanet?.longitude
+      let natalMoonPhase: string | null = null
+      if (natalSunLon !== undefined && natalMoonLon !== undefined) {
+        const elongation = ((natalMoonLon - natalSunLon) % 360 + 360) % 360
+        if (elongation < 22.5 || elongation >= 337.5) natalMoonPhase = 'New Moon'
+        else if (elongation < 67.5) natalMoonPhase = 'Waxing Crescent'
+        else if (elongation < 112.5) natalMoonPhase = 'First Quarter'
+        else if (elongation < 157.5) natalMoonPhase = 'Waxing Gibbous'
+        else if (elongation < 202.5) natalMoonPhase = 'Full Moon'
+        else if (elongation < 247.5) natalMoonPhase = 'Waning Gibbous'
+        else if (elongation < 292.5) natalMoonPhase = 'Last Quarter'
+        else natalMoonPhase = 'Waning Crescent'
+      }
+
+      // Build aspect brief sentences (parallel to top[]).
+      const aspectBriefSentences = top.map(a =>
+        computeTransitAspectBrief(
+          a.transitPlanet as (PlanetName | 'NorthNode'),
+          a.type,
+          a.natalPlanet as (PlanetName | 'NorthNode'),
+          a.natalHouse,
+          a.nature,
+          a.applying,
+        )
+      )
+
+      // Advance signal — pass category/reason only for non-neutral scores.
+      // Use localAdvanceScore (local variable) not advanceScore (React state) because
+      // React state updates are batched and won't reflect the setAdvanceScore call above yet.
+      let advanceCategory: string | null = null
+      let advanceReason: string | null = null
+      if (localAdvanceScore && localAdvanceScore.category !== 'neutral') {
+        advanceCategory = localAdvanceScore.category
+        advanceReason = localAdvanceScore.reason
+      }
+
+      // Enrich aspect objects with natalHouse and applying fields.
+      const enrichedAspects = top.map(a => ({
+        transitPlanet: a.transitPlanet,
+        symbol: a.symbol,
+        natalPlanet: a.natalPlanet,
+        orb: a.orb,
+        nature: a.nature,
+        natalHouse: a.natalHouse,
+        applying: a.applying,
+      }))
+
       setGptLoading(true)
       getTodayPageInterpretation(
         currentMoon,
-        top,
+        enrichedAspects,
+        aspectBriefSentences,
         personalDayNum,
         interpretation?.archetype ?? '',
+        firstSentence ?? '',
+        natalSunSign,
+        natalMoonSign,
+        natalMoonHouse,
+        natalAscSign,
+        natalMoonPhase,
+        advanceCategory,
+        advanceReason,
       ).then(text => {
         setGptText(text)
       }).catch(() => {
@@ -248,8 +388,8 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
         )}
       </div>
 
-      {/* Transit Energy card (only when chart available) */}
-      {chartData && energy && (
+      {/* Transit Energy card (only when chart available and advance score is absent or neutral) */}
+      {chartData && energy && !(advanceScore && advanceScore.category !== 'neutral') && (
         <div className="border border-mystic-border rounded-xl bg-mystic-surface/50 p-5 mb-6">
           <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">Transit Energy</p>
           <div className="flex items-center gap-3">
@@ -273,12 +413,27 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
           {gptLoading && !gptText && (
             <GptSkeleton label="Reading today's sky for you..." accentColor="gold" lines={5} />
           )}
-          {gptText && (
+          {gptText && isGptError(gptText) && gptText === GPT_TIMEOUT ? (
+            <div className="text-center space-y-3">
+              <p className="text-mystic-muted text-sm">{getGptErrorMessage(gptText)}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentMoon = moonRef.current
+                  const top = transitsRef.current
+                  if (currentMoon) fetchGptSynthesis(currentMoon, top)
+                }}
+                className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
+              >
+                ✦ Try again
+              </button>
+            </div>
+          ) : gptText && !isGptError(gptText) ? (
             <>
               <p className="text-mystic-text/90 text-sm leading-relaxed">{gptText}</p>
               {getGptNudge() && <p className="text-mystic-muted/60 text-xs mt-3">{getGptNudge()}</p>}
             </>
-          )}
+          ) : null}
         </div>
       )}
     </div>

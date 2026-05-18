@@ -6,10 +6,11 @@ import type { TransitAspect, EnergyRating } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import { isGptError } from '../../services/gptErrors'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
 import { buildKeyAspectSentence } from '../../data/interpretations/aspectKeywords'
-import type { MarkerCategory } from './AdvanceTab'
+import type { MarkerCategory } from '../../engine/advanceScoring'
 import { CATEGORY_LABELS } from './AdvanceTab'
 
 const PHASE_EMOJIS: Record<string, string> = {
@@ -79,8 +80,10 @@ const CACHE_PREFIX = 'daily-snapshot-'
 
 function getCacheKey(chart: ChartData): string {
   const sun = chart.planets.find(p => p.name === 'Sun')
+  const moon = chart.planets.find(p => p.name === 'Moon')
+  const asc = chart.houses?.[0]
   const today = new Date().toISOString().split('T')[0]
-  return `${CACHE_PREFIX}${sun?.longitude?.toFixed(0)}-${today}`
+  return `${CACHE_PREFIX}${sun?.longitude?.toFixed(4)}-${asc?.sign ?? 'unknown'}-${moon?.sign ?? 'unknown'}-${today}`
 }
 
 export default function DailySnapshotCard({ chart, birthDate, embedded }: { chart: ChartData; birthDate?: string; embedded?: boolean }) {
@@ -170,11 +173,14 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
 
         if (!cancelled) {
           setText(result)
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
-          } catch (e) {
-            if (isQuotaError(e)) {
-              console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+          // Do not cache GPT error strings — they must not be persisted as readings (spec 11)
+          if (!isGptError(result)) {
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
+            } catch (e) {
+              if (isQuotaError(e)) {
+                console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+              }
             }
           }
         }

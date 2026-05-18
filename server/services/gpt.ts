@@ -59,10 +59,12 @@ export interface PatternReading {
 // OpenAI client + call infrastructure
 // ---------------------------------------------------------------------------
 
+const SERVER_OPENAI_TIMEOUT_MS = 30_000
+
 let _client: OpenAI | null = null
 
 function getClient(): OpenAI {
-  if (!_client) _client = new OpenAI() // reads OPENAI_API_KEY from process.env
+  if (!_client) _client = new OpenAI({ timeout: SERVER_OPENAI_TIMEOUT_MS }) // reads OPENAI_API_KEY from process.env
   return _client
 }
 
@@ -97,19 +99,29 @@ async function callOpenAI(
   options: { temperature?: number; max_tokens?: number } = {},
 ): Promise<string> {
   const client = getClient()
+  // Per-request abort fires 2 s before the client-side AbortController (spec 6)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SERVER_OPENAI_TIMEOUT_MS - 2000)
   try {
     const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
       temperature: options.temperature ?? 0.8,
       max_tokens: options.max_tokens ?? 2000,
-    })
+    }, { signal: controller.signal })
     return completion.choices[0]?.message?.content ?? ''
   } catch (err) {
+    // Rethrow timeout errors without converting to GptServiceError so
+    // retryWithBackoff does not classify them as retryable (spec 7, 8)
+    if (err instanceof OpenAI.APIConnectionTimeoutError) {
+      throw err
+    }
     if (err instanceof OpenAI.APIError) {
       throw new GptServiceError(err.message, err.status ?? 500)
     }
     throw err
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 
@@ -565,16 +577,36 @@ Write a 2–3 paragraph reading about what this numerical distribution across th
 
 async function handleTodaySynthesis(payload: {
   moon: { phaseName: string; moonSign: string; isVoid: boolean }
-  aspects: TransitAspect[]
+  aspects: Array<{
+    transitPlanet: string; symbol: string; natalPlanet: string;
+    orb: number; nature: string; natalHouse?: number | null; applying?: boolean
+  }>
   personalDay: number
   personalDayArchetype: string
+  localDate?: string
+  // Enrichment fields — all optional for backward compatibility
+  aspectBriefSentences?: string[]
+  personalDayEssence?: string
+  natalSunSign?: string
+  natalMoonSign?: string
+  natalMoonHouse?: number | null
+  natalAscSign?: string
+  natalMoonPhase?: string | null
+  advanceCategory?: string | null
+  advanceReason?: string | null
 }, userId?: number): Promise<string> {
+  // Resolve "today" from the client's local date string (YYYY-MM-DD) when provided.
+  // This prevents the server's UTC clock from misidentifying the user's calendar day
+  // (e.g. for users east of UTC+0 during the UTC-midnight-to-local-midnight window).
+  const targetDate = payload.localDate ? new Date(payload.localDate) : new Date()
+
   // Cross-check client-provided personalDay against server-computed value when birth_date is available.
+  // Use the client-supplied date so both sides compute against the same calendar day.
   let authorizedPersonalDay = payload.personalDay
   if (userId) {
     const birthCtx = resolveUserBirthContext(userId)
     if (birthCtx) {
-      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate)
+      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate, targetDate)
       if (serverPersonalDay !== payload.personalDay) {
         console.warn(`[handleTodaySynthesis] personalDay mismatch: client=${payload.personalDay}, server=${serverPersonalDay}, userId=${userId}`)
       }
@@ -582,26 +614,61 @@ async function handleTodaySynthesis(payload: {
     }
   }
 
-  const today = new Date().toLocaleDateString('en-US', {
+  const today = targetDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
 
-  const aspectLines = payload.aspects.slice(0, 3).map(a =>
-    `${a.transitPlanet} ${a.symbol} natal ${a.natalPlanet} (${a.nature}, ${a.orb.toFixed(1)}° orb)`
-  ).join('\n') || 'No tight transit aspects active today.'
+  // ─── Build prompt sections ────────────────────────────────────────────────
 
-  const voidNote = payload.moon.isVoid ? ' The Moon is void of course — avoid committing to irreversible decisions.' : ''
+  const sections: string[] = [`Today is ${today}.`]
 
-  const prompt = `Today is ${today}.
+  // Section 1 — Natal Chart (when natal signs are present)
+  if (payload.natalSunSign) {
+    const moonHousePhrase = (payload.natalMoonHouse && payload.natalMoonHouse >= 1 && payload.natalMoonHouse <= 12)
+      ? ` in the ${payload.natalMoonHouse}${ordinalSuffix(payload.natalMoonHouse)} house`
+      : ''
+    let natalSection = `## Natal Chart\nSun in ${payload.natalSunSign}, Moon in ${payload.natalMoonSign ?? ''}${moonHousePhrase}, Ascendant in ${payload.natalAscSign ?? ''}`
+    if (payload.natalMoonPhase) {
+      natalSection += `\nNatal Moon Phase: ${payload.natalMoonPhase}`
+    }
+    sections.push(natalSection)
+  }
 
-Personal Day number: ${authorizedPersonalDay} — ${payload.personalDayArchetype}
+  // Section 2 — Personal Day
+  let personalDaySection = `## Personal Day ${authorizedPersonalDay} — ${payload.personalDayArchetype}`
+  if (payload.personalDayEssence) {
+    personalDaySection += `\n${payload.personalDayEssence}`
+  }
+  sections.push(personalDaySection)
 
-Moon: ${payload.moon.phaseName} in ${payload.moon.moonSign}${voidNote}
+  // Section 3 — Today's Sky
+  const voidNote = payload.moon.isVoid ? ', void of course — avoid committing to irreversible decisions' : ''
+  let skySection = `## Today's Sky\nMoon: ${payload.moon.phaseName} in ${payload.moon.moonSign}${voidNote}`
 
-Top transit aspects:
-${aspectLines}
+  const transitLines = payload.aspects.slice(0, 3).map((a, i) => {
+    const brief = payload.aspectBriefSentences?.[i]
+    if (brief) return brief
+    return `${a.transitPlanet} ${a.symbol} natal ${a.natalPlanet} (${a.nature}, ${a.orb.toFixed(1)}° orb)`
+  })
 
-Write a 2-3 sentence personalized morning synthesis that weaves this person's Personal Day ${authorizedPersonalDay} energy together with the current Moon phase and the active transit aspects. Be specific, evocative, and honest — name what is genuinely supported today and what may require care. Speak directly to the person in second person. Do not pad or encourage generically.`
+  if (transitLines.length > 0) {
+    skySection += `\n\nActive transits:\n${transitLines.join('\n')}`
+  } else {
+    skySection += '\n\nNo tight transit aspects active today.'
+  }
+  sections.push(skySection)
+
+  // Section 4 — Advance Signal (only when category is non-null)
+  if (payload.advanceCategory) {
+    sections.push(`## Advance Signal\nToday is scored as a ${payload.advanceCategory} period: ${payload.advanceReason ?? ''}`)
+  }
+
+  // Closing instruction
+  sections.push(
+    'Write a 2-3 sentence personalized morning synthesis that integrates all of the above into a single coherent reading. Do not list the systems separately — find the sentence that names what today means when the natal chart, the personal day, the lunar quality, and the active transits are read together. Name specific natal placements and houses where relevant. Be direct, specific, and honest about what is genuinely supported today and what calls for care. Do not pad or encourage generically. Speak in second person.'
+  )
+
+  const prompt = sections.join('\n\n')
 
   const result = await retryWithBackoff(() =>
     callOpenAI([
@@ -613,6 +680,17 @@ Write a 2-3 sentence personalized morning synthesis that weaves this person's Pe
     ], { temperature: 0.8, max_tokens: 350 })
   )
   return result || 'Unable to generate morning synthesis.'
+}
+
+/** Return ordinal suffix for a house number (1→"st", 2→"nd", 3→"rd", 4+→"th"). */
+function ordinalSuffix(n: number): string {
+  if (n === 11 || n === 12 || n === 13) return 'th'
+  switch (n % 10) {
+    case 1: return 'st'
+    case 2: return 'nd'
+    case 3: return 'rd'
+    default: return 'th'
+  }
 }
 
 async function handleNumerologyDiscuss(payload: {

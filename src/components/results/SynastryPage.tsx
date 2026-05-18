@@ -4,7 +4,7 @@ import { resolvePersonLabel } from '../../context/appState'
 import type { PlanetName, ZodiacSign } from '../../engine/types'
 import { ZODIAC_GLYPHS, getBodyGlyph } from '../../engine/types'
 import { formatPosition } from '../../engine/zodiac'
-import type { SynastryData, SynastryAspect, HouseOverlayEntry, CoupleProfile, DimensionValue } from '../../engine/synastry'
+import type { SynastryData, SynastryAspect, HouseOverlay, HouseOverlayEntry, CoupleProfile, DimensionValue } from '../../engine/synastry'
 import AspectRow from '../reading/AspectRow'
 import { computeSynastryAspectBrief } from '../../data/interpretations/synastryAspectBriefs'
 import { getHouseTheme } from '../../data/interpretations/houseThemes'
@@ -154,28 +154,32 @@ function InterpretationSection({ text }: { text: string }) {
   )
 }
 
-function SynastryAspectsSection({ aspects, label1, label2 }: { aspects: SynastryAspect[]; label1: string; label2: string }) {
+function SynastryAspectsSection({ aspects, label1, label2, houseOverlay }: { aspects: SynastryAspect[]; label1: string; label2: string; houseOverlay?: HouseOverlay }) {
   if (aspects.length === 0) return null
 
   return (
     <CollapsibleSection title={`Synastry Aspects (${aspects.length})`} defaultOpen={false}>
       <p className="text-mystic-muted text-xs mb-3">Aspects between {label1}'s planets and {label2}'s planets</p>
       <div>
-        {aspects.map((a, i) => (
-          <AspectRow
-            key={i}
-            transitPlanet={a.person1Planet}
-            natalPlanet={a.person2Planet}
-            aspectType={a.type}
-            nature={a.nature}
-            symbol={a.symbol}
-            orb={a.orb}
-            applying={false}
-            showApplyingBadge={false}
-            labelOverride={`${label1}'s ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} ${label2}'s ${a.person2Planet}`}
-            brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
-          />
-        ))}
+        {aspects.map((a, i) => {
+          const houseNote = houseOverlay ? resolveHouseNote(a, houseOverlay, label1, label2) : null
+          return (
+            <AspectRow
+              key={i}
+              transitPlanet={a.person1Planet}
+              natalPlanet={a.person2Planet}
+              aspectType={a.type}
+              nature={a.nature}
+              symbol={a.symbol}
+              orb={a.orb}
+              applying={false}
+              showApplyingBadge={false}
+              labelOverride={`${label1}'s ${a.person1Planet} ${a.type.charAt(0).toUpperCase() + a.type.slice(1)} ${label2}'s ${a.person2Planet}`}
+              brief={computeSynastryAspectBrief(a.person1Planet as (PlanetName | 'NorthNode'), a.type, a.person2Planet as (PlanetName | 'NorthNode'), a.nature)}
+              expansionNote={houseNote ?? undefined}
+            />
+          )
+        })}
       </div>
     </CollapsibleSection>
   )
@@ -200,6 +204,51 @@ function ordinal(n: number): string {
 
 function isHighSignal(entry: HouseOverlayEntry): boolean {
   return INNER_PLANETS.includes(entry.planet as string) && HIGH_SIGNAL_HOUSES.includes(entry.house)
+}
+
+const QUALIFYING_HOUSES = [1, 5, 7, 8]
+
+function resolveHouseNote(
+  aspect: SynastryAspect,
+  houseOverlay: HouseOverlay,
+  label1: string,
+  label2: string,
+): string | null {
+  const candidates: Array<{ house: number; note: string }> = []
+
+  // Check A: person1Planet in person2's houses
+  if (INNER_PLANETS.includes(aspect.person1Planet as string)) {
+    const entry = houseOverlay.person1InPerson2Houses.find(
+      e => e.planet === aspect.person1Planet && QUALIFYING_HOUSES.includes(e.house) && e.house > 0 && e.house <= 12
+    )
+    if (entry) {
+      const theme = getHouseTheme(entry.house)
+      candidates.push({
+        house: entry.house,
+        note: `${label1}'s ${entry.planet} also falls in ${label2}'s ${ordinal(entry.house)} house (${theme.theme.toLowerCase()}).`,
+      })
+    }
+  }
+
+  // Check B: person2Planet in person1's houses
+  if (INNER_PLANETS.includes(aspect.person2Planet as string)) {
+    const entry = houseOverlay.person2InPerson1Houses.find(
+      e => e.planet === aspect.person2Planet && QUALIFYING_HOUSES.includes(e.house) && e.house > 0 && e.house <= 12
+    )
+    if (entry) {
+      const theme = getHouseTheme(entry.house)
+      candidates.push({
+        house: entry.house,
+        note: `${label2}'s ${entry.planet} also falls in ${label1}'s ${ordinal(entry.house)} house (${theme.theme.toLowerCase()}).`,
+      })
+    }
+  }
+
+  if (candidates.length === 0) return null
+
+  // Tie-breaking: prefer lower index in QUALIFYING_HOUSES; on equal house, prefer Check A (index 0)
+  candidates.sort((a, b) => QUALIFYING_HOUSES.indexOf(a.house) - QUALIFYING_HOUSES.indexOf(b.house))
+  return candidates[0].note
 }
 
 function sortOverlayEntries(entries: HouseOverlayEntry[]): HouseOverlayEntry[] {
@@ -494,7 +543,7 @@ export default function SynastryPage() {
       )}
 
       {/* Synastry aspects */}
-      <SynastryAspectsSection aspects={synastryData.synastryAspects} label1={label1} label2={label2} />
+      <SynastryAspectsSection aspects={synastryData.synastryAspects} label1={label1} label2={label2} houseOverlay={synastryData.houseOverlay} />
 
       {/* House overlays */}
       {synastryData.houseOverlay.person1InPerson2Houses.length > 0 && (
