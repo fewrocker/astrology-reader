@@ -1,184 +1,159 @@
-# Sprint 0021 — Fragility Analysis (Taleb Voice)
+# Nassim Taleb: Sprint 0022 — Fragility Analysis
 
-## Opening Observation
-
-This codebase exhibits a pattern I find everywhere: the happy path is well-tested and extensively documented, while the failure modes accumulate silently in the margins. The advance engine has been through five sprints of iteration, and each sprint has fixed a bug that was invisible until someone looked. That is not a sign of careful engineering. That is a sign that the system is too complex to reason about correctly, and that bugs are found by accident rather than by design. Let me be specific.
+You have built a system that works beautifully in the middle of the distribution and is systematically blind to the tails. Let me show you what breaks.
 
 ---
 
-## 1. The Couple Advance Intensity Bug Is Not Just Wrong — It Is Visibly Inconsistent Right Now
+## The Core Problem: A Single External Process Owns Your Product's Value Proposition
 
-**Files:** `src/components/reading/CoupleAdvanceTab.tsx` lines 555, 619, 669; `src/components/reading/AdvanceTab.tsx` lines 696, 771, 804
+The central fragility is not any individual bug. It is this: every piece of interpretive text that gives this product its soul — every "Morning Synthesis," every transit reading, every synastry interpretation — flows through a single synchronous call to OpenAI's API in `server/services/gpt.ts`. When that call succeeds, the product works. When it fails for any reason — rate limit, OpenAI outage, network partition, token budget exceeded, model deprecation — the user sees either a silent skeleton or a generic fallback string.
 
-The sprint-0020 changelog entry for `code-couple-advance-scoring-parity` states it fixed the gate logic for Priorities 2–4. What it did not fix — and what the sprint-0020 deferred note and the sprint-0021 vision both acknowledge — is `baseIntensity`. At lines 555, 619, and 669 of `CoupleAdvanceTab.tsx`, `baseIntensity` is computed as `Math.abs(rating.score - 3) / 2`. The `rating` variable on line 460 still comes from `computeEnergyRating`, which is still imported at line 3.
+You have mistaken availability for resilience. OpenAI has had multi-hour outages. The `retryWithBackoff` function in `server/services/gpt.ts` retries three times with exponential backoff — but retries on the same provider that is already down. Three retries against a dead endpoint are not resilience; they are a more expensive form of failure. The correct architecture separates "does the feature work" from "is OpenAI up right now." Today, those are identical.
 
-In `AdvanceTab.tsx`, the corresponding path uses `Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)` (lines 696, 771, 804), where `COMBINATION_WEIGHT_NORMALIZE = 12`.
-
-The consequence is not abstract. `computeEnergyRating` returns a score from 1 to 5 based on raw aspect counts. `Math.abs(rating.score - 3) / 2` produces values in `{0, 0.5, 1}` — a three-state intensity system. The individual path produces a continuous value bounded by actual slow-planet weight. A Saturn+Pluto cluster at 0.5° orb that passes the gate produces `combinedWeight ≈ 14` on the individual path, yielding `intensity = Math.min(1, 14/12) = 1.0`. On the couple path the same sky can produce `baseIntensity = 0.5` if energy score happens to be 4, or `0` if it is 3. This is not a small drift. The dot size, the glow strength, and the density-cap priority sort all derive from `intensity`. A Saturn+Pluto couple marker can be rendered as a faint, small dot while a moderate Jupiter trine on an individual chart shows as a large, glowing marker. Users who compare the two surfaces see contradictory emphasis for the same sky. This is already happening in production.
-
-The synastry axis augmentation introduced in sprint-0020 task-0007 multiplies `baseIntensity * 1.25` (lines 569, 633, 683). When `baseIntensity` is already wrong, the augmentation amplifies the error. A 25% boost on a structurally incorrect baseline produces a value that is confidently wrong rather than quietly wrong.
-
-**What to fix:** Import `COMBINATION_WEIGHT_NORMALIZE` from `AdvanceTab` (already exported at line 112) and replace the three `baseIntensity` derivations with `Math.min(1, combinedWeight / COMBINATION_WEIGHT_NORMALIZE)`. Remove the `computeEnergyRating` import (line 3) and the `rating` variable (line 460) — they are dead code in `scoreCoupleSnapshot` once this is done.
+Everything built in sprints 0018–0021 — the advance engine, the scoring system, the house-anchored interpretation tables — runs locally in the browser and is robust. The reading surfaces themselves are fragile. This is the hidden single point of failure that four sprints of advance engine work has made more invisible, not less.
 
 ---
 
-## 2. The Snapshot Cache Is a Component-Level Ref With No Cross-Component Sharing
+## Proposal 1 — Issue Fix: The `advance-today-signal` localStorage Key Is Written Without Schema Validation on Read and Is Corruptible
 
-**Files:** `src/components/reading/AdvanceTab.tsx` line 1284; `src/components/reading/CoupleAdvanceTab.tsx` line 847; `src/components/results/SolarReturnPage.tsx` line 43
+**Files:** `src/components/reading/AdvanceTab.tsx` (line 1319), `src/components/reading/DailySnapshotCard.tsx` (line 109)
 
-Each component that runs advance pre-calculation holds its cache in a `useRef<Map<string, AdvanceSnapshot[]>>`. This means:
+The `advance-today-signal-{YYYY-MM-DD}` mechanism writes a JSON string to localStorage inside a `startTransition` callback. The read in `DailySnapshotCard.tsx` at line 109 does `JSON.parse(raw)` and casts directly to `{ category: MarkerCategory; intensity: number; reason: string }` without validating the shape.
 
-1. The cache is destroyed when the component unmounts. If a user visits the Advance tab, builds a 36-month snapshot array, then navigates to TodayPage, then returns to the Advance tab, the cache is gone and computation runs again.
+If `raw` parses to a malformed object — for instance, because a prior partial write or a future schema change left a different structure — the component receives an object where `category` is an unrecognized string. The rendering logic uses `CATEGORY_LABELS[advanceSignal.category]` (line 271), which does a keyed lookup on `MarkerCategory`. An unrecognized key produces `undefined`, which renders as nothing. The badge silently vanishes. No error, no indication to the user or developer that the signal read corrupted state.
 
-2. More importantly: the sprint-0021 vision proposes integrating advance snapshot data into TodayPage and DailySnapshotCard. The vision notes: "if the advance snapshots are already in the component-level cache (from an Advance tab visit), the Today page should read from that cache." But the Today page does not have access to AdvanceTab's `useRef` cache. The two components are siblings, not parent-child, and there is no shared cache. The stated design intent cannot be achieved without either lifting the cache to a shared parent or storing snapshots in application state.
+More dangerously: the same key pattern is cleaned up opportunistically by removing "yesterday's" key at line 123. This cleanup uses `yesterday.toISOString().split('T')[0]`, which returns the UTC date. But the `todayStr` on line 107 also uses `toISOString().slice(0, 10)` — UTC. Both sides use UTC, which is consistent. However, `AdvanceTab.tsx` writes the key using `new Date().toISOString().split('T')[0]` (line 1313) — also UTC. This is coincidentally safe only because all three sites use `toISOString()`. If any site ever switches to a local-date method for any reason, the key written and the key cleaned up will diverge for users in non-UTC timezones, leaving stale advance signals displayed indefinitely.
 
-3. `TodayPage.tsx` renders independently of whether the user has visited the Advance tab. The vision says "if no cache exists, the signal is simply absent." That is a safe default, but it means the TodayPage advance integration is unreliable by design — users who open TodayPage directly (the most common mobile pattern for daily users) will never see the advance signal unless an independent snapshot computation path is added for TodayPage. Adding that computation would be a blocking call on TodayPage mount, which is why the vision avoids it. The result is a feature that works only for users with specific navigation patterns, with no visible indication of the difference.
+The `isQuotaError` guard at the write site logs a warning but does not clear a potentially stale key. A user with nearly-full storage gets no signal and no explanation.
 
----
-
-## 3. The Solar Return Advance Preview Cache Key Omits `unknownTime`
-
-**File:** `src/components/results/SolarReturnPage.tsx` lines 47–52
-
-The SR advance preview cache key is built from `'sr'`, `targetYear`, and the SR chart's ascendant and midheaven longitudes at `.toFixed(4)` precision. The `unknownTime` flag is absent.
-
-The SR chart is always computed with `unknownTime = false` (see `src/engine/solarReturn.ts` line 49: `calculateChart(srDate, srTime, birthLat, birthLng, 'UTC', false)`). So the missing field is not an active cache collision risk today. But the oversight reveals a structural assumption: the cache key was designed by copying the advance cache pattern and dropping `unknownTime` because the SR chart always has time. If the SR engine ever changes to support unknown-time charts, or if this pattern is copied for a new advance surface, the missing field becomes a silent cache collision.
-
-Compare with the individual advance cache key in `AdvanceTab.tsx` line 1294: `${asc.toFixed(4)}:${mc.toFixed(4)}:${unknownTime}:${period}:${baseDate}`. The SR key also omits `period` (hardcoded to `monthly`) and `baseDate` (derived deterministically from `srMoment` and `targetYear`). Those omissions are defensible. The `unknownTime` omission is not, because it is a factual property of the chart and belongs in any identity fingerprint.
+**Fix:** Validate the parsed object's `category` field against the set of known `MarkerCategory` values before trusting it. If validation fails, remove the key. Add a comment at every site that reads or writes this key requiring `toISOString()` for date extraction, not local-date methods.
 
 ---
 
-## 4. The SR Advance Preview Runs a 36-Step Computation to Produce a 12-Step Output
+## Proposal 2 — Issue Fix: `DailySnapshotCard` Cache Key Uses `toFixed(0)` — Two Charts Can Share the Same Cached GPT Text
 
-**File:** `src/components/results/SolarReturnPage.tsx` lines 61–63
+**File:** `src/components/reading/DailySnapshotCard.tsx` (line 82)
 
-The preview calls `preCalculateSnapshots(srChart, 'monthly', srBaseDate)` with no custom config, which runs the full 36-month computation (the default `ADVANCE_CONFIG.monthly.max = 36`). It then slices to 13 snapshots (offsets 0–12) and applies a secondary density cap to those 13. The 24 discarded snapshots were computed, scored, and density-capped by the generic engine — computation time was spent and their results thrown away.
-
-The deeper problem is the density cap interaction. `runAdvancePreCalculation` in `AdvanceTab.tsx` applies its density cap to all 36 snapshots before the slice. The cap allows `Math.ceil(36 * 0.2) = 8` markers across the full 36 months. A power marker at month 5 may be displaced by a higher-intensity marker at month 20 — which is then discarded by the slice. The secondary density cap in the SR preview (lines 66–92) operates on the already-capped 13-snapshot slice, not on the raw scored set. This means the SR preview applies two sequential density caps: one calibrated for 36 months, one for 12. A year where markers cluster in months 1–6 can be under-represented because the first cap suppressed some of those months in favor of high-intensity markers at months 7–36 that are then discarded.
-
-**What should happen:** Pass `SR_ADVANCE_CONFIG` (with `max: 12`) directly to `runAdvancePreCalculation` via the `config` override parameter that the function already accepts. This eliminates the 36-step waste, removes the slice, and removes the secondary density cap entirely — the primary cap will be calibrated for 12 months from the start.
-
----
-
-## 5. The Solar Return Calculation Has a Silent Dead Parameter
-
-**File:** `src/engine/solarReturn.ts` line 20
-
-The `calculateSolarReturn` function signature accepts `_birthDate: string` as its second parameter. It is prefixed with underscore, which in TypeScript convention signals intentional non-use. It is never read inside the function — the SR is computed from `natalSun.longitude`, `birthLat`, `birthLng`, and `targetYear` only.
-
-The birth date is not an input to the solar return calculation. But the function name and the public API imply it should be: `calculateSolarReturn(natalChart, birthDate, lat, lng)` reads like birth date matters. Any future developer calling this function may pass incorrect birth data and receive no error. Any future developer modifying the function to actually use the birth date (for age validation, birth year reference, etc.) will discover that callers are passing stale or misformatted dates with no indication of the breakage.
-
-A dead parameter in a public API is not a style issue. It is an invitation for future corruption.
-
----
-
-## 6. `TodayPage` Uses a Stale `now` Constant That Does Not Update
-
-**File:** `src/components/reading/TodayPage.tsx` line 38
-
-```typescript
-const now = new Date()
+```ts
+return `${CACHE_PREFIX}${sun?.longitude?.toFixed(0)}-${today}`
 ```
 
-This is computed once at render time. The `useEffect` on line 53 also runs once (dependency array is `[]`). If a user opens TodayPage at 11:58 PM and leaves it open, the page shows yesterday's data at 12:01 AM. The moon phase, transit aspects, energy rating, and date header are all stale. There is no visible indication, no "last updated" timestamp, no automatic refresh.
+`toFixed(0)` rounds the Sun's longitude to the nearest integer degree. The Sun moves approximately 1° per day. Two people born on consecutive days — or in the same day in different years when the Sun is near a degree boundary — get colliding cache keys and receive each other's GPT-generated morning snapshot. The snapshot prompt includes Sun, Moon, and Ascendant natal positions in the text sent to GPT. User A reads User B's personalized reading. Neither knows.
 
-The GPT morning synthesis (line 64) is also computed once at mount and goes stale. A user reading their "morning synthesis" in the afternoon after leaving the tab open overnight is reading yesterday's sky read through yesterday's aspects. The GPT text says "today" but means yesterday.
+The Ascendant is not included in the cache key at all. Two people with identical Sun longitudes but different Ascendants — which changes the entire house context — get the same cached text.
 
-This is a product trust issue. A daily-use app that lies about what day it is erodes the user's confidence that it is computing anything correctly.
+This is the exact class of precision bug fixed in the advance snapshot cache in sprints 0019 and 0020 (`toFixed(4)`, including Ascendant and Midheaven in the fingerprint). The `DailySnapshotCard` was not updated to match the pattern that was established as correct.
 
----
-
-## 7. The Advance Engine Has No Guard for Charts With Empty or Malformed House Arrays
-
-**Files:** `src/engine/transits.ts` `assignTransitHouses` line 308; `src/engine/astronomy.ts` line 270
-
-`assignTransitHouses` iterates over `natalHouses` and calls `getHouseForLongitude`. If `natalHouses` is empty or contains malformed entries, the function returns all transit planets with `house: 0`. This propagates silently through `calculateTransitAspects` where the guard `unknownTime ? null : (np.house > 0 ? np.house : null)` (line 186) then sets `natalHouse: null` for all aspects — identical to the expected `unknownTime = true` behavior.
-
-The symptom of a malformed chart (empty houses from a bad city coordinate) looks identical to a legitimate unknown-time chart. The house-anchored reason strings in `buildAspectReason` fall back to archetype-only phrases in both cases. The advance engine degrades gracefully, but it degrades without diagnostic visibility. A user with a corrupted chart who sees generic phrases instead of house-specific guidance has no way to know why, and the developer has no error to catch.
-
-The city database is a bundled JSON of ~40,000 entries. Coordinates are not validated on input. A lat/lng of 0.0/0.0 (Gulf of Guinea) is valid JSON but would produce Placidus houses for a location that has no population. This does not crash; it produces wrong angles silently.
+**Fix:** Fingerprint the cache key with `sun?.longitude?.toFixed(4)` plus Ascendant sign and Moon sign — matching the chart-identity approach proven correct for advance snapshots.
 
 ---
 
-## 8. The Hysteresis Pass Has a Directional Assumption That Can Bridge Separating Aspects
+## Proposal 3 — Code Enhancement: `advanceSnapshotSessionCache` Is an Unbounded Module-Level Singleton
 
-**File:** `src/components/reading/AdvanceTab.tsx` lines 902–927 (in `runAdvancePreCalculation`)
+**File:** `src/components/reading/AdvanceTab.tsx` (line 128)
 
-The hysteresis pass bridges a neutral snapshot gap between two identically-scored non-neutral snapshots. The check at line 923: `Math.abs(currAspect.orb - prevOrb) < MARKER_HYSTERESIS_ORB`. If the orb difference between the current snapshot and the previous snapshot is less than 0.5°, the neutral snapshot inherits the previous score.
-
-This check is directionally blind. It compares current orb to previous orb but does not verify that the aspect at `curr` is still applying. A separating aspect — expressly excluded from firing markers by the `a.applying` filter — can be bridged into a marker via hysteresis if the orb change is gradual enough.
-
-The failing scenario: An aspect applies and fires a marker at offset N. At offset N+1 the planet crosses exactness — the aspect is now separating and `applying = false`, so no marker fires. At offset N+2 the aspect is still separating and another marker fires for a different reason. The hysteresis pass runs: prev (N) and next (N+2) both have the same category, curr (N+1) is neutral, and the orb at N+1 is within 0.5° of N's orb. Hysteresis bridges N+1. The banner then describes a transit as ongoing when it peaked and is receding. At the monthly orb threshold of 4.0°, a slowly separating outer planet can produce orb deltas well under 0.5° per step, making this scenario common rather than rare.
-
----
-
-## 9. `scoreCoupleSnapshot` Calls `computeEnergyRating` Unconditionally on Every Snapshot
-
-**File:** `src/components/reading/CoupleAdvanceTab.tsx` line 460
-
-```typescript
-const rating = computeEnergyRating(snapshot.transitAspects)
+```ts
+export const advanceSnapshotSessionCache = new Map<string, AdvanceSnapshot[]>()
 ```
 
-This is called at the top of `scoreCoupleSnapshot` for every snapshot — including offset 0, which is immediately returned as `neutral` on line 457 without ever reading `rating`. It is also called for every Priority 1 power marker, which short-circuits before reaching the `baseIntensity` lines that consume `rating`.
+The LruMap fix from sprint-0021 capped the four `useRef<Map>` caches inside components. This module-level singleton — the one that `TodayPage` reads from to display the advance banner — is still a bare `Map` with no size bound and no eviction.
 
-`computeEnergyRating` iterates all transit aspects, categorizes them by nature, and produces a score. At the monthly period this can be 40–60 aspects. Multiplied by 37 snapshots, this is overhead on approximately 37 × 50 = 1,850 aspect categorizations per computation run, of which the majority produce a `rating` value that is thrown away before it is read.
+An extended session with multiple charts across multiple periods accumulates snapshot arrays indefinitely. Each `AdvanceSnapshot` carries full `transitPlanets`, `housedTransitPlanets`, and `transitAspects` arrays. Nine combinations (three charts × three periods) at 30–36 snapshots each is a non-trivial heap footprint that grows for the lifetime of the browser tab.
 
-Once the intensity bug is fixed and `rating` is removed, this call disappears entirely. Until then it runs on every snapshot unconditionally.
+More practically: `TodayPage` reads this cache at line 71 by iterating all entries and scanning for a key prefix match. This is an O(n) iteration over the entire cache on every TodayPage mount. At a small session it is invisible. At a session where the user has visited Advance tabs for multiple charts, this scan touches every stored snapshot array. That is an O(n) scan in a component that mounts on every daily-use session open.
+
+**Fix:** Convert `advanceSnapshotSessionCache` to an `LruMap` with cap 6 — matching the component-level caches. This is one character change: `new LruMap<string, AdvanceSnapshot[]>(6)`. Export it with the same type. The LruMap is already imported in `AdvanceTab.tsx`.
 
 ---
 
-## 10. The SR Advance Preview `srBaseDate` Is UTC-Normalized in the UI but the Monthly Step Logic Reads Local Time
+## Proposal 4 — Issue Fix: `ErrorBoundary.handleStartOver` Calls `localStorage.clear()` — This Destroys Journal Data Without Warning
 
-**File:** `src/components/results/SolarReturnPage.tsx` lines 37–40
+**File:** `src/components/ErrorBoundary.tsx` (line 28)
 
-The component correctly normalizes `srBaseDate` to UTC midnight:
-```typescript
-const utcDateStr = srMoment.toISOString().split('T')[0]
-return new Date(utcDateStr) // parsed as UTC midnight
+```ts
+handleStartOver = () => {
+  localStorage.clear()
+  window.location.reload()
+}
 ```
 
-This is the fix applied in sprint-0020 for the UTC offset problem noted in the sprint-0019 analysis. The fix is correct: `new Date('2025-05-18')` (no time component) is parsed as UTC midnight, so `getFullYear()`, `getMonth()`, and `getDate()` return the UTC date components regardless of the user's local timezone.
+The ErrorBoundary is activated by rendering errors. These can be caused by corrupted cached values — a malformed cached chart result or a stale JSON structure from a schema change — and calling "Start Over" is the expected user action. The problem is that `localStorage.clear()` deletes everything, including journal entries that are also stored in localStorage (`journal-*` keys in `src/components/journal/types.ts`). Entry sync to the server is best-effort and asynchronous. For an unauthenticated user, or an authenticated user whose last sync failed silently, "Start Over" after a rendering error causes permanent, silent data loss of the journal.
 
-However, this is only safe because the monthly step construction in `runAdvancePreCalculation` at line 886 uses:
-```typescript
-new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate(), 12, 0, 0)
+The banner says "Your chart data is safe." This is false when `localStorage.clear()` is the next instruction.
+
+**Fix:** Replace `localStorage.clear()` with targeted removal of the known chart cache keys: `astral-chart-results`, `astral-chart-transit-results`, `astral-chart-synastry-results`, and the `daily-snapshot-` prefix. Preserve all keys that begin with `journal-`, `dream-session-`, and `astral-chart-birth-data`. Update the message to reflect what is actually being cleared.
+
+---
+
+## Proposal 5 — Feature: `callProxy` Has No Request Timeout — OpenAI Latency Can Hang the UI Indefinitely
+
+**File:** `src/services/gptInterpretation.ts` (line 62), `server/services/gpt.ts` (line 65)
+
+The `fetch('/api/gpt/interpret', ...)` call in `callProxy` has no `AbortController` timeout. OpenAI's API, under load, can take 30–90 seconds to respond for complex prompts with full natal chart context. The `retryWithBackoff` wrapper in `server/services/gpt.ts` retries three times — meaning a single user action can spend 90+ seconds in progressively longer timeouts before failing.
+
+The user sees the `GptSkeleton` loading state with "Reading today's sky for you..." indefinitely. There is no maximum wait time, no retry button that appears after a threshold, and no fallback text. In the failure case — a hanging connection that never resolves — the component is trapped in loading state for the entire session.
+
+The server has the same problem: `callOpenAI` calls the OpenAI SDK with no `timeout` option in the client constructor (line 65: `new OpenAI()`). The OpenAI Node SDK accepts `timeout` and `defaultHeaders` in the constructor. Without a timeout, a single network partition at the OpenAI edge can hold a server worker for the full Node.js connection timeout.
+
+**Fix:** Add an `AbortController` with a 30-second timeout to `callProxy` in `gptInterpretation.ts`. Pass the signal to `fetch`. Add `timeout: 30000` to the `OpenAI` constructor in `server/services/gpt.ts`. Surface timeout as a distinct user-facing error — "The reading took too long — try again" — separate from the generic server error string.
+
+---
+
+## Proposal 6 — Code Enhancement: `calculatePersonalDay` and the Today Synthesis Prompt Both Compute "Today" Independently Using Different Timezone Anchors
+
+**Files:** `src/engine/numerology.ts` (line 74), `server/services/gpt.ts` (line 585)
+
+`calculatePersonalDay` in the client uses `new Date()` with local time methods `getFullYear()`, `getMonth()`, `getDate()` — so it returns the user's local date. The server-side `handleTodaySynthesis` builds the date header with:
+
+```ts
+const today = new Date().toLocaleDateString('en-US', {
+  weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+})
 ```
 
-`getFullYear()`, `getMonth()`, and `getDate()` without `UTC` variants read local time. If `baseDate` is UTC midnight for May 18, then in UTC+5:30 it is actually May 18 at 05:30 AM local — so `getDate()` returns 18, which is correct. In UTC-5 it is May 17 at 7:00 PM local — so `getDate()` returns 17, which is wrong. The UTC normalization of `srBaseDate` is undone by the local-time reads inside the step construction.
+This uses the server's system timezone, not the user's. The server also runs `calculatePersonalDay(birthCtx.birthDate)` at line 577 using `new Date()` — again the server's local clock. If the server is in UTC and the user is in UTC+9, the server computes "Thursday May 22" while the user's browser computes "Friday May 23." The server verification logs a `console.warn` and uses the server-computed value in the GPT prompt — generating a morning synthesis for the wrong day.
 
-The fix from the sprint-0020 analysis was applied at the component level but the underlying `runAdvancePreCalculation` still reads local time. Users in UTC-5 to UTC-12 whose SR occurs in the first 12 hours UTC will see a one-day-early SR Start anchor on the strip. The per-step dates in the monthly strip will also be offset by one day for those users.
+This is not a theoretical tail risk. It is a daily occurrence for users in Asia and Australia during the UTC morning hours. The synthesis says "today is Thursday" when the user is already in Friday.
 
----
-
-## 11. The Density Cap Produces Counterintuitive Results at Small `max` Values
-
-**Files:** `src/components/results/SolarReturnPage.tsx` line 66; `src/components/reading/AdvanceTab.tsx` line 931
-
-`Math.ceil(12 * 0.2) = Math.ceil(2.4) = 3`. The SR preview allows 3 markers across 12 months. The reservation phase of the density cap attempts to reserve one slot per non-neutral category present. If power, favorable, challenging, and shift markers all exist, the reservation alone fills all 3 slots. The fill phase in Phase 2 adds zero additional markers regardless of how many remain.
-
-The result: in a year with all four category types, exactly one marker per category is shown — never more. A year with three consecutive favorable windows and one challenging period shows one favorable and one challenging. The highest-intensity favorable markers beyond the first are discarded to make room for one marker from each other category. The density cap is supposed to guarantee variety while preserving significance; at `max = 12` and `maxMarkers = 3`, it guarantees variety at the direct expense of significance.
-
-The 20% density cap was calibrated for `max = 36` (monthly) and `max = 52` (weekly), where 20% is 7 or 11 markers — enough room for category reservation and additional high-intensity fills. At `max = 12`, 20% is 3. The algorithm was not designed for this parameter regime.
+**Fix:** Pass the client's local date string (`YYYY-MM-DD`) in the `today-synthesis` payload. The server should accept and use this date string for both the prompt header and the personal day computation. The local date is not sensitive.
 
 ---
 
-## Summary: What Breaks and When
+## Proposal 7 — Code Enhancement: The GPT Error Surface Is Magic-String Equality — Cached Error Strings Become Indistinguishable From Valid Content
 
-The table below organizes by severity and trigger condition:
+**Files:** `src/services/gptErrors.ts`, `src/services/gptInterpretation.ts` (15 call sites)
 
-| # | File | What | Triggering condition | Severity |
-|---|------|------|---------------------|---------|
-| 1 | `CoupleAdvanceTab.tsx:555,619,669` | Intensity divergence from `computeEnergyRating` | Any couple advance view — always wrong | High |
-| 8 | `runAdvancePreCalculation:902-927` | Hysteresis bridges separating aspects | Slowly separating outer planet at monthly orbs | High |
-| 2 | Cache design | TodayPage advance signal absent for direct navigation | User opens TodayPage without prior Advance tab visit | Medium |
-| 4 | `SolarReturnPage.tsx:61-63` | 36-step computation for 12-step output; double density cap | SR with clustered markers in months 1–6 | Medium |
-| 10 | `runAdvancePreCalculation:886` | Local-time reads undo UTC `srBaseDate` normalization | UTC-5 to UTC-12 users with SR in first 12 hours UTC | Medium |
-| 6 | `TodayPage.tsx:38` | Stale `now` constant across midnight | Session left open overnight or across midnight | Medium |
-| 11 | Density cap math | Significance suppressed at `max=12` | SR year with all four category types present | Medium |
-| 3 | `SolarReturnPage.tsx:47-52` | SR cache key missing `unknownTime` | If SR engine ever supports unknown-time charts | Low (latent) |
-| 5 | `solarReturn.ts:20` | `_birthDate` is dead parameter | Silent API confusion; no runtime failure | Low (latent) |
-| 7 | `assignTransitHouses` | Malformed chart indistinguishable from unknown-time | Bad city coordinate data | Low (degraded gracefully) |
-| 9 | `CoupleAdvanceTab.tsx:460` | Unnecessary `computeEnergyRating` call | Every couple advance computation; pure overhead | Low |
+The error detection system works as follows: GPT functions return `string` in both success and failure cases. Callers distinguish errors from content by calling `isGptError(text)`, which checks membership in a `Set` of four hardcoded strings. Those strings are also stored in localStorage as cached GPT results.
 
-Items 1 and 8 are active correctness failures. Item 2 is a feature that cannot work as described for the most common navigation pattern. Items 4, 10, and 6 produce wrong outputs under normal conditions for a meaningful fraction of users.
+If the string for `GPT_SERVER_ERROR` is ever changed — which it cannot be safely, because "preserved for backward compatibility" is the stated reason for keeping it — users with the old string in their cache will have it rendered as a successful reading. If a new error condition is introduced and its string is not added to the `GPT_ERROR_STRINGS` set, it renders as content.
+
+There are 15 sites in `gptInterpretation.ts` that return `err instanceof Error ? err.message : GPT_SERVER_ERROR`. Each is a place where a future developer makes a different choice about which string to return. The `RateLimitError` demonstrates the correct architecture — a typed error class that callers catch explicitly. Only `RateLimitError` is structured this way.
+
+**Fix:** Sprint 0022 touches `gptInterpretation.ts` to enrich the Today synthesis prompt. When modifying that function, do not add a 16th magic-string error site. Instead, `getTodayPageInterpretation` should follow the `RateLimitError` pattern: throw a typed error on failure, let the caller handle rendering. This converts one function from string-sentinel to typed-throw. Mark the remaining 14 sites with a comment indicating migration target.
+
+---
+
+## Proposal 8 — Feature: Transit Timeline Event Cards Show Generic Briefs on Advance-Scored Days — The Header Label and the Content Are Disconnected
+
+**Files:** `src/components/reading/TransitTimeline.tsx` (line 36), `src/data/interpretations/transitEvents.ts`
+
+The transit Timeline receives `scoreByDate: Map<string, MarkerCategory>` from `TransitReadingPage` and uses it to override the day-level header badge with the authoritative advance category. This is correct as far as it goes. But within that same day's expanded event cards, `getPersonalizedEventBrief` is called with `aspectType`, `secondPlanet` (the natal planet), and `natalHouse` — and returns a generic one-line phrase from a lookup table. The event card has no awareness of the day's advance category.
+
+A user opens a "◆ Favorable Window" day in the Timeline — this label came from the advance engine scoring a Jupiter-to-natal-Venus trine as favorable. They expand the event card for that aspect. The card shows: "Jupiter trine natal Venus — ease in relationships and finances." The day header says "Favorable Window." But the card never says why this makes the window favorable, which house axis is activated, or what the advance engine specifically identified. The connection between the badge and the content is absent.
+
+The sprint 0022 vision already identifies routing aspect-perfection event briefs through `computeTransitAspectBrief`. The additional step — which costs nothing given that routing — is to pass the advance category as an optional `dayCategory` argument into the brief generation, allowing the brief to shade its language when it knows the day has been authoritatively scored. "Jupiter opening toward your Venus in your 7th house (partnership) — the advance engine identifies today as a favorable window; this is the aspect driving it" closes the gap between the header and the card content.
+
+---
+
+## What Everyone Is Ignoring
+
+The product spent four sprints building a sophisticated advance engine that scores every day for the next 36 months. The engine is genuinely impressive. But the engine's output is mediated through a GPT call that has no timeout, no fallback content, and is cached in localStorage with insufficient key precision.
+
+The advance engine can survive an OpenAI outage because it runs locally. The reading surfaces — the thing the user actually reads — cannot. You have built a robust calculation layer sitting beneath a fragile presentation layer, and the fragility is invisible because OpenAI's uptime has been adequate during development.
+
+The tail scenario: OpenAI has a two-hour outage. Every GPT call returns a 503. Each call retries three times. The Today page shows "Reading today's sky for you..." for the entire session. The advance engine continues working in tabs the user has stopped visiting. The product is blind during the one moment when a daily-use app most needs to deliver value.
+
+The fix is not complex. Add request timeouts. Surface timeout failures as distinct user-facing states with retry options. The static interpretation tables already in the codebase — `computeTransitAspectBrief`, `PLANET_IN_HOUSE`, house themes — are sufficient to generate a meaningful static fallback for the Today page without any GPT call. That fallback does not need to replace GPT. It needs to give the user something to read while the external dependency is unavailable.
+
+That is antifragility. Not three retries against the same dead endpoint.
+

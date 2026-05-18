@@ -1,8 +1,135 @@
-# John Carmack: Sprint 0021 — Technical Assessment
+# John Carmack: Sprint 0022 — Technical Audit
 
 ---
 
-## 1. Scoring Parity: `CoupleAdvanceTab` Still Uses `computeEnergyRating` (Priority 2–4)
+## What I Read
+
+I walked the full source tree: `src/engine/`, `src/services/gptInterpretation.ts`, `src/data/interpretations/`, `src/components/reading/`, `src/components/results/`, the sprint changelogs for 0019–0021, and the done-proposals index. The codebase is in better shape than most products at this stage. The LRU cache fix was correct, the cache-key corruption bugs were found and patched, the `runAdvancePreCalculation` abstraction was the right call. But there are specific technical problems worth naming precisely.
+
+---
+
+## What Is Slow or Fragile
+
+### 1. `advanceSnapshotSessionCache` is a plain `Map`, not an `LruMap`, and it is unbounded
+
+`src/components/reading/AdvanceTab.tsx`, line 128:
+
+```ts
+export const advanceSnapshotSessionCache = new Map<string, AdvanceSnapshot[]>()
+```
+
+The four per-component caches were fixed with `LruMap` in sprint-0021. This module-level singleton was not. It is exported and shared across `AdvanceTab`, `TransitReadingPage`, and `TodayPage`. Every unique `chartKey:period:baseDate` combo adds another entry and it never evicts. It is the same category of bug as the ones fixed in sprint-0021. An extended session browsing multiple solar return years, multiple transit periods, or switching between couple and individual charts will accumulate snapshot arrays here that are never reclaimed.
+
+The fix is one line: change `new Map` to `new LruMap(12)` and import `LruMap`. The cap of 12 is generous — 3 periods × 2 base dates × 2 people. This is an oversight from the sprint-0021 scope definition, which specified the four `useRef<Map>` sites but omitted this singleton.
+
+### 2. The Today page fires `calculateTransitAspects` twice for the same date
+
+`src/components/reading/TodayPage.tsx`, lines 61–64:
+
+```ts
+const top = getTopActiveTransits(chartData, 3, 5)
+...
+const all = calculateTransitAspects(calculateCurrentPositions(now), chartData.planets, 'daily')
+```
+
+`getTopActiveTransits` calls `calculateCurrentPositions(now)` and `calculateTransitAspects` internally. Then the second call recomputes `calculateCurrentPositions(now)` from scratch and runs `calculateTransitAspects` again to produce `all` for the energy rating. Both calls hit the same astronomical functions for the same `now`. Positions are computed twice, aspects are computed twice. The fix is to hoist `calculateCurrentPositions(now)` before both calls, run `calculateTransitAspects` once on the result, then derive the top 3 from the full list manually.
+
+### 3. Two parallel transit-to-natal interpretation systems doing the same job
+
+This is the most significant architectural problem in the codebase. `src/data/interpretations/transitEvents.ts` contains `getPersonalizedEventBrief()` and the `HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE` table — 250 lines, 240 entries covering Sun, Moon, Mercury, Venus, Mars × 5 aspect types × 12 houses. `src/data/interpretations/transitAspectBriefs.ts` contains `computeTransitAspectBrief()`, which produces house-aware, planet-archetype, applying/separating sentences via `TRANSIT_PLANET_PHRASES` and `getHouseTheme`. Both functions describe the same event type: a transit planet forming an aspect to a natal planet. The Timeline calls `getPersonalizedEventBrief`. The reading tab's `AspectRow` calls `computeTransitAspectBrief`.
+
+The maintenance problem: if a new planet or aspect type is added, it must be threaded through both systems. If the house theme names change in `houseThemes.ts`, the composed sentences in `transitAspectBriefs.ts` update automatically but `HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE` in `transitEvents.ts` does not — it has hardcoded house-theme words embedded in 240 string literals. These can silently diverge. The table was correct when it was written; `computeTransitAspectBrief` is strictly superior now, and the table is redundant debt.
+
+The canonical path is `computeTransitAspectBrief`. Route Timeline aspect-perfection events through it. `transitEvents.ts` should retain only `getIngressBrief`, `getStationBrief`, and `getLunarPhaseBrief` — these have no counterpart in `transitAspectBriefs.ts`. The `HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE` table can be deleted after that migration. Net reduction: ~250 lines removed, zero behavior change for users (the output will be better, not just fewer lines).
+
+### 4. `getTodayPageInterpretation` strips house context and advance signal before sending to GPT
+
+`src/services/gptInterpretation.ts`, lines 207–224. The function signature:
+
+```ts
+export async function getTodayPageInterpretation(
+  moon: { phaseName: string; moonSign: string; isVoid: boolean },
+  aspects: Array<{ transitPlanet: string; symbol: string; natalPlanet: string; orb: number; nature: string }>,
+  personalDay: number,
+  personalDayArchetype: string,
+): Promise<string>
+```
+
+The `aspects` array drops `natalHouse` and `applying` when it is constructed from `TransitAspect` objects in `TodayPage.tsx` at lines 81–86. The `TransitAspect` objects from `getTopActiveTransits` carry `natalHouse` and `applying` — they are just not passed through. The prompt therefore cannot name a house. "Saturn pressing on your Moon" is not the same sentence as "Saturn pressing on your Moon in your 7th house (partnership)." The house context is the difference between a generic horoscope and a personal reading.
+
+Also absent from the payload: natal moon phase (the Sun-Moon elongation category, computed in `ResultsPage` and stored in chart data), the advance category (visible on the same page when the session cache is warm), and void-of-course practical context beyond the boolean flag.
+
+The fix is not a new API endpoint. It is adding `natalHouse`, `applying`, and `natalSign` to the aspects payload; adding an optional `advanceCategory` string parameter; and adding an optional `natalMoonPhase` string. The server-side `today-synthesis` handler receives richer data and can produce a brief that actually names the house and acknowledges the advance signal in one coherent paragraph.
+
+### 5. `computeEnergyRating` and the advance category answer the same question with different models and can contradict each other on screen
+
+`src/engine/transits.ts`, lines 505–523. `computeEnergyRating` runs a +1/-1 vote count over the top 8 transit aspects. The advance engine scores the same day via `computeCombinedWeight` (planet-weighted, orb-adjusted, applying-only, slow-planet aware). When the advance cache is warm and the advance banner says "Challenging Period" for a Saturn opposition, the energy dot bar might say "Mixed" or "Favorable" if Venus trines are in the top 8. These two cards answer the same question ("what is today like energetically?") with contradictory answers on the same screen. The advance category is the more accurate signal. The right behavior: hide the energy rating card when an advance score for today is present in the session cache; show it only as a fallback when no advance data exists.
+
+---
+
+## What Is Over-Engineered
+
+### The `ASPECT_HOUSE_CONTEXT` table in `AdvanceTab.tsx` is large, sparse, and partially redundant
+
+The `ASPECT_HOUSE_CONTEXT` table at line 141 covers Saturn/Jupiter/Pluto/Uranus/Neptune × harmonious/challenging × up to 12 houses — but Neptune has only 8 entries while Saturn has 24. The fallback path when a key is missing composes a sentence using `TRANSIT_PLANET_PHRASES` and `getHouseTheme`, which is parametric and arguably better than the hard-coded table entries. The table exists to provide override quality, but the fallback is almost as good. Any new planet added to the advance scorer needs table entries or silently uses the fallback — there is no coverage test. This maintenance surface is larger than it needs to be.
+
+---
+
+## What Is Under-Engineered
+
+### The synastry aspect expansion panel ignores house overlay data that is already computed
+
+`src/components/results/SynastryPage.tsx`, `SynastryAspectsSection` at line 157. When a synastry aspect row is expanded, it shows the `computeSynastryAspectBrief` text. The `synastryData.houseOverlay` data is already computed — it contains which of partner 1's planets fall in which of partner 2's houses, with full briefs from `synastryHouseOverlayBriefs.ts`. A Venus-Mars trine is categorically different depending on whether one person's Venus is also in the other's 5th house versus their 8th house. The aspect row expansion is exactly the right place to surface this. The data lookup is trivial: `synastryData.houseOverlay.person2InPerson1Houses.find(e => e.planet === aspect.person2Planet && HIGH_SIGNAL_HOUSES.includes(e.house))` — `HIGH_SIGNAL_HOUSES` is already defined at line 185 of `SynastryPage.tsx`. This is a missing connection between two existing data structures, not a missing feature.
+
+### The Today page has no static interpretive content while GPT loads
+
+`TodayPage.tsx`, lines 269–283. The "Morning Synthesis" card is conditionally rendered only when `gptLoading || gptText` is true. Until the user has a chart and the GPT call is in flight, the bottom third of the Today page is blank. The top transit aspects are available synchronously from `getTopActiveTransits` — the `AspectRow` component with `computeTransitAspectBrief` briefs could render immediately. Users wait with nothing to read. The skeleton spinner is shown but there is no static layer of content. Adding the transit aspect rows to a "Today's Sky" section that renders synchronously would give the user something to read while GPT loads and make the page useful in offline or rate-limited states.
+
+---
+
+## Proposed Improvements for Sprint 0022
+
+### Issue Fixes
+
+**issue-advance-session-cache-unbounded**
+The module-level `advanceSnapshotSessionCache` at `AdvanceTab.tsx` line 128 is a plain `Map` that was not converted to `LruMap` in sprint-0021 when the four per-component caches were fixed. Same failure mode, same class of bug, one-line fix. Change `new Map` to `new LruMap(12)`, import `LruMap`. This closes the remaining open instance of the sprint-0021 unbounded-cache class.
+
+**issue-today-energy-rating-contradiction**
+The "Transit Energy" dot bar on `TodayPage.tsx` can contradict the advance category banner when both are visible. When `advanceScore` is non-null and the category is non-neutral, hide the energy rating card. The energy rating is a fallback signal; the advance category is the authoritative one. Two contradictory quality signals on the same screen undermine both.
+
+### Code Enhancements
+
+**code-timeline-aspect-brief-consolidation**
+Route `TransitTimeline.tsx`'s `EventCard` aspect-perfection branch through `computeTransitAspectBrief` instead of `getPersonalizedEventBrief`. This eliminates the dual-system maintenance liability and makes the Timeline briefs qualitatively identical to the reading tab briefs. After migration, delete `HOUSE_BRIEF_BY_PLANET_ASPECT_HOUSE` from `transitEvents.ts` — 250 lines of data that is now redundant. Retain `getIngressBrief`, `getStationBrief`, and `getLunarPhaseBrief`. The `computeTransitAspectBrief` function accepts `transitPlanet`, `aspectType`, `natalPlanet`, `natalHouse`, `nature`, and `applying` — all of these are available on `TimelineEvent` for aspect-perfection events.
+
+**code-today-prompt-enrichment**
+Add `natalHouse`, `applying`, and `natalSign` to the `aspects` objects in the `getTodayPageInterpretation` call at `TodayPage.tsx` lines 81–86. Add optional `advanceCategory: string | null` and `natalMoonPhase: string | null` parameters to `getTodayPageInterpretation`. The natal moon phase can be derived from `chartData.planets` (Sun and Moon longitude delta). The advance category comes from `advanceScore?.category` which is already in component state. These additions do not require a new API endpoint — only the server-side `today-synthesis` prompt constructor needs to use the new fields.
+
+### Features
+
+**feat-today-sky-summary-static-block**
+Before or alongside the GPT brief, show the top 2–3 transit aspects as static `AspectRow` entries using `computeTransitAspectBrief` sentences. The aspect data is synchronously available after `getTopActiveTransits` runs. The user sees substantive content immediately; the GPT brief loads on top as synthesis. This makes the Today page useful in offline and rate-limited states and eliminates the "blank page waiting for API" problem. The `AspectRow` component and `computeTransitAspectBrief` are already in use on the Today page's existing "Sky Highlights" section — this is extending the existing pattern, not adding a new component.
+
+**feat-synastry-aspect-house-overlay-note**
+In `SynastryPage.tsx`'s `SynastryAspectsSection`, when an aspect row is expanded, check whether the aspect's `person2Planet` (or `person1Planet`) appears in the partner's house overlay at a relationship-significant house (1, 5, 7, 8 — `HIGH_SIGNAL_HOUSES` at line 185). If it does, append a one-line note to the expansion panel naming the house and its theme. The overlay data is in `synastryData.houseOverlay`; the brief is in `synastryHouseOverlayBriefs.ts`. This is wiring two existing data structures together, not adding new data. Scope: not every aspect gets a note — only inner planets (Sun, Moon, Venus, Mars, Mercury) in relationship-defining houses, matching the existing `isHighSignal` predicate at line 201.
+
+---
+
+## Bottom Line
+
+The critical issues in priority order: the unbounded `advanceSnapshotSessionCache` is the same class of bug as sprint-0021's four LRU fixes — it was missed and should be closed immediately. The Today page dual transit computation is minor sloppy redundancy. The two-system transit brief problem is real technical debt with a clear consolidation path and net line-count reduction. The Today prompt impoverishment is the highest-leverage interpretive improvement: the house context, applying/separating state, natal moon phase, and advance category are all available in component state — they are just not being serialized into the server payload. The energy-rating/advance-category contradiction is a display coherence issue that undermines trust in both signals.
+
+None of this is fundamental architecture failure. The codebase is coherent. The type system is being used. The performance characteristics are acceptable for the current feature set. But the five specific problems above will compound if not addressed, and four of them are single-file fixes.
+
+---
+
+## Previously Flagged Issues (Sprint 0021 — Now Resolved)
+
+Sprint-0021 resolved: scoring parity fix, LRU cache bounds on four per-component caches, couple banner bold fragment, couple advance guidance tables, `runAdvancePreCalculation` abstraction. All delivered as specified. The `computeCombinedWeight` scope issue in the Priority 2 coShift branch (mentioned as a repair commit in the sprint-0021 changelog) was caught and fixed correctly.
+
+---
+
+*Audited: sprint-0022 cycle*
 
 **File:** `src/components/reading/CoupleAdvanceTab.tsx`, lines 173–274
 

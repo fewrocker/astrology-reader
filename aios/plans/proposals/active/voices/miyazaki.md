@@ -1,230 +1,232 @@
-# Hayao Miyazaki: Sprint 0021 — On Craft, Care, and the Small Things Nobody Notices But Everyone Feels
+# Hayao Miyazaki: Sprint 0022 — The Sky Should Feel Like Someone Noticed
 
 ---
 
-## What Sprint 0019 Got Right, and What It Left Behind
+## What I See When I Open This Product
 
-Sprint 0019 did something difficult and necessary. It built the house-aware interpretation layer, the combination scorer, the guidance field, the proper power day reason strings. The before/after in the changelog is real:
+There is a kind of film I have made many times. A young person arrives in a world they do not understand. The world is vast and detailed — the sky, the forest, the bathhouse — and the young person must find their place in it. What makes those films work is not the vastness. It is the small things. A single flower bending in the wind. A hand held out at precisely the right moment. A meal eaten in silence that says everything about who these people are.
 
-Before: *"Saturn opposition your natal Moon — tension around structure and discipline."*
+I open this application and I see the vastness. The engine is real. The advance scorer knows things about the sky that most astrological software never attempts. The synastry axis augmentation, the SR advance preview, the combination weight — these are genuine achievements. The engineers have been building a real world.
 
-After: *"Saturn pressing on your Moon in your 7th house (partnership) — a committed relationship is being examined for durability — what isn't working can't be deferred."*
+But I sit with it as an ordinary person, not an engineer. And I notice the small things that are missing. Not features. Not scoring functions. Small human gestures. The difference between a world that is inhabited and a world that is merely constructed.
 
-The after sentence earns its place. It knows where the pressure falls. It names the consequence. It is a sentence a person can work with.
-
-The inheritance problem is this: the improvements shipped in sprint 0019 apply only to `AdvanceTab`. `CoupleAdvanceTab` did not receive them. The couple advance feature launched in sprint 0019 with the old language — the language the changelog explicitly called insufficient. The couple has the machinery of the advance system without the soul of it.
-
-Sprint 0020 has an opportunity to close that gap completely. What it must not do is close it mechanically.
+Let me tell you what I see.
 
 ---
 
-## The Couple Advance Guidance Problem Is Not Just Technical
+## The Today Page: A Beautiful Room with No Fire in the Hearth
 
-The vision document frames the `guidance` field on `CoupleAdvanceTab` as a missing wire: the field exists in `SnapshotScore`, it is rendered in `AdvanceTab`, it is simply not yet populated or rendered in `CoupleAdvanceTab`. Add the field return values to the three builders, add the render block, done.
+The Today page is the most-visited surface in this product. A person opens it every morning. It is the first thing they see.
 
-This is correct as an engineering description. It is incomplete as a craft prescription.
+I look at it and I see: a date. A personal day number. A moon emoji. Three transit rows. Five dots of energy. A GPT paragraph.
 
-The `ASPECT_GUIDANCE` table in `AdvanceTab.tsx` contains entries like:
+Each of these is correct. None of them are wrong. But they do not speak to each other. The Personal Day card does not know about the Moon card. The Moon card does not know what the transit rows say. The GPT paragraph does not know what the advance engine has already concluded. They are displayed in sequence, like ingredients on a countertop, waiting for someone to cook.
 
-*"Face the pattern directly rather than managing around it — what gets examined and restructured now builds a foundation that actually holds."*
+The sprint vision already identifies this: the `getTodayPageInterpretation` function sends the Big Three, the moon phase, and the top transit aspects, but not the personal day archetype, not the void-of-course status as a named signal, not the natal moon phase, not the advance category when the session cache is warm. The prompt is sending the ingredients but not asking for the recipe.
 
-*"Initiate, reach out, ask, say yes to the opportunity — the window is open and action taken now has genuine momentum behind it."*
+But I want to name something beneath the architecture. When I open this page, no one seems to know I have arrived. The date header says "Today" and a date, in small gold letters, slightly muted. Then immediately: "Personal Day." A number. An archetype. A sentence.
 
-These are addressed to one person. They use "you" throughout. They describe what one person should do. And they will, if simply copied, be placed into the guidance paragraph of the couple advance banner — where the reader is two people in a relationship.
+There is no breath. No acknowledgment that today is specific. That I am here.
 
-The instruction in the vision document acknowledges this explicitly: *"Couple guidance sentences should name the relationship ('this is a window to deepen how the two of you...') rather than speaking to an individual."*
+In my films, the moment a character arrives somewhere new, the place responds. Totoro turns his head. The soot sprites scatter. The bathhouse lights come on. The world registers that a person has entered it.
 
-But the vision document does not specify what those sentences should actually say, beyond the framing distinction. This is where craft is required, not just engineering.
+The Today page could do this with almost nothing. The advance banner from sprint-0021 is there — but only when the session cache is warm. A user who opens the app fresh on the most significant day of their month sees nothing of it unless they have first visited the Advance tab. The page is waiting for the user to do work before it will show them what it already knows. This is backwards. The product should do the work. The user should arrive and find the fire already lit.
 
-Here is the problem made concrete. When Saturn presses on the composite Moon in a couple advance marker, the guidance cannot simply say "face the pattern directly." It must say something about what facing the pattern means for two people together. Saturn pressing on the composite Moon is not one person's emotional patterns being tested. It is the shared emotional foundation — the way this particular couple holds and processes feelings together — being tested. The question the week is asking them is not individual. It is relational: *how does this relationship handle emotional difficulty? Do you turn toward each other when things are hard, or do you each retreat into your own private coping? Saturn is now asking this question with real stakes.*
+**What the Today page needs is not more data — it needs integration. The GPT prompt must weave the personal day archetype, the void-of-course status, the advance category, and the natal moon phase into a single synthesis. One call that actually knows who this person is today, not a list of facts about the sky in general.**
 
-That is a guidance sentence for two people. It is not a reword of the individual guidance. It emerges from understanding what composite Moon means for a relationship, what Saturn's pressure means in a shared context, and what two people can actually do together with that information.
-
-The three builders — `buildCouplePowerReason`, `buildCoupleAspectReason`, `buildCoupleShiftReason` — need guidance returns that come from this understanding. Not from the `ASPECT_GUIDANCE` table with "your" replaced by "the relationship's." From a separate, relationship-native guidance vocabulary.
-
-This is more work than the vision document implies. It is the right amount of work.
+The sprint vision describes this precisely: "a prompt that integrates all three systems — 'today is Personal Day 7 (The Seeker), Moon is waxing in Scorpio (void of course), Saturn pressing on natal Venus in the 7th house'" — would produce a qualitatively different brief. This is the right target. I am seconding it with the emphasis that the difference is not technical. It is the difference between a room where someone knows you are coming and a room that is simply furnished.
 
 ---
 
-## The `COMPOSITE_PLANET_PHRASES` Table Has a Gap Worth Fixing
+## The Transit Timeline: A Calendar That Doesn't Know You
 
-The archetype vocabulary in `CoupleAdvanceTab.tsx` for composite planets is good:
+Open the Transit Timeline. You see a vertical list of days with event cards. Some days have a gold badge. You click on an aspect-perfection card — "Saturn square natal Moon" — and it expands. The expanded text reads: "Emotional stress, internal conflict."
 
-```
-Venus:   { relationship: "the relationship's romantic axis", brief: "shared pleasure, warmth, and connection" }
-Saturn:  { relationship: "the bond's structures and commitments", brief: "shared responsibility and long-term shape" }
-Neptune: { relationship: "the bond's idealism and depth", brief: "shared dreams and dissolution" }
-```
+I have read this sentence. It tells me nothing about my life. It is the sentence that appears for every person whose Saturn squares their Moon, in every house, in every chart, in every decade of their life. It is the kind of sentence that could be printed in a newspaper under a generic horoscope column. It treats me as a category, not a person.
 
-These are real. They name what the composite planet governs for the couple.
+Three tabs away, in the Reading tab, the same event produces something different. The transit aspect row for Saturn square natal Moon expands to say: "Saturn pressing on your Moon in your 4th house (home and family) — the structures you have built around domestic stability are being examined." That sentence is about me. It knows where my Moon lives. It knows what the 4th house means. It names a specific area of my life.
 
-But the guidance sentences built from them are thin. For a favorable window when Jupiter transits composite Venus, the current output is:
+These are the same event. The same person. The same sky. But the Timeline card speaks to everyone, and the Reading tab speaks to me.
 
-*"Jupiter flows through the relationship's romantic axis — a window when shared pleasure, warmth, and connection is genuinely supported."*
+The sprint vision identifies this gap and describes the fix: for aspect-perfection events, call `computeTransitAspectBrief` with the `natalHouse` that `TimelineEvent` already carries. The function exists. The data is there. The `EventCard` component in `TransitTimeline.tsx` reads `detailText` from `getPersonalizedEventBrief` — a function that returns the generic `ASPECT_BRIEFS` table entries, keyed by aspect type and natal planet, with no house awareness.
 
-This is accurate but it is not alive. Compare with what the same moment could say:
+This is a craft failure. Not a technical failure. The information was available and was not used. The carpenter had the right wood and chose something cheaper.
 
-*"Jupiter is moving through the romantic heart of your relationship — this is genuinely one of the better windows in the year for pleasure together, not just contentment but joy. If there is something you have wanted to create together, to celebrate, to give each other, this is when the conditions are not just permissive but actively favorable."*
-
-The difference is not length. It is specificity about what this moment means for two people who have chosen each other. The phrase "shared pleasure, warmth, and connection is genuinely supported" is a technical observation. The second version is an invitation. The couple advance strip is supposed to help two people find the best moments in their year together. When it finds one, it should say so in a way that makes them feel found.
-
-The guidance field is the natural home for this invitation-level language. The reason string can remain more technical — a clean description of what the transit is doing. The guidance paragraph is the space for what to do with it.
+The fix is clear and the sprint vision spells it out: route Timeline aspect-perfection `detailText` through `computeTransitAspectBrief`. The `TimelineEvent` already carries `natalHouse`, `planet` (the transit planet), `secondPlanet` (the natal planet), and `aspectType`. One substitution in `EventCard`'s `detailText` derivation block makes the Timeline speak to the person instead of the category. The generic `getPersonalizedEventBrief` path remains as fallback when the house is unknown. Ingress and station briefs remain on their existing functions — they have no parallel in `transitAspectBriefs.ts`.
 
 ---
 
-## The Synastry Axis Scoring Must Not Produce Language from a Different Register
+## The Synastry Aspect Rows: Two Stories That Don't Know Each Other
 
-The vision document's description of synastry axis overlay scoring is technically clean: if a slow transiting planet is within tight orb of a sensitive synastry axis degree and the synastry aspect has orb ≤ 2.0, augment the intensity and add a reason suffix: *"and activates the bond between [Person1Planet] and [Person2Planet]."*
+The Synastry page has aspect rows that expand. The expanded brief from `computeSynastryAspectBrief` describes what the aspect means — what Venus trine Mars signifies when two people's charts share it. This is good work.
 
-That suffix lives in a different emotional register than the rest of the `COMPOSITE_PLANET_PHRASES` vocabulary.
+But the Synastry page also has house overlay sections — "Person 1's Planets in Person 2's Houses" — where the overlay briefs do something more personal: "Your Venus in their 5th house — the love you bring lands in the space they hold for pleasure and creative joy." This is the voice I want everywhere.
 
-*"Jupiter flows through the relationship's romantic axis — a window when shared pleasure, warmth, and connection is genuinely supported, and activates the bond between Venus and Mars."*
+When I expand a Venus-Mars trine aspect row, I am told what Venus-Mars trines mean in general. I am not told that the Venus in question sits in this person's 5th house, activating their pleasure axis. The aspect row and the house overlay section are two separate stories about the same planets, and they never introduce themselves to each other.
 
-"Activates the bond between Venus and Mars" is a phrase from technical documentation, not from a product that uses language like "the relationship's romantic axis" and "shared dreams and dissolution." It names the mechanism. It does not name the meaning.
+The sprint vision identifies the fix: when an aspect row expands, check whether the involved planets have a meaningful house overlay placement (houses 1, 5, 7, 8 — the relationship-relevant houses, already defined in `HIGH_SIGNAL_HOUSES` in `SynastryPage.tsx`). If they do, append a single line: "This aspect also activates [person]'s [Nth] house — [theme name]." Not every aspect. Not every house. Only when it matters.
 
-The `SYNASTRY_ASPECT_BRIEFS` table in this codebase already has language for Venus-Mars synastry connections:
+This is what the sprint vision calls "selective, not mechanical" — and I think this framing is right. In my films, I never put music under every moment. The silences matter as much as the melody. A house note that appears on one out of every four expanded rows says: this one is special. Look here. A house note that appears on every row says: I have no sense of proportion.
 
-*"desire and identity occupy the same point — the contact is immediate, charged, and leaves little room for neutrality between you."*
-
-The synastry axis suffix should draw on this vocabulary. When a transiting planet activates a Venus-Mars synastry connection, the suffix should tell the couple what kind of bond between them is being lit up, not just that a bond is being activated. The specific synastry aspect has already been identified — its brief is already written. The activation language should quote or echo it: *"the charged, immediate contact between your Venus and their Mars is amplified in this window."*
-
-This is a small change in the suffix generation but a significant change in the quality of what the user receives. A person reading about their relationship does not want to hear that abstract astrological bodies are being activated. They want to hear which specific quality of their connection is currently in motion.
+The `synastryData.houseOverlay` data is already computed and available in the `SynastryPage` closure. The `SynastryAspectsSection` component would need the overlay data threaded in as an additional prop. The implementation is modest; the gain is that the two richest interpretive layers of the Synastry page — aspects and house overlays — finally acknowledge each other.
 
 ---
 
-## The Solar Return Page's Time Problem
+## The Natal Chart Reading: A Long Silence at the Beginning
 
-The Solar Return page has a beautiful header: *"Your Year Ahead."* It has a banner that tells the user the exact moment their Sun returns. It has key placements — SR Ascendant, Sun house, Moon house, Midheaven — displayed with care in a 2×2 grid. It has a GPT interpretation that covers the year thematically.
+I want to name something the sprint vision does not address for sprint-0022, because it has been there since the beginning.
 
-And then it ends. It has no sense of time within the year.
+The `ResultsPage.tsx` — the natal birth chart — shows: a header ("Your Birth Chart"), a chart wheel, the Big Three, then a long sequence of collapsible sections — Planets, Asteroids, Aspects, Balance, Planetary Strength, Retrogrades, Houses — then a planet positions table, then an aspects table, then two buttons.
 
-The SR interpretation tells you what the year is about. It does not tell you when the year's peak moments are, when the important windows open and close, or when the seasonal rhythm of the twelve months favors different kinds of action. A person who reads their Solar Return in July and is told "this is a year of professional visibility and career advancement" is given useful framing. They are given no way to ask: when this year? The first half or the second? Before my birthday or after?
+Nowhere on this page does the user see a sentence that speaks to them as a whole person before the sections divide them into parts. The page moves immediately from the chart wheel — which is beautiful — to a structural breakdown. The user sees their Sun in Libra, their Moon in Scorpio, their Rising in Gemini, displayed as rows in a table, before anyone has said: this is what these three things together say about you.
 
-The peak moments strip proposed in the vision document is the right response to this problem. The SR chart is a `ChartData`-compatible object. `preCalculateSnapshots` can accept it. The 12-month range is known. The existing scoring and marker system can identify the power moments, favorable windows, and challenging periods within the SR year and place them on a strip that gives the year a shape rather than a theme.
+The `ReadingSummary` component shows the Big Three and dominant element and modality. These are facts. They are not synthesis.
 
-What requires craft attention is how this strip is introduced and what it says when the strip has no markers.
+A natal chart deserves a two-sentence character portrait — not a description of placements, but an integration. Something warm: "A Libra Sun with a Scorpio Moon and Gemini Rising means you seek balance and connection at the surface while carrying emotional depths that surprise even you — your mind moves faster than your feelings, and sometimes the people who love you have to catch up." That sentence is not in the product. It should be, in a small GPT call or a static synthesis rule keyed to the Big Three combination.
 
-The Solar Return advance strip should not use the same language as the personal transit advance strip. The personal transit strip is looking at the user's natal chart and asking: what is the sky doing to you right now and in the coming months? The SR strip is asking something different: within the year defined by your solar return, which months carry the most intensity?
-
-The empty strip message should reflect this. The personal transit advance says: *"A steady period for you — no exceptional signals in this window."* The SR strip, when quiet, might say: *"A relatively even year — the intensity is distributed rather than concentrated in specific peaks."* This is a slightly different message. A steady individual transit period might mean "this month is unremarkable." A steady SR year means "the year's energy is spread across it rather than arriving in waves" — which is itself a meaningful observation about the year's character.
-
-The header for the strip also deserves care. "Look Ahead" (used in the couple advance section) is a natural home for that product context. The SR strip should be introduced as something more specific: *"Peak Moments This Solar Year"* as the vision suggests, or perhaps *"When This Year Intensifies"* — language that locates it within the SR year frame rather than treating it as a generic advance feature.
+I offer this for the backlog. The sprint vision explicitly says `ResultsPage.tsx` does not receive structural attention in sprint-0022. I note the gap because it is the most visited reading in the product after Today — and its most important page has no voice.
 
 ---
 
-## The Transit Timeline's Power Day Problem Is a Trust Problem
+## Small Gestures That Would Make the User Feel Cared For
 
-The vision document correctly identifies the mismatch between the Timeline's "Power Day" markers (fired by event count: 3+ events on a date) and the advance engine's `power` category (fired by slow planet contact with a natal angle). These can and do disagree.
+There are three small things I noticed that are not proposals — they are questions the product should ask itself.
 
-A date could appear as a gold Power Day dot in the advance strip — because Saturn is conjunct the natal Ascendant, a significant event — and appear as an ordinary date in the Timeline, because no three transit events perfected that day. Conversely, a date could appear as a Power Day label in the Timeline because a Moon ingress, a Mars station, and an aspect perfection all clustered there by calendar coincidence, while the advance strip shows no marker at all.
+**The "← Back" button on the Today page.** It is the first interactive element visible when the user opens `TodayPage.tsx`. It dispatches `{ type: 'SET_VIEW', view: 'form' }`. A user who taps "Back" from the Today page expecting the Home screen may encounter the birth data form instead, depending on how the `form` view is resolved when chart data is already present in state. This deserves investigation. When I am reading today's sky and I want to go home, I expect the home screen.
 
-The vision frames this as a coherence problem to be solved by carrying the advance score category into the Timeline's `isPowerDay` determination.
+**The GptSkeleton label text.** When the Today page GPT is loading, the label reads: "Reading today's sky for you..." — personal, warm, specific. On the Transit Reading page, the label reads: "Consulting the stars..." — the language of an automated service, not a presence. The skeleton label is what the user reads for ten seconds while GPT loads. It should be the warmest sentence on the page, and it should know which reading it is loading for. "Listening to today's sky for your chart..." for a daily reading. "Tracing this month's movements across your chart..." for a monthly reading. The `PERIOD_DESCRIPTIONS` map already has period-specific language; the skeleton label should match it.
 
-From a craft perspective, the problem is deeper. It is a trust problem. When the user sees "Power Day" on a date and investigates, they expect to find something significant when they look at the details. If the label is firing on event-count alone, they may find three relatively minor events — a Moon sign change, a Mercury trine, a minor aspect — and feel that the product has misled them. The label raised their expectation. The events did not meet it.
-
-The current Timeline's Power Day criterion is: `eventCount >= 3`. This is a reasonable proxy that requires no integration with the scoring engine. It fires frequently enough to give users something to notice. But it fires indiscriminately, without asking whether the clustering of events actually amounts to anything significant.
-
-The advance score integration proposed in the vision is the right fix, but the craft implication goes further: if a date carries a genuine `power` or high-intensity advance marker, the Timeline's Power Day label for that date should be contextually enriched — not just visually labeled, but briefly described. *"Saturn contacts your Ascendant on this date — the advance engine identifies this as a power configuration."* The event-count Power Day might retain its label but with a softer visual treatment; the advance-scored Power Day should get a richer one.
-
-There is a secondary issue here that the vision does not address: the Timeline's event count is not displayed in a way that helps the user understand what kind of day it is. The date header shows:
-
-*"Sat, May 16  ✦ Power Day  3 events"*
-
-Three events. But what three events? The user has to open each card to find out. If the date is genuinely significant, the header should hint at why — something like the aspect header suffix pattern already used in the advance tab: *"✦ Power Day · Saturn stations"* or *"✦ Power Day · 3 slow-planet aspects"*. A single phrase that earns the label before the user has to click.
+**The FormWizard.** The form for entering birth data asks for name, date, time, and place. It is clean, correct, functional. But it has no sense of occasion. When someone enters their birth data for the first time, they are doing something they have never done in this app before. One sentence below the heading — "The sky at the moment of your birth has been waiting." — would not slow the form or add friction. It would make the user feel that the app understands this moment matters.
 
 ---
 
-## What the Couple Advance Banner Currently Does to a Person
+## Proposed Improvements for Sprint 0022
 
-The `CoupleAdvanceTab` banner renders like this when the category is favorable:
-
-```
-✦ [first word bolded] [rest of reason string]
-```
-
-The reason string: *"Jupiter flows through the relationship's romantic axis — a window when shared pleasure, warmth, and connection is genuinely supported."*
-
-What the banner does not render: the guidance paragraph. The `categoryBanner` variable in `CoupleAdvanceTab` is just `snapshot.score.reason` — but the banner render block only has a single `<p>` element for the reason. The guidance field is defined in `SnapshotScore` and rendered in `AdvanceTab` as a second paragraph (`text-mystic-muted/80`). In `CoupleAdvanceTab` the render block was written without this second paragraph. The guidance field is not used anywhere in the component.
-
-The vision document identifies this. But there is a secondary craft failure worth naming: the first word bolding logic in `CoupleAdvanceTab` (`categoryBanner.split(' ')[0]`) is the old, pre-sprint-0019 approach. `AdvanceTab` replaced this with `bannerBoldFragment` — a specific token (the planet name) that is explicitly set by the reason builders to ensure the bold heading is always the planet name, not whatever word happens to open the sentence.
-
-`CoupleAdvanceTab`'s three builders do not set `bannerBoldFragment`. When the sprint adds the guidance paragraph, it should also bring the banner bold logic to parity with `AdvanceTab`. The current behavior bolds "Jupiter" (correct by accident, since the reason string happens to open with the planet name), but the couple power reason opens with the planet name, then "reaches" — so *"Jupiter"* gets bolded. The couple aspect reason opens with the transit planet — so *"Jupiter"* gets bolded. The couple shift reason opens with the planet — so *"Saturn"* gets bolded. The accident holds for now, but it is an accident. When guidance sentences change the reason string structure, it will break. The `bannerBoldFragment` field should be set explicitly.
+Six proposals, distributed across the three types, weighted toward the reading surfaces the sprint vision identifies as the priority.
 
 ---
 
-## What the SR Page Does Not Know About Its Own Emotional Register
+### Feature: Today Page — Integrated GPT Synthesis Prompt
 
-The Solar Return page's header says: *"Your Year Ahead."*
+**Type:** Feature
+**Files:** `src/services/gptInterpretation.ts` (`getTodayPageInterpretation`), `src/components/reading/TodayPage.tsx`
 
-The key placement cards say: *"Year theme," "Primary focus," "Emotional climate," "Career direction."*
+The `getTodayPageInterpretation` call in `TodayPage.tsx` sends: moon phase/sign, top transit aspects, personal day number, personal day archetype. It does not send: void-of-course status as a named signal, the advance category and reason (when session cache is warm), or the natal moon phase name (derivable from `chartData.planets` Sun and Moon longitudes already available in the component).
 
-The static briefs say: *"This year: [brief]."*
+Enrich the payload to include all of these. Revise the prompt instruction to explicitly ask the model to weave the systems together into a single synthesis — not to list them separately, but to find the sentence that names what today means when the numerology, the lunar quality, the transit pressure, and the advance category are read together.
 
-All of this is framed as a year-level view. Twelve months of life, compressed into themes.
+The call signature of `getTodayPageInterpretation` expands from four arguments to include optional `advanceCategory`, `advanceReason`, and `natalMoonPhase`. `TodayPage.tsx` already reads the session cache for the advance signal at mount time; pass the non-neutral result into the GPT call. The natal moon phase is computable from `chartData` without an additional engine call.
 
-Then the user reads the GPT interpretation — which is paragraph prose covering the year thematically — and hits the planet table:
-
-| Planet | SR Sign | SR House | Natal Sign |
-|--------|---------|----------|------------|
-| Sun    | Gemini  | 9        | Aries      |
-| Moon   | Scorpio | 3        | Virgo      |
-
-This table is useful data. It shows where each planet has landed in the SR chart. But it is presented in a register that is completely disconnected from the year-level emotional framing that preceded it. The user was reading about their year's themes, their emotional climate, their primary focus — and now they are looking at a table of technical astronomical data.
-
-The SR planet table is appropriate on the Chart tab, which is intended for users who want to inspect the chart data directly. On the Reading tab, it belongs either in a collapsible section that starts closed — available for those who want to inspect, hidden for those who do not — or not at all (since the GPT interpretation covers its terrain more warmly).
-
-The current layout on the Reading tab:
-1. Key placements grid (thematic)
-2. Year selector (functional)
-3. Tab toggle (functional)
-4. Static briefs (SR Sun/Moon house — thematic)
-5. GPT interpretation (thematic, warm, prose)
-
-This is good. The user moves through a coherent thematic experience.
-
-If sprint 0020 adds the peak moments strip to the Reading tab, the question is where it lives. The vision says: *"surface only the overview strip and Prev/Next navigation."* This will sit somewhere on the Reading tab.
-
-If it sits between the GPT interpretation and the planet table, the user's experience is:
-- Themes for the year (warm)
-- Notable moment strip (forward-looking, actionable)
-- Technical table data (cold)
-
-That sequence breaks the warmth. The peak moments strip should be the last major element before the navigation buttons — after the GPT interpretation, after any static briefs, as a forward-looking close to the reading rather than a transition to technical data. The planet table belongs in a collapsible, or on the Chart tab only.
-
-This is a small layout decision that matters because it determines whether the peak moments strip feels like a gift at the end of the reading or a speed bump before the data.
+No new GPT type. No new API endpoint. Prompt content enrichment only.
 
 ---
 
-## Where the Couple Advance Tab Currently Fails on Human Scale
+### Feature: Transit Timeline — House-Aware Expanded Briefs
 
-Open the couple advance section. Move the slider to a favorable window. The banner appears. Read the reason string. Now scroll down. You will see: "Transit Aspects to Composite (8)," followed by eight rows of aspect data. Below that: retrograde activity. Below that: a planet positions table.
+**Type:** Feature
+**Files:** `src/components/reading/TransitTimeline.tsx`
 
-This is the same layout as the individual advance tab. It was built by mirroring the individual tab's structure. And for the individual tab, this layout is appropriate — the user has a personal chart wheel to look at, the aspect list references their own natal planets, and the table shows where the sky is relative to their life.
+In `EventCard`, the `detailText` for aspect-perfection events is derived from `getPersonalizedEventBrief(event.aspectType, event.secondPlanet, event.natalHouse ?? null)`. This function returns generic keyword phrases from `ASPECT_BRIEFS`, ignoring the house.
 
-For the couple advance tab, the aspect list references composite planets that the average user has never seen displayed. "Saturn pressing on the relationship's House of Communication" would be meaningful. "Saturn pressing on composite Mercury" is less meaningful — unless the user already knows what composite Mercury means for this relationship specifically. The transit aspects to composite section was built for completeness, not for the user's experience of what they need.
+Replace this call with `computeTransitAspectBrief`, passing:
+- `event.planet as PlanetName` (transit planet)
+- `event.aspectType`
+- `event.secondPlanet as PlanetName` (natal planet)
+- `event.natalHouse ?? null`
+- `event.aspectNature`
+- `true` (aspect-perfection events are at maximum applying)
 
-The couple advance tab has no chart wheel — this was documented as intentional in sprint 0019. The reason string and guidance field are meant to carry the interpretive weight. But if the reason and guidance are thin (no guidance paragraph currently) and the aspect list below is long and technical, the user's experience is: a brief interesting sentence, followed by eight rows of data they may not know how to read.
+When `natalHouse` is null or `event.planet` has no entry in `TRANSIT_PLANET_PHRASES`, `computeTransitAspectBrief` already falls through to `getAspectPerfectionBrief` as a fallback — the same result as the current code. Ingress and station detailText derivation is unchanged.
 
-The craft fix is not to remove the aspect list. It is to ensure the reason and guidance are rich enough that the aspect list feels like supporting detail rather than the main event. When the guidance paragraph exists and is relationship-native, and when the reason string names the specific dimension of the relationship being activated, the aspect list below becomes something to verify rather than something to interpret. The user reads the banner and understands the moment. The aspect list is there for those who want to go deeper.
-
-This is why the guidance sentences must be written with care. They are not metadata. They are what the couple advance tab is for.
-
----
-
-## The Specific Craft Standard for Sprint 0020
-
-Sprint 0019 established the right quality bar for individual advance guidance: house-aware, actionable, addressed to a specific person's life situation.
-
-Sprint 0020 must establish the equivalent quality bar for couple advance guidance: relationship-aware, actionable, addressed to two people's shared situation.
-
-The test is simple. Take any guidance sentence that will appear in the couple advance banner. Read it aloud to two people who are in the relationship it describes. Ask: does this feel written for us, or does it feel written for some generic couple?
-
-The `ASPECT_GUIDANCE` table's individual sentences would not pass this test for couple advance. *"Face the pattern directly rather than managing around it"* is good individual guidance for a Saturn challenging transit. For two people, the guidance needs to say something about how to face the pattern together, or how the pattern typically surfaces between two people in a relationship, or what the specific risk is when two people both receive Saturn pressure on their shared emotional foundation.
-
-This is a small number of guidance sentences. The couple advance has three builders, covering power, aspect, and shift. Each builder needs two or three guidance cases. Twelve sentences total, written with the same care as the house-specific entries in `ASPECT_HOUSE_CONTEXT`.
-
-If those twelve sentences are written well, the couple advance feature becomes something a person tells their partner about. Not because it is technically impressive, but because it said something true about them.
+Import `computeTransitAspectBrief` from `../../data/interpretations/transitAspectBriefs` in `TransitTimeline.tsx`.
 
 ---
 
-*Analysis prepared from the lens of craft, care, and the specific obligation of a product that handles the emotional texture of people's lives together.*
+### Feature: Synastry Aspect Rows — House Overlay Note on Expand
+
+**Type:** Feature
+**File:** `src/components/results/SynastryPage.tsx`
+
+When a synastry aspect row expands, optionally append a house note if either of the involved planets has an overlay in a high-signal house (1, 5, 7, 8 — already defined as `HIGH_SIGNAL_HOUSES` in the file).
+
+Thread `synastryData.houseOverlay` into `SynastryAspectsSection` as an optional additional prop. In the `AspectRow` render loop, after computing `computeSynastryAspectBrief`, derive a `houseNote` string:
+
+1. Check `houseOverlay.person1InPerson2Houses` for an entry where `entry.planet === a.person1Planet` and `HIGH_SIGNAL_HOUSES.includes(entry.house)` and `INNER_PLANETS.includes(entry.planet)`.
+2. If found, construct: `"${label1}'s ${entry.planet} falls in ${label2}'s ${ordinal(entry.house)} house — ${getHouseTheme(entry.house).name}."`
+3. Check `person2InPerson1Houses` symmetrically.
+4. Use at most one note per expanded row. If both directions qualify, prefer the one with the lower-numbered house (closer to the angular houses).
+
+Pass `houseNote` into `AspectRow` as an optional `expansionNote` prop, rendered as a quieter italic line below the existing brief — visually subordinate, not competing.
+
+Apply only when `INNER_PLANETS.includes(planet)` and house is in `HIGH_SIGNAL_HOUSES`. Not every aspect. Not every house.
+
+---
+
+### Issue Fix: Today Page — Back Button Navigation
+
+**Type:** Issue Fix
+**File:** `src/components/reading/TodayPage.tsx`
+
+The "← Back" button dispatches `{ type: 'SET_VIEW', view: 'form' }`. When chart data is already present in app state, the `form` view renders as the home screen or as the birth data form, depending on how the app resolves that view state.
+
+Investigate `src/context/appState.ts` to confirm the correct view key for "return to home when chart data is present." If a `home` view state exists, change the dispatch to `{ type: 'SET_VIEW', view: 'home' }`. If the app uses `form` as the home state conditionally on chart data presence, add a guard in the back handler: `dispatch({ type: 'SET_VIEW', view: chartData ? 'home' : 'form' })`.
+
+The user expectation when pressing Back from the Today reading is the Home screen. The button should deliver it.
+
+---
+
+### Issue Fix: Transit Reading GPT Skeleton — Warmth Parity
+
+**Type:** Issue Fix
+**File:** `src/components/results/TransitReadingPage.tsx`
+
+The loading label on the transit reading GPT skeleton reads: `"Consulting the stars..."` — the most impersonal of the skeleton labels in the product. The synastry page uses `"Reading your celestial bond..."` (warm). The Today page uses `"Reading today's sky for you..."` (personal).
+
+Replace the static label with period-specific copy, derived from `transitPeriod`:
+
+- `daily`: `"Listening to today's sky for your chart..."`
+- `weekly`: `"Reading this week's currents for your birth pattern..."`
+- `monthly`: `"Tracing this month's movements across your natal chart..."`
+
+The skeleton is rendered at the point where `transitInterpretation === null || retrying`. The `transitPeriod` prop is available in the component at that point. A one-line ternary or record lookup replaces the static string.
+
+This label is read for ten seconds on every transit reading load. Ten seconds is long enough for the warmth of the language to matter.
+
+---
+
+### Code Enhancement: Transit Interpretation Path Consolidation
+
+**Type:** Code Enhancement
+**Files:** `src/data/interpretations/transitEvents.ts`, `src/data/interpretations/transitAspectBriefs.ts`
+
+After the Timeline Feature above routes aspect-perfection `detailText` through `computeTransitAspectBrief`, the aspect-perfection branch of `getPersonalizedEventBrief` becomes dead code. It contains the `ASPECT_BRIEFS` lookup table and the planet-keyed fallback entries — all of which are now superseded by `computeTransitAspectBrief`'s own fallback to `getAspectPerfectionBrief`.
+
+Remove the aspect-perfection interpretation logic from `getPersonalizedEventBrief`. Retain in `transitEvents.ts`:
+- `getIngressBrief` (planet + sign ingress language — no parallel in `transitAspectBriefs.ts`)
+- `getStationBrief` (retrograde/direct station language — no parallel)
+- `EVENT_TYPE_INFO` (used by `TransitTimeline.tsx` for event type icons and labels)
+- `getAspectPerfectionBrief` (used as fallback inside `computeTransitAspectBrief`)
+
+The `ASPECT_BRIEFS` record at the top of `transitEvents.ts` — the keyword-level table — may be removed or deprecated if it is no longer referenced after the above. Confirm with a grep for all call sites before deleting.
+
+This reduces the maintenance surface: there is one canonical path for transit-to-natal aspect interpretation (`computeTransitAspectBrief`), and `transitEvents.ts` holds only the interpretation types that have no other home.
+
+---
+
+## What I Am Really Asking For
+
+I have listed six proposals. But behind all of them is one question.
+
+When a person opens this application in the morning — uncertain, curious, maybe a little anxious about the week ahead — does the product feel like it was made by someone who cared about that moment? Or does it feel like a collection of correctly assembled parts?
+
+The parts are good. The engine is real. The charts are beautiful in the right light. But craft is not about having the right parts. Craft is about the fire in the hearth. The meal that is already on the table. The world that knows you have arrived.
+
+The Today page should feel like someone read the sky for you before you woke up. The Transit Timeline expanded card should speak to your specific life, not to the general category of people whose Saturn squares their Moon. The synastry aspect row should notice when the connection it is describing also lives in the house where your partner holds their sense of joy.
+
+These are not hard changes. They are the changes that turn a correct product into a caring one.
+
+That is the difference I am asking for.
+
+---
+
+*Analysis prepared through the lens of craft, care, and the obligation of a product that handles the emotional texture of people's daily lives.*
