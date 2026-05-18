@@ -125,10 +125,10 @@ export const initialBirthData: BirthData = {
 }
 
 const BIRTH_DATA_CACHE_KEY = 'astral-chart-birth-data'
-const CHART_RESULTS_CACHE_KEY = 'astral-chart-results'
-const TRANSIT_RESULTS_CACHE_KEY = 'astral-chart-transit-results'
-const PARTNER_DATA_CACHE_KEY = 'astral-chart-partner-data'
-const SYNASTRY_RESULTS_CACHE_KEY = 'astral-chart-synastry-results'
+export const CHART_RESULTS_CACHE_KEY = 'astral-chart-results'
+export const TRANSIT_RESULTS_CACHE_KEY = 'astral-chart-transit-results'
+export const PARTNER_DATA_CACHE_KEY = 'astral-chart-partner-data'
+export const SYNASTRY_RESULTS_CACHE_KEY = 'astral-chart-synastry-results'
 
 const SYNASTRY_CACHE_VERSION = 2
 
