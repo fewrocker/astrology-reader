@@ -79,8 +79,10 @@ const CACHE_PREFIX = 'daily-snapshot-'
 
 function getCacheKey(chart: ChartData): string {
   const sun = chart.planets.find(p => p.name === 'Sun')
+  const moon = chart.planets.find(p => p.name === 'Moon')
+  const asc = chart.houses?.[0]
   const today = new Date().toISOString().split('T')[0]
-  return `${CACHE_PREFIX}${sun?.longitude?.toFixed(0)}-${today}`
+  return `${CACHE_PREFIX}${sun?.longitude?.toFixed(4)}-${asc?.sign ?? 'unknown'}-${moon?.sign ?? 'unknown'}-${today}`
 }
 
 export default function DailySnapshotCard({ chart, birthDate, embedded }: { chart: ChartData; birthDate?: string; embedded?: boolean }) {
