@@ -2,7 +2,8 @@ import { useState } from 'react'
 import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
 import { ZODIAC_GLYPHS, getBodyGlyph, isAsteroid } from '../../engine/types'
 import type { BodyName, PlanetName, ZodiacSign } from '../../engine/types'
-import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
+import { getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
+import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import type { MarkerCategory } from './AdvanceTab'
 import { CATEGORY_LABELS } from './AdvanceTab'
 
@@ -32,8 +33,15 @@ function EventCard({ event, expanded, onToggle }: { event: TimelineEvent; expand
 
   // Get enriched interpretation
   let detailText = ''
-  if (event.type === 'aspect-perfection' && event.aspectType && event.secondPlanet) {
-    detailText = getPersonalizedEventBrief(event.aspectType, event.secondPlanet as (PlanetName | 'NorthNode'), event.natalHouse ?? null)
+  if (event.type === 'aspect-perfection' && event.aspectType && event.planet && event.secondPlanet && event.aspectNature) {
+    detailText = computeTransitAspectBrief(
+      event.planet as string,
+      event.aspectType,
+      event.secondPlanet as string,
+      event.natalHouse ?? null,
+      event.aspectNature,
+      true,
+    )
   } else if (event.type === 'sign-ingress' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet as BodyName) && event.toSign) {
     detailText = getIngressBrief(event.planet as PlanetName, event.toSign)
   } else if (event.type === 'retrograde-station' && event.planet && event.planet !== 'NorthNode' && !isAsteroid(event.planet as BodyName) && event.stationType) {
