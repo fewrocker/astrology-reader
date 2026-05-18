@@ -531,7 +531,7 @@ function AppContent() {
     )
   }
 
-  const showCachedLanding = state.view === 'form' && state.formCompleted && !!state.birthData.date && !!state.birthData.city
+  const showCachedLanding = state.view === 'form' && (state.formCompleted || !!state.chartData) && !!state.birthData.date && !!state.birthData.city
 
   const isLandingPage = state.view === 'form'
 
