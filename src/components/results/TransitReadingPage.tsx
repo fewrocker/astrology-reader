@@ -13,7 +13,7 @@ import AspectRow from '../reading/AspectRow'
 import DiscussModal from '../discuss/DiscussModal'
 import { CurrentMoonWidget } from '../reading/MoonPhaseWidget'
 import GptSkeleton from '../ui/GptSkeleton'
-import { isGptError, getGptErrorMessage } from '../../services/gptErrors'
+import { isGptError, getGptErrorMessage, GPT_TIMEOUT } from '../../services/gptErrors'
 import { getGptInterpretation } from '../../services/gptInterpretation'
 import { track } from '../../services/analytics'
 import type { AdvanceSnapshot, MarkerCategory } from '../../engine/advanceScoring'
@@ -377,7 +377,7 @@ export default function TransitReadingPage() {
                 onClick={handleRetryGpt}
                 className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
               >
-                ✦ Ask again
+                {transitInterpretation === GPT_TIMEOUT ? '✦ Try again' : '✦ Ask again'}
               </button>
             </div>
           ) : (

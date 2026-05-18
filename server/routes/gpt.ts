@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import OpenAI from 'openai'
 import { gptRateLimit } from '../middleware/gptRateLimit.js'
 import { handleGptRequest } from '../services/gpt.js'
 import { getDb } from '../db.js'
@@ -54,6 +55,12 @@ router.post('/interpret', gptRateLimit, async (req: Request, res: Response) => {
     // the user consumed a legitimate call attempt (spec §17)
     if (message.startsWith('Unknown GPT type:')) {
       res.status(400).json({ error: message })
+      return
+    }
+    // Server-side timeout from the OpenAI SDK — return 504 (spec 14)
+    if (err instanceof OpenAI.APIConnectionTimeoutError || (err instanceof Error && err.name === 'AbortError')) {
+      res.locals.releaseSlot?.()
+      res.status(504).json({ error: 'gateway_timeout' })
       return
     }
     // Unexpected 5xx — release slot (infrastructure error, not user fault)
