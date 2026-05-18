@@ -9,7 +9,7 @@ import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptI
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
 import { buildKeyAspectSentence } from '../../data/interpretations/aspectKeywords'
-import type { MarkerCategory } from './AdvanceTab'
+import type { MarkerCategory } from '../../engine/advanceScoring'
 import { CATEGORY_LABELS } from './AdvanceTab'
 
 const PHASE_EMOJIS: Record<string, string> = {

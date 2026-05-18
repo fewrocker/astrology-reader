@@ -3,7 +3,7 @@ import type { TimelineDay, TimelineEvent } from '../../engine/transitTimeline'
 import { ZODIAC_GLYPHS, getBodyGlyph, isAsteroid } from '../../engine/types'
 import type { BodyName, PlanetName, ZodiacSign } from '../../engine/types'
 import { getPersonalizedEventBrief, getIngressBrief, getStationBrief, EVENT_TYPE_INFO } from '../../data/interpretations/transitEvents'
-import type { MarkerCategory } from './AdvanceTab'
+import type { MarkerCategory } from '../../engine/advanceScoring'
 import { CATEGORY_LABELS } from './AdvanceTab'
 
 function formatTimelineDate(date: Date): string {

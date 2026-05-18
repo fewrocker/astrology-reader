@@ -10,16 +10,16 @@ import { TRANSIT_RETROGRADE } from '../../data/interpretations/retrogrades'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
 import AspectRow from './AspectRow'
 
-import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from './AdvanceTab'
-import { LruMap } from '../../utils/lruMap'
+import type { SnapshotScore, AdvanceSnapshot, AdvanceConfig } from '../../engine/advanceScoring'
 import {
-  ADVANCE_CONFIG, CATEGORY_HALO,
+  ADVANCE_CONFIG,
   ORB_THRESHOLDS, MARKER_HYSTERESIS_ORB, SLOW_PLANETS_FOR_BANNER,
   ASPECT_VERB_BANNER, PLANET_WEIGHT,
   COMBINATION_PLANETS, COMBINATION_WEIGHT_THRESHOLD, COMBINATION_WEIGHT_NORMALIZE,
-  computeCombinedWeight,
-  detectAngleContact, MarkerDot, OverviewStrip, MarkerTooltip,
-} from './AdvanceTab'
+  computeCombinedWeight, detectAngleContact,
+} from '../../engine/advanceScoring'
+import { LruMap } from '../../utils/lruMap'
+import { CATEGORY_HALO, MarkerDot, OverviewStrip, MarkerTooltip } from './AdvanceTab'
 
 // ─── Composite planet archetype phrases ──────────────────────────────────────
 
