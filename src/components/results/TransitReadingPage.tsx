@@ -35,6 +35,12 @@ const PERIOD_DESCRIPTIONS: Record<TransitPeriod, string> = {
   monthly: 'Major influences shaping your month',
 }
 
+const SKELETON_LABELS: Record<TransitPeriod, string> = {
+  daily: "Listening to today's sky for your chart...",
+  weekly: "Reading this week's currents for your birth pattern...",
+  monthly: "Tracing this month's movements across your natal chart...",
+}
+
 function Section({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
@@ -361,7 +367,7 @@ export default function TransitReadingPage() {
 
           {/* GPT interpretation */}
           {transitInterpretation === null || retrying ? (
-            <GptSkeleton label="Consulting the stars..." accentColor="gold" />
+            <GptSkeleton label={SKELETON_LABELS[transitPeriod]} accentColor="gold" />
           ) : isGptError(transitInterpretation) ? (
             <div className="bg-mystic-surface/50 border border-mystic-border rounded-xl p-6 text-center space-y-3 mb-6">
               <p className="text-mystic-muted text-sm">{getGptErrorMessage(transitInterpretation)}</p>
