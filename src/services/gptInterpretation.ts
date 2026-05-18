@@ -210,12 +210,16 @@ export async function getTodayPageInterpretation(
   personalDay: number,
   personalDayArchetype: string,
 ): Promise<string> {
+  // Derive the client's local date as YYYY-MM-DD so the server uses the user's
+  // wall-clock date rather than its own UTC clock.
+  const localDate = new Date().toLocaleDateString('en-CA')
   try {
     const result = await callProxy('today-synthesis', {
       moon,
       aspects,
       personalDay,
       personalDayArchetype,
+      localDate,
     })
     return (result as string) || 'Unable to generate morning synthesis.'
   } catch (err) {

@@ -568,13 +568,20 @@ async function handleTodaySynthesis(payload: {
   aspects: TransitAspect[]
   personalDay: number
   personalDayArchetype: string
+  localDate?: string
 }, userId?: number): Promise<string> {
+  // Resolve "today" from the client's local date string (YYYY-MM-DD) when provided.
+  // This prevents the server's UTC clock from misidentifying the user's calendar day
+  // (e.g. for users east of UTC+0 during the UTC-midnight-to-local-midnight window).
+  const targetDate = payload.localDate ? new Date(payload.localDate) : new Date()
+
   // Cross-check client-provided personalDay against server-computed value when birth_date is available.
+  // Use the client-supplied date so both sides compute against the same calendar day.
   let authorizedPersonalDay = payload.personalDay
   if (userId) {
     const birthCtx = resolveUserBirthContext(userId)
     if (birthCtx) {
-      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate)
+      const serverPersonalDay = calculatePersonalDay(birthCtx.birthDate, targetDate)
       if (serverPersonalDay !== payload.personalDay) {
         console.warn(`[handleTodaySynthesis] personalDay mismatch: client=${payload.personalDay}, server=${serverPersonalDay}, userId=${userId}`)
       }
@@ -582,7 +589,7 @@ async function handleTodaySynthesis(payload: {
     }
   }
 
-  const today = new Date().toLocaleDateString('en-US', {
+  const today = targetDate.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   })
 
