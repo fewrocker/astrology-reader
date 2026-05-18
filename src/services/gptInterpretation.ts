@@ -206,16 +206,37 @@ export async function generateNumerologySkyChartReading(
 
 export async function getTodayPageInterpretation(
   moon: { phaseName: string; moonSign: string; isVoid: boolean },
-  aspects: Array<{ transitPlanet: string; symbol: string; natalPlanet: string; orb: number; nature: string }>,
+  aspects: Array<{
+    transitPlanet: string; symbol: string; natalPlanet: string;
+    orb: number; nature: string; natalHouse: number | null; applying?: boolean
+  }>,
+  aspectBriefSentences: string[],
   personalDay: number,
   personalDayArchetype: string,
+  personalDayEssence: string,
+  natalSunSign: string,
+  natalMoonSign: string,
+  natalMoonHouse: number | null,
+  natalAscSign: string,
+  natalMoonPhase: string | null,
+  advanceCategory: string | null,
+  advanceReason: string | null,
 ): Promise<string> {
   try {
     const result = await callProxy('today-synthesis', {
       moon,
       aspects,
+      aspectBriefSentences,
       personalDay,
       personalDayArchetype,
+      personalDayEssence,
+      natalSunSign,
+      natalMoonSign,
+      natalMoonHouse,
+      natalAscSign,
+      natalMoonPhase,
+      advanceCategory,
+      advanceReason,
     })
     return (result as string) || 'Unable to generate morning synthesis.'
   } catch (err) {
