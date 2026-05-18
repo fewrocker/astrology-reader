@@ -1,4 +1,10 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import {
+  CHART_RESULTS_CACHE_KEY,
+  TRANSIT_RESULTS_CACHE_KEY,
+  PARTNER_DATA_CACHE_KEY,
+  SYNASTRY_RESULTS_CACHE_KEY,
+} from '../context/appState'
 
 interface Props {
   children: ReactNode
@@ -25,7 +31,16 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   handleStartOver = () => {
-    localStorage.clear()
+    const exactKeys = [
+      CHART_RESULTS_CACHE_KEY,
+      TRANSIT_RESULTS_CACHE_KEY,
+      PARTNER_DATA_CACHE_KEY,
+      SYNASTRY_RESULTS_CACHE_KEY,
+    ]
+    exactKeys.forEach(k => localStorage.removeItem(k))
+    Object.keys(localStorage)
+      .filter(k => k.startsWith('daily-snapshot-') || k.startsWith('advance-today-signal-'))
+      .forEach(k => localStorage.removeItem(k))
     window.location.reload()
   }
 
@@ -58,7 +73,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             </h2>
 
             <p className="text-mystic-muted text-sm leading-relaxed mb-8">
-              An unexpected error occurred. Your chart data is safe.
+              An unexpected error occurred. Clearing cached chart data and restarting — your journal and birth data are preserved.
             </p>
 
             <button
