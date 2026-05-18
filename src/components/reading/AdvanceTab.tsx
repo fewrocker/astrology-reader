@@ -125,7 +125,7 @@ export const ASPECT_VERB_BANNER: Record<AspectType, string> = {
 }
 
 // ─── Session-level singleton cache (shared with TodayPage) ───────────────────
-export const advanceSnapshotSessionCache = new Map<string, AdvanceSnapshot[]>()
+export const advanceSnapshotSessionCache = new LruMap<string, AdvanceSnapshot[]>(6)
 
 // ─── House ordinal helper ─────────────────────────────────────────────────────
 
