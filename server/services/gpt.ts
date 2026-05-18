@@ -59,10 +59,12 @@ export interface PatternReading {
 // OpenAI client + call infrastructure
 // ---------------------------------------------------------------------------
 
+const SERVER_OPENAI_TIMEOUT_MS = 30_000
+
 let _client: OpenAI | null = null
 
 function getClient(): OpenAI {
-  if (!_client) _client = new OpenAI() // reads OPENAI_API_KEY from process.env
+  if (!_client) _client = new OpenAI({ timeout: SERVER_OPENAI_TIMEOUT_MS }) // reads OPENAI_API_KEY from process.env
   return _client
 }
 
@@ -97,19 +99,29 @@ async function callOpenAI(
   options: { temperature?: number; max_tokens?: number } = {},
 ): Promise<string> {
   const client = getClient()
+  // Per-request abort fires 2 s before the client-side AbortController (spec 6)
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), SERVER_OPENAI_TIMEOUT_MS - 2000)
   try {
     const completion = await client.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
       temperature: options.temperature ?? 0.8,
       max_tokens: options.max_tokens ?? 2000,
-    })
+    }, { signal: controller.signal })
     return completion.choices[0]?.message?.content ?? ''
   } catch (err) {
+    // Rethrow timeout errors without converting to GptServiceError so
+    // retryWithBackoff does not classify them as retryable (spec 7, 8)
+    if (err instanceof OpenAI.APIConnectionTimeoutError) {
+      throw err
+    }
     if (err instanceof OpenAI.APIError) {
       throw new GptServiceError(err.message, err.status ?? 500)
     }
     throw err
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 

@@ -1,9 +1,11 @@
 import type { ChartData } from '../engine/types'
 import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
-import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_NUDGE } from './gptErrors'
+import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_TIMEOUT, GPT_NUDGE } from './gptErrors'
 import { track } from './analytics'
 import { AUTH_TOKEN_KEY } from './authService'
+
+const GPT_REQUEST_TIMEOUT_MS = 30_000
 
 // ─── Rate limit signal ────────────────────────────────────────────────────────
 
@@ -58,14 +60,22 @@ async function callProxy(type: string, payload: object): Promise<unknown> {
   }
 
   let response: Response
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GPT_REQUEST_TIMEOUT_MS)
   try {
     response = await fetch('/api/gpt/interpret', {
       method: 'POST',
       headers,
       body: JSON.stringify({ type, payload }),
+      signal: controller.signal,
     })
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(GPT_TIMEOUT)
+    }
     throw new Error(GPT_OFFLINE)
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   if (response.status === 429) {

@@ -6,6 +6,7 @@ import type { TransitAspect, EnergyRating } from '../../engine/transits'
 import { getCurrentMoonPhase } from '../../engine/lunar'
 import type { CurrentMoonPhase } from '../../engine/lunar'
 import { getDailySnapshotInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import { isGptError } from '../../services/gptErrors'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { isQuotaError } from '../../utils/storage'
 import { buildKeyAspectSentence } from '../../data/interpretations/aspectKeywords'
@@ -170,11 +171,14 @@ export default function DailySnapshotCard({ chart, birthDate, embedded }: { char
 
         if (!cancelled) {
           setText(result)
-          try {
-            localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
-          } catch (e) {
-            if (isQuotaError(e)) {
-              console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+          // Do not cache GPT error strings — they must not be persisted as readings (spec 11)
+          if (!isGptError(result)) {
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify({ text: result, energy: rating, moon: currentMoon, topAspect: best }))
+            } catch (e) {
+              if (isQuotaError(e)) {
+                console.warn('[DailySnapshot] localStorage quota exceeded — snapshot cache not written.')
+              }
             }
           }
         }

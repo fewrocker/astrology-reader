@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useApp } from '../../context/AppContext'
 import type { ChartData, PlanetName } from '../../engine/types'
 import { ZODIAC_GLYPHS } from '../../engine/types'
@@ -9,6 +9,7 @@ import type { CurrentMoonPhase } from '../../engine/lunar'
 import { calculatePersonalDay } from '../../engine/numerology'
 import { getInterpretation } from '../../data/numerologyInterpretations'
 import { getTodayPageInterpretation, getGptNudge } from '../../services/gptInterpretation'
+import { isGptError, getGptErrorMessage, GPT_TIMEOUT } from '../../services/gptErrors'
 import GptSkeleton from '../ui/GptSkeleton'
 import AspectRow from '../reading/AspectRow'
 import { computeTransitAspectBrief } from '../../data/interpretations/transitAspectBriefs'
@@ -53,13 +54,36 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
   const [gptLoading, setGptLoading] = useState(false)
   const [advanceScore, setAdvanceScore] = useState<SnapshotScore | null>(null)
 
+  // Stable refs so the retry callback can access the latest moon/transits without stale closures
+  const moonRef = useRef<CurrentMoonPhase | null>(null)
+  const transitsRef = useRef<TransitAspect[]>([])
+
+  const fetchGptSynthesis = useCallback((currentMoon: CurrentMoonPhase, top: TransitAspect[]) => {
+    setGptLoading(true)
+    setGptText(null)
+    getTodayPageInterpretation(
+      currentMoon,
+      top,
+      personalDayNum,
+      interpretation?.archetype ?? '',
+    ).then(text => {
+      setGptText(text)
+    }).catch(() => {
+      // silently hide if API call fails entirely
+    }).finally(() => {
+      setGptLoading(false)
+    })
+  }, [personalDayNum, interpretation?.archetype]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const currentMoon = getCurrentMoonPhase(now)
     setMoon(currentMoon)
+    moonRef.current = currentMoon
 
     if (chartData) {
       const top = getTopActiveTransits(chartData, 3, 5)
       setTransits(top)
+      transitsRef.current = top
       const all = calculateTransitAspects(calculateCurrentPositions(now), chartData.planets, 'daily')
       setEnergy(computeEnergyRating(all))
 
@@ -77,19 +101,7 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
         }
       }
 
-      setGptLoading(true)
-      getTodayPageInterpretation(
-        currentMoon,
-        top,
-        personalDayNum,
-        interpretation?.archetype ?? '',
-      ).then(text => {
-        setGptText(text)
-      }).catch(() => {
-        // silently hide if API call fails
-      }).finally(() => {
-        setGptLoading(false)
-      })
+      fetchGptSynthesis(currentMoon, top)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -273,12 +285,27 @@ export default function TodayPage({ chartData, birthDate }: TodayPageProps) {
           {gptLoading && !gptText && (
             <GptSkeleton label="Reading today's sky for you..." accentColor="gold" lines={5} />
           )}
-          {gptText && (
+          {gptText && isGptError(gptText) && gptText === GPT_TIMEOUT ? (
+            <div className="text-center space-y-3">
+              <p className="text-mystic-muted text-sm">{getGptErrorMessage(gptText)}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const currentMoon = moonRef.current
+                  const top = transitsRef.current
+                  if (currentMoon) fetchGptSynthesis(currentMoon, top)
+                }}
+                className="text-mystic-gold text-sm font-heading hover:text-mystic-gold/80 transition-colors"
+              >
+                ✦ Try again
+              </button>
+            </div>
+          ) : gptText && !isGptError(gptText) ? (
             <>
               <p className="text-mystic-text/90 text-sm leading-relaxed">{gptText}</p>
               {getGptNudge() && <p className="text-mystic-muted/60 text-xs mt-3">{getGptNudge()}</p>}
             </>
-          )}
+          ) : null}
         </div>
       )}
     </div>
