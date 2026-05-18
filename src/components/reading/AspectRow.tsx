@@ -22,6 +22,8 @@ export interface AspectRowProps {
   showApplyingBadge?: boolean
   /** When present, renders instead of the auto-generated label. */
   labelOverride?: string
+  /** Optional contextual note rendered beneath the brief in the expansion panel. */
+  expansionNote?: string
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -59,6 +61,7 @@ export default function AspectRow({
   natalLabel = 'Natal',
   showApplyingBadge = true,
   labelOverride,
+  expansionNote,
 }: AspectRowProps) {
   const [expanded, setExpanded] = useState(false)
 
@@ -129,7 +132,7 @@ export default function AspectRow({
         <div
           className="overflow-hidden transition-all duration-200"
           style={{
-            maxHeight: expanded ? '6rem' : '0',
+            maxHeight: expanded ? (expansionNote ? '8rem' : '6rem') : '0',
             opacity: expanded ? 1 : 0,
           }}
         >
@@ -138,6 +141,11 @@ export default function AspectRow({
             <p className="text-mystic-text/80 text-xs leading-relaxed italic">
               {brief}
             </p>
+            {expansionNote && (
+              <p className="text-mystic-muted/70 text-xs leading-relaxed mt-1.5">
+                {expansionNote}
+              </p>
+            )}
           </div>
         </div>
       )}
