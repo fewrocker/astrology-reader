@@ -216,9 +216,21 @@ export async function generateNumerologySkyChartReading(
 
 export async function getTodayPageInterpretation(
   moon: { phaseName: string; moonSign: string; isVoid: boolean },
-  aspects: Array<{ transitPlanet: string; symbol: string; natalPlanet: string; orb: number; nature: string }>,
+  aspects: Array<{
+    transitPlanet: string; symbol: string; natalPlanet: string;
+    orb: number; nature: string; natalHouse: number | null; applying?: boolean
+  }>,
+  aspectBriefSentences: string[],
   personalDay: number,
   personalDayArchetype: string,
+  personalDayEssence: string,
+  natalSunSign: string,
+  natalMoonSign: string,
+  natalMoonHouse: number | null,
+  natalAscSign: string,
+  natalMoonPhase: string | null,
+  advanceCategory: string | null,
+  advanceReason: string | null,
 ): Promise<string> {
   // Derive the client's local date as YYYY-MM-DD so the server uses the user's
   // wall-clock date rather than its own UTC clock.
@@ -227,9 +239,18 @@ export async function getTodayPageInterpretation(
     const result = await callProxy('today-synthesis', {
       moon,
       aspects,
+      aspectBriefSentences,
       personalDay,
       personalDayArchetype,
       localDate,
+      personalDayEssence,
+      natalSunSign,
+      natalMoonSign,
+      natalMoonHouse,
+      natalAscSign,
+      natalMoonPhase,
+      advanceCategory,
+      advanceReason,
     })
     return (result as string) || 'Unable to generate morning synthesis.'
   } catch (err) {
