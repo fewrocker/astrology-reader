@@ -1,5 +1,18 @@
-import type { SpreadPosition, SpreadType } from './types'
+import type { SpreadPosition } from './types'
 export type { SpreadType, SpreadPosition } from './types'
+import type { SpreadMode } from '../../types/tarot'
+
+export interface SpreadDefinition {
+  positions: SpreadPosition[]
+}
+
+const spreadModeToType: Record<SpreadMode, string> = {
+  'past-present-future': 'three-past-present-future',
+  'situation-challenge-advice': 'three-situation-challenge-advice',
+  'mind-heart-action': 'three-mind-heart-action',
+  'self-other-bridge': 'three-self-other-bridge',
+  'theme-shadow-gift': 'three-theme-shadow-gift',
+}
 
 export const SPREAD_POSITIONS: SpreadPosition[] = [
   // Single card
@@ -198,6 +211,13 @@ export const SPREAD_POSITIONS: SpreadPosition[] = [
     positionIndex: 9,
   },
 ]
+
+export const SPREAD_DEFINITIONS: Record<SpreadMode, SpreadDefinition> = Object.fromEntries(
+  Object.entries(spreadModeToType).map(([mode, spreadType]) => [
+    mode,
+    { positions: SPREAD_POSITIONS.filter(p => p.spreadType === spreadType) },
+  ]),
+) as Record<SpreadMode, SpreadDefinition>
 
 // Celtic Cross positions for the CelticCrossReading component — uses gridArea for CSS grid layout.
 export interface CelticCrossPosition {

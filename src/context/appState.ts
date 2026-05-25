@@ -1,4 +1,4 @@
-import type { TarotView } from './TarotContext'
+import type { TarotSubView as TarotView } from './TarotContext'
 import type { City } from '../data/cityTypes'
 import type { ChartData } from '../engine/types'
 import type { Aspect } from '../engine/aspects'

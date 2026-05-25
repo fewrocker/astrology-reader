@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DrawnCard, InstantInterpretation, TarotAstroContext, SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
 import { SPREAD_DEFINITIONS } from '../../data/tarot/spreadPositions'
+import type { SpreadPosition } from '../../data/tarot/types'
 import GptSkeleton from '../ui/GptSkeleton'
 import { getTarotThreeSynthesis, RateLimitError } from '../../services/gptInterpretation'
+import type { TarotThreeSynthesisPayload, TarotCardPayload, SpreadPositionPayload } from '../../services/gptInterpretation'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -612,27 +614,56 @@ export default function ThreeCardReading({
     const controller = new AbortController()
     abortRef.current = controller
 
-    const payload = {
-      spreadMode,
-      cards: drawnCards.map((card, i) => ({
-        position: spreadPositions[i],
-        card: {
+    const suitCounts: Record<string, number> = {}
+    for (const c of drawnCards) if (c.suit) suitCounts[c.suit] = (suitCounts[c.suit] ?? 0) + 1
+    const topSuit = Object.entries(suitCounts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null
+
+    const payload: TarotThreeSynthesisPayload = {
+      cards: drawnCards.map((card, i) => {
+        const interp = instantInterpretations[i]
+        return {
           id: card.id,
           name: card.name,
           arcana: card.arcana,
-          number: card.number,
-          suit: card.suit,
+          suit: card.suit ?? undefined,
+          number: card.number ?? 0,
           element: card.element,
-        },
-        reversed: card.reversed,
-        instantInterpretation: {
-          coreMeaning: instantInterpretations[i]?.coreMeaning ?? '',
-          symbolicTheme: instantInterpretations[i]?.symbolicTheme ?? '',
-          emotionalMeaning: instantInterpretations[i]?.emotionalMeaning ?? '',
-        },
-      })),
-      synthesisSignals: signals,
+          reversed: card.reversed,
+          coreMeaning: interp?.coreMeaning ?? '',
+          symbolicTheme: interp?.symbolicTheme ?? '',
+          emotionalMeaning: interp?.emotionalMeaning ?? '',
+          practicalGuidance: interp?.practicalGuidance ?? '',
+          reflectionQuestion: interp?.reflectionQuestion ?? '',
+          numerologyResonance: interp?.numerologyNote ?? '',
+          astroHeadline: interp?.astroConnection.headline ?? '',
+          transitInfluence: interp?.astroConnection.transitInfluence ?? '',
+          lunarPhaseNote: interp?.astroConnection.lunarPhaseNote ?? null,
+        } satisfies TarotCardPayload
+      }) as [TarotCardPayload, TarotCardPayload, TarotCardPayload],
+      positions: spreadPositions.map((pos, i) => ({
+        index: i,
+        label: pos.label,
+        meaning: pos.meaning,
+      })) as [SpreadPositionPayload, SpreadPositionPayload, SpreadPositionPayload],
+      spreadMode,
+      signals: {
+        dominantArcana: signals.dominantArcana === 'mixed' ? 'balanced' : signals.dominantArcana,
+        majorArcanaCount: drawnCards.filter(c => c.arcana === 'major').length,
+        elementDistribution: signals.elementDistribution,
+        polarityCount: signals.polarityCount,
+        hasFoolOrWorld: signals.hasFoolOrWorld,
+        dominantSuit: topSuit,
+        numeralProgression: null,
+      },
       userIntention,
+      natalSunSign: astroContext.sunSign,
+      natalMoonSign: astroContext.moonSignNatal,
+      natalAscSign: astroContext.ascendant,
+      personalDay: astroContext.personalDay,
+      advanceCategory: astroContext.advanceCategory,
+      moonPhaseName: astroContext.moonPhase,
+      moonSign: astroContext.moonSign,
+      localDate: new Date().toISOString().split('T')[0],
     }
 
     const minDelay = new Promise<void>(r => setTimeout(r, 2000))
@@ -739,7 +770,7 @@ export default function ThreeCardReading({
         >
           {/* Spread mode label (shown after reading starts) */}
           <p className="text-mystic-muted text-xs uppercase tracking-[0.2em] mb-3">
-            {spreadDef.positions.map(p => p.label).join(' · ')}
+            {spreadDef.positions.map((p: SpreadPosition) => p.label).join(' · ')}
           </p>
 
           {/* Cards */}

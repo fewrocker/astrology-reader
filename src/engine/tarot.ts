@@ -534,7 +534,7 @@ export function computeInstantInterpretation(
     cardId: card.id,
     cardName: card.name,
     arcana: card.arcana,
-    suit: card.suit,
+    suit: card.suit ?? null,
     reversed,
     positionLabel: position?.label ?? null,
     positionMeaning: position?.meaning ?? null,
@@ -615,7 +615,7 @@ export function computeThreeCardSynthesis(
   }
 
   // Suit pattern
-  const suits: (TarotSuit | null)[] = cards.map(dc => dc.card.suit)
+  const suits: (TarotSuit | null)[] = cards.map(dc => dc.card.suit ?? null)
   const nonNullSuits = suits.filter((s): s is TarotSuit => s !== null)
   const allSameSuit = nonNullSuits.length === suits.length && new Set(nonNullSuits).size === 1
   const noMinorArcana = cards.every(dc => dc.card.arcana === 'major')

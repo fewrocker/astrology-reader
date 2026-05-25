@@ -5,16 +5,6 @@ import type { SlimReading, FullReading } from '../../services/readingsService'
 
 const PAGE_SIZE = 20
 
-const MOON_GLYPHS: Record<string, string> = {
-  'New Moon': '🌑',
-  'Waxing Crescent': '🌒',
-  'First Quarter': '🌓',
-  'Waxing Gibbous': '🌔',
-  'Full Moon': '🌕',
-  'Waning Gibbous': '🌖',
-  'Last Quarter': '🌗',
-  'Waning Crescent': '🌘',
-}
 
 function relativeTime(iso: string): string {
   const now = Date.now()
@@ -119,7 +109,7 @@ function DetailModal({ reading, onClose, onDelete }: DetailModalProps) {
           </p>
         )}
 
-        {reading.synthesis && (
+        {Boolean(reading.synthesis) && (
           <div style={{ borderTop: '1px solid #3a3a5c', paddingTop: '1rem', marginBottom: '1rem' }}>
             <p style={{ color: '#888', fontSize: '0.75rem', marginBottom: '0.5rem' }}>Synthesis</p>
             <p style={{ color: '#ccc', fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
