@@ -10,7 +10,7 @@ build/
 .next/
 
 # SQLite database
-data/
+/data/
 
 # Environment
 .env
