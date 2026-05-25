@@ -116,6 +116,7 @@ export function getDb(): Database.Database {
 
   addColumnIfMissing("ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'");
   addColumnIfMissing('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+  addColumnIfMissing('ALTER TABLE gpt_usage ADD COLUMN request_type TEXT');
 
   return instance;
 }
