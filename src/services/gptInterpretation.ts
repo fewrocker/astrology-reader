@@ -387,9 +387,126 @@ export async function getCoupleTransitInterpretation(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Tarot payload types (mirror of server/services/gptTarot.ts)
+// ---------------------------------------------------------------------------
+
+export interface TarotCardPayload {
+  id: string
+  name: string
+  arcana: 'major' | 'minor'
+  suit?: string
+  number: number
+  element: string | null
+  reversed: boolean
+  coreMeaning: string
+  symbolicTheme: string
+  emotionalMeaning: string
+  practicalGuidance: string
+  reflectionQuestion: string
+  numerologyResonance: string
+  astroHeadline: string
+  transitInfluence: string
+  lunarPhaseNote: string | null
+}
+
+export interface SpreadPositionPayload {
+  index: number
+  label: string
+  meaning: string
+}
+
+export interface ThreeCardSignals {
+  dominantArcana: 'major-heavy' | 'minor-heavy' | 'balanced'
+  majorArcanaCount: number
+  elementDistribution: Record<string, number>
+  polarityCount: { upright: number; reversed: number }
+  hasFoolOrWorld: boolean
+  dominantSuit: string | null
+  numeralProgression: string | null
+}
+
+export interface TarotSingleSynthesisPayload {
+  card: TarotCardPayload
+  position: SpreadPositionPayload | null
+  userIntention: string | null
+  natalSunSign: string
+  natalMoonSign: string
+  natalAscSign: string
+  personalDay: number
+  personalYear: number
+  advanceCategory: string | null
+  advanceReason: string | null
+  moonPhaseName: string
+  moonSign: string
+  spreadMode: string | null
+  localDate: string
+}
+
+export interface TarotThreeSynthesisPayload {
+  cards: [TarotCardPayload, TarotCardPayload, TarotCardPayload]
+  positions: [SpreadPositionPayload, SpreadPositionPayload, SpreadPositionPayload]
+  spreadMode: string
+  signals: ThreeCardSignals
+  userIntention: string | null
+  natalSunSign: string
+  natalMoonSign: string
+  natalAscSign: string
+  personalDay: number
+  advanceCategory: string | null
+  moonPhaseName: string
+  moonSign: string
+  localDate: string
+}
+
+export interface TarotCelticSynthesisPayload {
+  cards: TarotCardPayload[]
+  positions: SpreadPositionPayload[]
+  userIntention: string | null
+  natalSunSign: string
+  natalMoonSign: string
+  natalAscSign: string
+  natalMoonPhase: string | null
+  personalDay: number
+  personalYear: number
+  lifePathNumber: number
+  advanceCategory: string | null
+  advanceReason: string | null
+  moonPhaseName: string
+  moonSign: string
+  localDate: string
+}
+
+// ---------------------------------------------------------------------------
+// Tarot synthesis client functions
+// ---------------------------------------------------------------------------
+
+export async function getTarotSingleSynthesis(
+  payload: TarotSingleSynthesisPayload,
+): Promise<string> {
+  try {
+    const result = await callProxy('tarot-single-synthesis', payload)
+    return (result as string) || 'Unable to generate synthesis.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
+
+export async function getTarotThreeSynthesis(
+  payload: TarotThreeSynthesisPayload,
+): Promise<string> {
+  try {
+    const result = await callProxy('tarot-three-synthesis', payload)
+    return (result as string) || 'Unable to generate synthesis.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
+
 // Parses GPT response into chapters.
-// The server returns a plain string with sections delimited by heading lines
-// ("1. Psychological Dynamics\n..." etc). We split on numbered headings.
+// The server returns a plain string with sections delimited by numbered headings.
 function parseCelticChapters(raw: unknown): SynthesisChapter[] {
   if (!raw || typeof raw !== 'string') return []
   const sections = raw.split(/\n(?=\d+\.\s)/).map(s => s.trim()).filter(Boolean)
@@ -421,4 +538,54 @@ export async function getTarotDiscussResponse(
   } catch (err) {
     return err instanceof Error ? err.message : GPT_SERVER_ERROR
   }
+}
+
+export function buildTarotDiscussContext(
+  readingType: 'single-card' | 'three-card' | 'celtic-cross',
+  spreadMode: string | null,
+  cards: TarotCardPayload[],
+  positions: SpreadPositionPayload[],
+  synthesis: string | null,
+  natal: { sunSign: string; moonSign: string; ascSign: string; lifePathNumber: number; personalYear: number; personalDay: number },
+  sky: { moonPhaseName: string; moonSign: string; advanceCategory: string | null; topTransits: string[] },
+  userIntention: string | null,
+): string {
+  const intentionLine = userIntention
+    ? `READING INTENTION: "${userIntention}"`
+    : 'READING INTENTION: Open reading — no specific question'
+
+  const cardLines = cards.slice(0, 10).map((card, i) => {
+    const pos = positions[i]
+    const rev = card.reversed ? 'reversed' : 'upright'
+    return `${i + 1}. ${pos.label}: ${card.name} (${rev}) — ${card.symbolicTheme}. ${card.coreMeaning}. Sky: ${card.astroHeadline}`
+  }).join('\n')
+
+  const synthesisSection = synthesis
+    ? `GPT SYNTHESIS:\n${synthesis}`
+    : 'GPT SYNTHESIS: Not yet loaded.'
+
+  const transitsLine = sky.topTransits.length > 0
+    ? sky.topTransits.slice(0, 2).join('; ')
+    : 'No tight transit aspects.'
+
+  const advanceLine = sky.advanceCategory ? ` ${sky.advanceCategory} period.` : ''
+
+  return [
+    intentionLine,
+    '',
+    `CARDS DRAWN (${spreadMode ?? readingType.toUpperCase()}):`,
+    cardLines,
+    '',
+    synthesisSection,
+    '',
+    'NATAL CHART:',
+    `Sun in ${natal.sunSign}, Moon in ${natal.moonSign}, Ascendant in ${natal.ascSign}`,
+    `Life Path: ${natal.lifePathNumber}, Personal Year: ${natal.personalYear}, Personal Day: ${natal.personalDay}`,
+    '',
+    'CURRENT SKY:',
+    `${sky.moonPhaseName} Moon in ${sky.moonSign}.${advanceLine} ${transitsLine}`,
+    '',
+    `READING TYPE: ${readingType}`,
+    spreadMode ? `SPREAD MODE: ${spreadMode}` : '',
+  ].filter(line => line !== undefined).join('\n').trim()
 }

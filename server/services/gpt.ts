@@ -20,6 +20,16 @@ import {
   calculateSynastry, buildSynastryPrompt, buildCoupleTransitPrompt,
   type SynastryData,
 } from '../engine/synastryEngine.js'
+import {
+  handleTarotSingleSynthesis,
+  handleTarotThreeSynthesis,
+  handleTarotCelticSynthesis,
+  handleTarotDiscuss,
+  type TarotSingleSynthesisPayload,
+  type TarotThreeSynthesisPayload,
+  type TarotCelticSynthesisPayload,
+  type TarotDiscussPayload,
+} from './gptTarot.js'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,7 +78,7 @@ function getClient(): OpenAI {
   return _client
 }
 
-class GptServiceError extends Error {
+export class GptServiceError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
     this.name = 'GptServiceError'
@@ -77,7 +87,7 @@ class GptServiceError extends Error {
 
 const RETRYABLE = new Set([429, 503, 504])
 
-async function retryWithBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function retryWithBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
   let lastError: unknown
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
@@ -94,7 +104,7 @@ async function retryWithBackoff<T>(fn: () => Promise<T>, maxAttempts = 3): Promi
   throw lastError
 }
 
-async function callOpenAI(
+export async function callOpenAI(
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
   options: { temperature?: number; max_tokens?: number } = {},
 ): Promise<string> {
@@ -129,7 +139,7 @@ async function callOpenAI(
 // Shared birth context resolution
 // ---------------------------------------------------------------------------
 
-interface BirthContext {
+export interface BirthContext {
   birthDate: string
   birthTime: string
   lat: number
@@ -138,7 +148,7 @@ interface BirthContext {
   unknownTime: boolean
 }
 
-function resolveUserBirthContext(userId: number): BirthContext | null {
+export function resolveUserBirthContext(userId: number): BirthContext | null {
   try {
     const db = getDb()
     const row = db
@@ -1012,6 +1022,14 @@ export async function handleGptRequest(
       return handleSynastryInterpretation(payload as Parameters<typeof handleSynastryInterpretation>[0])
     case 'couple-transit-interpretation':
       return handleCoupleTransitInterpretation(payload as Parameters<typeof handleCoupleTransitInterpretation>[0])
+    case 'tarot-single-synthesis':
+      return handleTarotSingleSynthesis(payload as TarotSingleSynthesisPayload, userId)
+    case 'tarot-three-synthesis':
+      return handleTarotThreeSynthesis(payload as TarotThreeSynthesisPayload, userId)
+    case 'tarot-celtic-synthesis':
+      return handleTarotCelticSynthesis(payload as TarotCelticSynthesisPayload, userId)
+    case 'tarot-discuss':
+      return handleTarotDiscuss(payload as TarotDiscussPayload)
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }
