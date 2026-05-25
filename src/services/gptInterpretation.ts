@@ -1,6 +1,7 @@
 import type { ChartData } from '../engine/types'
 import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
+import type { CelticSynthesisPayload, SynthesisChapter } from '../components/tarot/types'
 import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_TIMEOUT, GPT_NUDGE } from './gptErrors'
 import { track } from './analytics'
 import { AUTH_TOKEN_KEY } from './authService'
@@ -382,6 +383,42 @@ export async function getCoupleTransitInterpretation(
     return (result as string) || 'Unable to generate synastry interpretation.'
   } catch (err) {
     if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
+
+// Parses GPT response into chapters.
+// The server returns a plain string with sections delimited by heading lines
+// ("1. Psychological Dynamics\n..." etc). We split on numbered headings.
+function parseCelticChapters(raw: unknown): SynthesisChapter[] {
+  if (!raw || typeof raw !== 'string') return []
+  const sections = raw.split(/\n(?=\d+\.\s)/).map(s => s.trim()).filter(Boolean)
+  return sections.map(section => {
+    const newline = section.indexOf('\n')
+    if (newline === -1) return { heading: section, body: '' }
+    const heading = section.slice(0, newline).replace(/^\d+\.\s+/, '').trim()
+    const body = section.slice(newline + 1).trim()
+    return { heading, body }
+  })
+}
+
+export async function getTarotCelticSynthesis(
+  payload: CelticSynthesisPayload,
+): Promise<SynthesisChapter[]> {
+  const result = await callProxy('tarot-celtic-synthesis', payload)
+  const chapters = parseCelticChapters(result)
+  if (chapters.length === 0) throw new Error('Empty synthesis response')
+  return chapters
+}
+
+export async function getTarotDiscussResponse(
+  discussContext: string,
+  messages: ChatMessage[],
+): Promise<string> {
+  try {
+    const result = await callProxy('tarot-discuss', { discussContext, messages })
+    return (result as string) || 'Unable to generate a response.'
+  } catch (err) {
     return err instanceof Error ? err.message : GPT_SERVER_ERROR
   }
 }
