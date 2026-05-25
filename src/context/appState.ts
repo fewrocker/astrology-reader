@@ -40,6 +40,7 @@ export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'trans
   | 'solar-return-loading' | 'solar-return'
   | 'today'
   | 'journal'
+  | 'tarot'
 
 export const DREAM_SESSION_KEY_PREFIX = 'dream-session-'
 

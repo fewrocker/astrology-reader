@@ -19,6 +19,7 @@ import SolarReturnPage from './components/results/SolarReturnPage'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
 import CosmicJournalPage from './components/journal/CosmicJournalPage'
+import TarotPage from './components/tarot/TarotPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -603,6 +604,13 @@ function AppContent() {
         )}
         {state.view === 'journal' && (
           <CosmicJournalPage chartData={journalChartData} birthData={state.birthData} />
+        )}
+        {state.view === 'tarot' && (
+          <TarotPage
+            chartData={journalChartData}
+            birthDate={state.birthData.date}
+            onOpenUpgrade={openUpgrade}
+          />
         )}
       </div>
 
