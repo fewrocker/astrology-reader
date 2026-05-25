@@ -1,142 +1,157 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useReducer } from 'react'
+import type { ReactNode } from 'react'
 
-export type TarotReadingType = 'single' | 'three-card' | 'celtic-cross'
-
-export type TarotView =
-  | 'intention'
-  | 'mode-select'
-  | 'draw'
-  | 'reveal'
-  | 'interpretation'
-  | 'synthesis'
-  | 'saved'
-
+// Placeholder types — replaced when src/engine/tarot.ts and src/data/tarot/spreadPositions.ts land
 export interface DrawnCard {
-  cardId: string
-  reversed: boolean
-  position: number
-  spreadPositionLabel: string
+  id: string
+  name: string
+  suit: string | null
+  number: number | null
 }
 
 export interface InstantInterpretation {
   cardId: string
-  uprightMeaning: string
-  reversedMeaning: string
-  emotionalMeaning: string
-  practicalGuidance: string
-  reflectionQuestion: string
-  numerologyResonance: string
-  astroHeadline: string
-  transitInfluence: string
+  position: string
+  text: string
 }
 
-export type SynthesisStatus = 'idle' | 'loading' | 'success' | 'unavailable' | 'rate-limited'
+export interface SpreadMode {
+  id: string
+  label: string
+  positions: string[]
+}
+
+export type TarotSubView =
+  | 'home'
+  | 'single-reading'
+  | 'three-reading'
+  | 'celtic-reading'
+  | 'saved-readings'
+
+export type ReadingMode = 'single' | 'three' | 'celtic'
 
 export interface TarotState {
-  tarotView: TarotView
-  readingType: TarotReadingType | null
-  spreadMode: string | null
+  subView: TarotSubView
+  readingMode: ReadingMode | null
   userIntention: string
   drawnCards: DrawnCard[]
-  interpretations: InstantInterpretation[]
-  revealIndex: number
-  synthesisStatus: SynthesisStatus
-  synthesisText: string | null
+  reversals: boolean[]
+  instantInterpretations: InstantInterpretation[]
+  spreadMode: SpreadMode | null
+  gptSynthesis: string | null
+  gptSynthesisStatus: 'idle' | 'loading' | 'success' | 'error' | 'rate-limited'
+  gptSynthesisError: string | null
   savedReadingIds: string[]
+  currentReadingId: string | null
 }
 
-interface TarotContextType {
-  tarot: TarotState
-  setTarotView: (view: TarotView) => void
-  setReadingType: (type: TarotReadingType | null) => void
-  setSpreadMode: (mode: string | null) => void
-  setUserIntention: (intention: string) => void
-  setDrawnCards: (cards: DrawnCard[]) => void
-  setInterpretations: (interpretations: InstantInterpretation[]) => void
-  setRevealIndex: (index: number) => void
-  setSynthesisStatus: (status: SynthesisStatus) => void
-  setSynthesisText: (text: string | null) => void
-  setSavedReadingIds: (ids: string[]) => void
-}
-
-const TarotContext = createContext<TarotContextType | null>(null)
+export type TarotAction =
+  | { type: 'NAVIGATE_TAROT'; subView: TarotSubView }
+  | { type: 'SET_INTENTION'; intention: string }
+  | { type: 'SET_READING_MODE'; mode: ReadingMode }
+  | { type: 'SET_SPREAD_MODE'; spreadMode: SpreadMode }
+  | { type: 'SET_DRAWN_CARDS'; cards: DrawnCard[]; reversals: boolean[] }
+  | { type: 'SET_INSTANT_INTERPRETATIONS'; interpretations: InstantInterpretation[] }
+  | { type: 'SET_GPT_SYNTHESIS_STATUS'; status: TarotState['gptSynthesisStatus'] }
+  | { type: 'SET_GPT_SYNTHESIS'; synthesis: string }
+  | { type: 'SET_GPT_SYNTHESIS_ERROR'; error: string }
+  | { type: 'SAVE_READING'; readingId: string }
+  | { type: 'RESET_READING' }
 
 const initialTarotState: TarotState = {
-  tarotView: 'intention',
-  readingType: null,
-  spreadMode: null,
+  subView: 'home',
+  readingMode: null,
   userIntention: '',
   drawnCards: [],
-  interpretations: [],
-  revealIndex: 0,
-  synthesisStatus: 'idle',
-  synthesisText: null,
+  reversals: [],
+  instantInterpretations: [],
+  spreadMode: null,
+  gptSynthesis: null,
+  gptSynthesisStatus: 'idle',
+  gptSynthesisError: null,
   savedReadingIds: [],
+  currentReadingId: null,
 }
 
-export function TarotProvider({ children }: { children: ReactNode }) {
-  const [tarot, setTarot] = useState<TarotState>(initialTarotState)
+function tarotReducer(state: TarotState, action: TarotAction): TarotState {
+  switch (action.type) {
+    case 'NAVIGATE_TAROT':
+      return { ...state, subView: action.subView }
+    case 'SET_INTENTION':
+      return { ...state, userIntention: action.intention }
+    case 'SET_READING_MODE':
+      return { ...state, readingMode: action.mode }
+    case 'SET_SPREAD_MODE':
+      return { ...state, spreadMode: action.spreadMode }
+    case 'SET_DRAWN_CARDS':
+      return { ...state, drawnCards: action.cards, reversals: action.reversals }
+    case 'SET_INSTANT_INTERPRETATIONS':
+      return { ...state, instantInterpretations: action.interpretations }
+    case 'SET_GPT_SYNTHESIS_STATUS':
+      return { ...state, gptSynthesisStatus: action.status }
+    case 'SET_GPT_SYNTHESIS':
+      return { ...state, gptSynthesis: action.synthesis, gptSynthesisStatus: 'success' }
+    case 'SET_GPT_SYNTHESIS_ERROR':
+      return { ...state, gptSynthesisError: action.error, gptSynthesisStatus: 'error' }
+    case 'SAVE_READING':
+      return {
+        ...state,
+        currentReadingId: action.readingId,
+        savedReadingIds: state.savedReadingIds.includes(action.readingId)
+          ? state.savedReadingIds
+          : [...state.savedReadingIds, action.readingId],
+      }
+    case 'RESET_READING':
+      return {
+        ...state,
+        drawnCards: [],
+        reversals: [],
+        instantInterpretations: [],
+        gptSynthesis: null,
+        gptSynthesisStatus: 'idle',
+        gptSynthesisError: null,
+        readingMode: null,
+        spreadMode: null,
+        userIntention: '',
+      }
+    default:
+      return state
+  }
+}
 
-  const setTarotView = useCallback((view: TarotView) => {
-    setTarot(prev => ({ ...prev, tarotView: view }))
-  }, [])
+export interface TarotAstroContext {
+  birthDate: string
+  personalDay: number
+  moonPhase: unknown | null
+  transitAspects: unknown[] | null
+  advanceCategory: string | null
+  dominantElement: 'Fire' | 'Water' | 'Air' | 'Earth' | null
+}
 
-  const setReadingType = useCallback((type: TarotReadingType | null) => {
-    setTarot(prev => ({ ...prev, readingType: type }))
-  }, [])
+interface TarotContextValue {
+  state: TarotState
+  dispatch: React.Dispatch<TarotAction>
+  astroContext: TarotAstroContext | null
+}
 
-  const setSpreadMode = useCallback((mode: string | null) => {
-    setTarot(prev => ({ ...prev, spreadMode: mode }))
-  }, [])
+const TarotContext = createContext<TarotContextValue | null>(null)
 
-  const setUserIntention = useCallback((intention: string) => {
-    setTarot(prev => ({ ...prev, userIntention: intention }))
-  }, [])
-
-  const setDrawnCards = useCallback((cards: DrawnCard[]) => {
-    setTarot(prev => ({ ...prev, drawnCards: cards }))
-  }, [])
-
-  const setInterpretations = useCallback((interpretations: InstantInterpretation[]) => {
-    setTarot(prev => ({ ...prev, interpretations }))
-  }, [])
-
-  const setRevealIndex = useCallback((index: number) => {
-    setTarot(prev => ({ ...prev, revealIndex: index }))
-  }, [])
-
-  const setSynthesisStatus = useCallback((status: SynthesisStatus) => {
-    setTarot(prev => ({ ...prev, synthesisStatus: status }))
-  }, [])
-
-  const setSynthesisText = useCallback((text: string | null) => {
-    setTarot(prev => ({ ...prev, synthesisText: text }))
-  }, [])
-
-  const setSavedReadingIds = useCallback((ids: string[]) => {
-    setTarot(prev => ({ ...prev, savedReadingIds: ids }))
-  }, [])
-
+export function TarotProvider({
+  children,
+  astroContext,
+}: {
+  children: ReactNode
+  astroContext: TarotAstroContext | null
+}) {
+  const [state, dispatch] = useReducer(tarotReducer, initialTarotState)
   return (
-    <TarotContext.Provider value={{
-      tarot,
-      setTarotView,
-      setReadingType,
-      setSpreadMode,
-      setUserIntention,
-      setDrawnCards,
-      setInterpretations,
-      setRevealIndex,
-      setSynthesisStatus,
-      setSynthesisText,
-      setSavedReadingIds,
-    }}>
+    <TarotContext.Provider value={{ state, dispatch, astroContext }}>
       {children}
     </TarotContext.Provider>
   )
 }
 
-export function useTarot(): TarotContextType {
+export function useTarot(): TarotContextValue {
   const ctx = useContext(TarotContext)
   if (!ctx) throw new Error('useTarot must be used within TarotProvider')
   return ctx

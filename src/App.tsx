@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { TarotProvider } from './context/TarotContext'
 import MigrationBanner from './components/auth/MigrationBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
@@ -20,6 +19,7 @@ import SolarReturnPage from './components/results/SolarReturnPage'
 import NumerologyPage from './components/results/NumerologyPage'
 import TodayPage from './components/reading/TodayPage'
 import CosmicJournalPage from './components/journal/CosmicJournalPage'
+import TarotPage from './components/tarot/TarotPage'
 import { calculateChart } from './engine/astronomy'
 import { calculateAspects } from './engine/aspects'
 import { assembleReading } from './data/interpretations'
@@ -606,11 +606,11 @@ function AppContent() {
           <CosmicJournalPage chartData={journalChartData} birthData={state.birthData} />
         )}
         {state.view === 'tarot' && (
-          <TarotProvider>
-            <div className="text-center py-24">
-              <p className="text-mystic-gold font-heading text-xl">Tarot coming soon</p>
-            </div>
-          </TarotProvider>
+          <TarotPage
+            chartData={journalChartData}
+            birthDate={state.birthData.date}
+            onOpenUpgrade={openUpgrade}
+          />
         )}
       </div>
 
