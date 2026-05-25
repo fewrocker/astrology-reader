@@ -70,6 +70,18 @@ export function getDb(): Database.Database {
       count   INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, date)
     );
+
+    CREATE TABLE IF NOT EXISTS tarot_usage (
+      user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date              TEXT NOT NULL,
+      week_start        TEXT NOT NULL,
+      daily_cards       INTEGER NOT NULL DEFAULT 0,
+      weekly_three_card INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tarot_usage_week
+      ON tarot_usage (user_id, week_start);
   `);
 
   // Apply OAuth migration if not already applied.
