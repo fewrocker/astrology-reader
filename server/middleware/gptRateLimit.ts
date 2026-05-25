@@ -27,11 +27,10 @@ const authenticated: Map<number, RateLimitEntry> = new Map()
 // Authenticated counts are the monetization-critical path and are persisted.
 const unauthenticated: Map<string, RateLimitEntry> = new Map()
 
-const TIER_LIMITS: Record<Tier, number> = {
-  free: 3,
-  basic: 20,
-  advanced: 100,
-}
+const TIER_LIMITS: Record<Tier, number> =
+  process.env.NODE_ENV !== 'production'
+    ? { free: 10000, basic: 10000, advanced: 10000 }
+    : { free: 3, basic: 20, advanced: 100 }
 
 // Prepared statements cached at module level for performance (spec §63).
 // Initialized lazily on first use (after DB is ready).
