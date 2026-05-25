@@ -1,0 +1,1006 @@
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type {
+  TarotAstroContext,
+  DrawnCard,
+  InstantInterpretation,
+  SynthesisChapter,
+  SavedReading,
+  CelticSynthesisPayload,
+  CelticCrossPrecomputedSignals,
+} from './types'
+import { CELTIC_CROSS_POSITIONS } from '../../data/tarot/spreadPositions'
+import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInterpretation'
+import TarotCard from './TarotCard'
+import TarotSynthesisPanel from './TarotSynthesisPanel'
+import TarotDiscussPanel from './TarotDiscussPanel'
+
+// ─── Props ───────────────────────────────────────────────────────────────────
+
+interface CelticCrossReadingProps {
+  userIntention: string | null
+  tarotAstroContext: TarotAstroContext
+  onSave: (reading: SavedReading) => void
+  onDiscard: () => void
+}
+
+// ─── State machine phase ──────────────────────────────────────────────────────
+// Phases progress linearly; synthesis fires concurrently during staff reveal.
+type Phase =
+  | 'dealing'            // dealing animation (1.2 s), all face-down
+  | 'awaiting-12'        // waiting for user to flip positions 1+2 together
+  | 'holding'            // mandatory 3-second contemplation hold
+  | 'continuing'         // hold complete — faint Continue affordance shown
+  | 'cross-staff-transition'   // boundary text between cross and staff
+  | 'final-pause'        // 2-second silence after card 10
+  | 'constellation-text' // full-screen overlay "read as constellation"
+  | 'synthesis'          // chapters arriving sequentially
+  | 'complete'           // reading done, Save/Discard visible
+
+type SynthesisStatus = 'idle' | 'loading' | 'ready' | 'error'
+type SynthesisErrorKind = 'unavailable' | 'rate-limited' | 'timeout' | 'session-expired'
+
+// ─── Stub: mock card draw ─────────────────────────────────────────────────────
+// Engine (task-0006) will replace this with a proper 78-card deck shuffle/deal.
+const CARD_POOL: Omit<DrawnCard, 'reversed'>[] = [
+  { cardId: 'high-priestess', cardName: 'The High Priestess', arcana: 'major', element: 'Water', number: 2, coreMeaning: 'Inner knowing and mystery', symbolicTheme: 'The veil between worlds', emotionalMeaning: 'Deep trust in what is felt but not yet seen', astroConnection: 'Moon — the tides of intuition' },
+  { cardId: 'the-tower', cardName: 'The Tower', arcana: 'major', element: 'Fire', number: 16, coreMeaning: 'Sudden revelation, the fall of false structures', symbolicTheme: 'Lightning clearing the way', emotionalMeaning: 'The shock that precedes clarity', astroConnection: 'Mars — force cutting through obstruction' },
+  { cardId: 'eight-of-cups', cardName: 'Eight of Cups', arcana: 'minor', suit: 'cups', element: 'Water', number: 8, coreMeaning: 'Turning away from what no longer satisfies', symbolicTheme: 'The pilgrim walking upstream', emotionalMeaning: 'A sadness that is also a liberation', astroConnection: 'Saturn in Pisces — the discipline of departure' },
+  { cardId: 'three-of-pentacles', cardName: 'Three of Pentacles', arcana: 'minor', suit: 'pentacles', element: 'Earth', number: 3, coreMeaning: 'Mastery emerging through collaboration', symbolicTheme: 'The cathedral being built', emotionalMeaning: 'Satisfaction in skilled, witnessed effort', astroConnection: 'Mars in Capricorn — building with purpose' },
+  { cardId: 'the-star', cardName: 'The Star', arcana: 'major', element: 'Air', number: 17, coreMeaning: 'Hope renewed, guidance from the deep sky', symbolicTheme: 'The naked figure pouring water under stars', emotionalMeaning: 'Quiet faith returning after upheaval', astroConnection: 'Aquarius — the waters of consciousness poured freely' },
+  { cardId: 'the-world', cardName: 'The World', arcana: 'major', element: 'Earth', number: 21, coreMeaning: 'Completion, wholeness, full integration', symbolicTheme: 'The dancer in the wreath', emotionalMeaning: 'The deep satisfaction of a cycle fulfilled', astroConnection: 'Saturn — the teacher who grants mastery' },
+  { cardId: 'knight-of-swords', cardName: 'Knight of Swords', arcana: 'minor', suit: 'swords', element: 'Air', coreMeaning: 'Swift decisive action, clarity cutting through', symbolicTheme: 'The mind charging into its conclusion', emotionalMeaning: 'The thrill and risk of moving fast', astroConnection: 'Gemini energy — thought in motion' },
+  { cardId: 'the-moon', cardName: 'The Moon', arcana: 'major', element: 'Water', number: 18, coreMeaning: 'Illusion, the unconscious, what cannot be seen clearly', symbolicTheme: 'The path between the twin towers at night', emotionalMeaning: 'Anxiety, mystery, and the longing to see clearly', astroConnection: 'Pisces — the dissolving of boundaries' },
+  { cardId: 'five-of-wands', cardName: 'Five of Wands', arcana: 'minor', suit: 'wands', element: 'Fire', number: 5, coreMeaning: 'Competing forces, creative friction, striving', symbolicTheme: 'Five figures clashing with their own instruments', emotionalMeaning: 'The frustration that sharpens clarity', astroConnection: 'Saturn in Leo — the test of identity' },
+  { cardId: 'judgement', cardName: 'Judgement', arcana: 'major', element: 'Fire', number: 20, coreMeaning: 'The call to rise, a summoning toward new life', symbolicTheme: 'The trumpet sounding the resurrection', emotionalMeaning: 'A readiness to answer a long-awaited call', astroConnection: 'Pluto — deep transformation answering its own necessity' },
+]
+
+function generateMockDraw(): DrawnCard[] {
+  return CARD_POOL.map((card, i) => ({ ...card, reversed: (i * 7 + 3) % 5 === 0 }))
+}
+
+// ─── Stub: instant interpretation ────────────────────────────────────────────
+// Engine (task-0006) will provide a proper computeInstantInterpretation.
+function computeInstantInterpretation(card: DrawnCard, position: typeof CELTIC_CROSS_POSITIONS[number]): InstantInterpretation {
+  const reversalNote = card.reversed
+    ? `In reversal, ${card.coreMeaning.toLowerCase()} turns inward — its energy blocked, inverted, or awaiting release.`
+    : null
+  return {
+    cardId: card.cardId,
+    position: position.number,
+    positionName: position.name,
+    positionDescription: position.description,
+    coreMeaning: card.coreMeaning,
+    emotionalMeaning: card.emotionalMeaning,
+    astroConnection: card.astroConnection,
+    reversalNote,
+  }
+}
+
+// ─── Structural signals ───────────────────────────────────────────────────────
+function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSignals {
+  const elementDist: Record<string, number> = {}
+  const suitDist: Record<string, number> = {}
+  const numerology: Record<number, number> = {}
+  let majorCount = 0, reversalCount = 0
+  let foolPos: number | null = null, worldPos: number | null = null
+
+  cards.forEach((card, i) => {
+    if (card.arcana === 'major') majorCount++
+    if (card.reversed) reversalCount++
+    if (card.element) elementDist[card.element] = (elementDist[card.element] ?? 0) + 1
+    if (card.suit) suitDist[card.suit] = (suitDist[card.suit] ?? 0) + 1
+    if (card.number !== undefined) numerology[card.number] = (numerology[card.number] ?? 0) + 1
+    if (card.cardId === 'the-fool') foolPos = i + 1
+    if (card.cardId === 'the-world') worldPos = i + 1
+  })
+
+  const dominantElement = Object.entries(elementDist).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  const repeatingNumerology = Object.entries(numerology).filter(([, v]) => v > 1).map(([k]) => Number(k))
+
+  return {
+    majorArcanaCount: majorCount,
+    minorArcanaCount: cards.length - majorCount,
+    dominantElement,
+    elementDistribution: elementDist,
+    reversalCount,
+    hasFoolOrWorld: foolPos !== null || worldPos !== null,
+    foolPosition: foolPos,
+    worldPosition: worldPos,
+    repeatingNumerology,
+    suitDistribution: suitDist,
+  }
+}
+
+// ─── Build synthesis payload ──────────────────────────────────────────────────
+function buildCelticSynthesisPayload(
+  cards: DrawnCard[],
+  interps: InstantInterpretation[],
+  astroContext: TarotAstroContext,
+  userIntention: string | null,
+): CelticSynthesisPayload {
+  return {
+    cards: cards.map((card, i) => ({
+      position: i + 1,
+      positionName: CELTIC_CROSS_POSITIONS[i].name,
+      positionDescription: CELTIC_CROSS_POSITIONS[i].description,
+      cardName: card.cardName,
+      cardId: card.cardId,
+      arcana: card.arcana,
+      suit: card.suit,
+      element: card.element,
+      reversed: card.reversed,
+      coreMeaning: interps[i]?.coreMeaning ?? card.coreMeaning,
+      symbolicTheme: card.symbolicTheme,
+      emotionalMeaning: interps[i]?.emotionalMeaning ?? card.emotionalMeaning,
+      astroConnection: interps[i]?.astroConnection ?? card.astroConnection,
+    })),
+    precomputedSignals: computeCelticCrossSignals(cards),
+    astroContext,
+    userIntention,
+    spreadType: 'celtic-cross',
+  }
+}
+
+// ─── Build discuss context string ─────────────────────────────────────────────
+function buildDiscussContext(
+  cards: DrawnCard[],
+  interps: InstantInterpretation[],
+  astroContext: TarotAstroContext,
+  userIntention: string | null,
+  synthesisChapters: SynthesisChapter[],
+): string {
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  let ctx = `User intention: ${userIntention ?? 'Not stated'}\n\n`
+  ctx += `CELTIC CROSS READING — ${date}\n`
+  ctx += `Natal: ${astroContext.sunSign}, ${astroContext.moonSign}, ${astroContext.ascendant} | Moon: ${astroContext.currentMoonPhase} | Personal Day: ${astroContext.personalDay}\n`
+  ctx += `Significant transits: ${astroContext.significantTransits.join(', ') || 'None noted'}\n`
+  ctx += astroContext.advanceCategory ? `Advance category: ${astroContext.advanceCategory}\n` : ''
+  ctx += '\nPOSITIONS AND CARDS:\n'
+  cards.forEach((card, i) => {
+    ctx += `${i + 1}. ${CELTIC_CROSS_POSITIONS[i].name} — ${card.cardName} (${card.reversed ? 'Reversed' : 'Upright'})\n`
+    ctx += `   ${interps[i]?.coreMeaning ?? card.coreMeaning} | ${interps[i]?.astroConnection ?? card.astroConnection}\n`
+  })
+  const signals = computeCelticCrossSignals(cards)
+  ctx += `\nPRE-SYNTHESIS SIGNALS:\n`
+  ctx += `Major Arcana: ${signals.majorArcanaCount}/10 | Dominant element: ${signals.dominantElement ?? 'None'} | Reversals: ${signals.reversalCount}\n`
+  if (synthesisChapters.length > 0) {
+    ctx += '\nAI SYNTHESIS:\n'
+    ctx += synthesisChapters.map(c => `${c.heading}\n${c.body}`).join('\n\n')
+  }
+  return ctx
+}
+
+// ─── AI-free reading fallback ──────────────────────────────────────────────────
+function AiFreeReadingSummary({ cards, interps }: { cards: DrawnCard[]; interps: InstantInterpretation[] }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {cards.map((card, i) => (
+        <div key={i} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(201,168,76,0.12)' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', marginBottom: '0.4rem' }}>
+            <span className="font-heading" style={{ color: '#c9a84c', fontSize: '0.875rem' }}>
+              {CELTIC_CROSS_POSITIONS[i].name}
+            </span>
+            <span style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.8rem' }}>—</span>
+            <span style={{ color: 'rgba(232,230,227,0.8)', fontSize: '0.875rem' }}>
+              {card.cardName} {card.reversed ? '(Reversed)' : '(Upright)'}
+            </span>
+          </div>
+          <p style={{ color: 'rgba(232,230,227,0.7)', fontSize: '0.85rem', lineHeight: 1.65, margin: 0 }}>{interps[i]?.coreMeaning}</p>
+          <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.8rem', marginTop: '0.35rem', fontStyle: 'italic' }}>{interps[i]?.emotionalMeaning}</p>
+          {interps[i]?.reversalNote && (
+            <p style={{ color: 'rgba(200,150,100,0.65)', fontSize: '0.8rem', marginTop: '0.35rem' }}>{interps[i].reversalNote}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ─── Cross-to-staff transition overlay ────────────────────────────────────────
+function CrossStaffTransition({ visible }: { visible: boolean }) {
+  return (
+    <div
+      aria-live="assertive"
+      aria-atomic="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(0,0,0,0.15)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 20,
+        pointerEvents: 'none',
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.3s ease',
+      }}
+    >
+      <p
+        className="font-heading"
+        style={{
+          color: 'rgba(255,255,255,0.85)',
+          fontSize: '1.125rem',
+          fontStyle: 'italic',
+          textAlign: 'center',
+          maxWidth: '480px',
+          padding: '0 2rem',
+        }}
+      >
+        The cross has spoken. The staff now tells you where you are going.
+      </p>
+    </div>
+  )
+}
+
+// ─── Constellation overlay ────────────────────────────────────────────────────
+function ConstellationOverlay({ visible }: { visible: boolean }) {
+  return (
+    <div
+      aria-live="assertive"
+      aria-atomic="true"
+      role="status"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.75)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+        opacity: visible ? 1 : 0,
+        transition: 'opacity 0.8s ease-out',
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+    >
+      <p
+        className="font-heading"
+        style={{
+          color: 'rgba(255,255,255,0.92)',
+          fontSize: '1.375rem',
+          fontStyle: 'italic',
+          textAlign: 'center',
+          maxWidth: '520px',
+          padding: '0 2rem',
+          lineHeight: 1.5,
+        }}
+      >
+        The cards are now being read as a constellation.
+      </p>
+    </div>
+  )
+}
+
+// ─── Error panel ─────────────────────────────────────────────────────────────
+interface ErrorPanelProps {
+  kind: SynthesisErrorKind
+  cards: DrawnCard[]
+  interps: InstantInterpretation[]
+  onRetry: () => void
+  onShowIndividual: () => void
+}
+function ErrorPanel({ kind, cards, interps, onRetry, onShowIndividual }: ErrorPanelProps) {
+  if (kind === 'rate-limited') {
+    return (
+      <div style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
+        <p className="font-heading" style={{ color: '#c9a84c', fontSize: '1.1rem', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+          You've drawn the full cross. The synthesis is an Advanced feature.
+        </p>
+        <p style={{ color: 'rgba(232,230,227,0.65)', fontSize: '0.875rem', lineHeight: 1.7, marginBottom: '1.5rem' }}>
+          Upgrade to Advanced to receive the full constellation synthesis — all eight sections, the complete astrological resonance, and the reflection prompts.
+        </p>
+        <button type="button" onClick={onShowIndividual} style={linkBtnStyle}>
+          Read cards individually
+        </button>
+      </div>
+    )
+  }
+
+  if (kind === 'session-expired') {
+    return (
+      <div style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
+        <p className="font-heading" style={{ color: '#c9a84c', fontSize: '1.1rem', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+          Your session has ended. Your cards are preserved — tap to reconnect.
+        </p>
+        <button type="button" onClick={onRetry} style={primaryBtnStyle}>
+          Reconnect
+        </button>
+      </div>
+    )
+  }
+
+  // unavailable or timeout
+  return (
+    <div style={{ padding: '2rem 1.5rem' }}>
+      <p className="font-heading" style={{ color: '#c9a84c', fontSize: '1.1rem', marginBottom: '0.5rem', fontStyle: 'italic', textAlign: 'center' }}>
+        The synthesis is resting.
+      </p>
+      <p style={{ color: 'rgba(232,230,227,0.65)', fontSize: '0.875rem', lineHeight: 1.7, textAlign: 'center', marginBottom: '1.25rem' }}>
+        The ten cards have been read and their individual interpretations are complete. The constellation synthesis requires a connection to the sky — and the sky is briefly unavailable.
+      </p>
+      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '2rem' }}>
+        <button type="button" onClick={onRetry} style={primaryBtnStyle}>Retry</button>
+        <button type="button" onClick={onShowIndividual} style={outlineBtnStyle}>Read cards individually</button>
+      </div>
+      <AiFreeReadingSummary cards={cards} interps={interps} />
+    </div>
+  )
+}
+
+// ─── Button style constants ───────────────────────────────────────────────────
+const primaryBtnStyle: React.CSSProperties = {
+  background: '#c9a84c',
+  color: '#0f0b05',
+  border: 'none',
+  borderRadius: '8px',
+  padding: '0.65rem 1.5rem',
+  fontSize: '0.875rem',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+}
+const outlineBtnStyle: React.CSSProperties = {
+  background: 'transparent',
+  color: 'rgba(201,168,76,0.7)',
+  border: '1px solid rgba(201,168,76,0.3)',
+  borderRadius: '8px',
+  padding: '0.65rem 1.5rem',
+  fontSize: '0.875rem',
+  fontFamily: 'inherit',
+  cursor: 'pointer',
+}
+const linkBtnStyle: React.CSSProperties = {
+  background: 'none',
+  border: 'none',
+  color: 'rgba(201,168,76,0.6)',
+  fontSize: '0.875rem',
+  cursor: 'pointer',
+  textDecoration: 'underline',
+  fontFamily: 'inherit',
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function CelticCrossReading({
+  userIntention,
+  tarotAstroContext,
+  onSave,
+  onDiscard,
+}: CelticCrossReadingProps) {
+  // ── Card data (determined at mount, revealed progressively) ───────────────
+  const [drawnCards] = useState<DrawnCard[]>(() => generateMockDraw())
+  const [interpretations] = useState<InstantInterpretation[]>(
+    () => drawnCards.map((card, i) => computeInstantInterpretation(card, CELTIC_CROSS_POSITIONS[i]))
+  )
+
+  // ── State machine ─────────────────────────────────────────────────────────
+  const [phase, setPhase] = useState<Phase>('dealing')
+  const [activePosition, setActivePosition] = useState<number>(2)  // 1-indexed, current position in hold/continue cycle
+  const [revealedPositions, setRevealedPositions] = useState<Set<number>>(new Set())
+  const holdStartRef = useRef<number>(0)
+
+  // ── Synthesis ─────────────────────────────────────────────────────────────
+  const [synthesisStatus, setSynthesisStatus] = useState<SynthesisStatus>('idle')
+  const [synthesisChapters, setSynthesisChapters] = useState<SynthesisChapter[]>([])
+  const [synthesisError, setSynthesisError] = useState<SynthesisErrorKind | null>(null)
+  const [chaptersDisplayed, setChaptersDisplayed] = useState(0)
+  const [showAiFree, setShowAiFree] = useState(false)
+  const synthesisFireRef = useRef(false)
+  const synthesisStartTimeRef = useRef<number>(0)
+
+  // ── Background temperature ────────────────────────────────────────────────
+  const [bgTemp, setBgTemp] = useState<'neutral' | 'warm' | 'cool'>('neutral')
+
+  // ── Constellation overlay ─────────────────────────────────────────────────
+  const [constellationVisible, setConstellationVisible] = useState(false)
+
+  // ── Cross-staff transition overlay ────────────────────────────────────────
+  const [transitionVisible, setTransitionVisible] = useState(false)
+
+  // ── Discuss ───────────────────────────────────────────────────────────────
+  const [discussOpen, setDiscussOpen] = useState(false)
+
+  // ── Accessibility: live region ref ────────────────────────────────────────
+  const [liveMessage, setLiveMessage] = useState('')
+
+  // ── Screen-size detection for mobile layout ───────────────────────────────
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // ─── Phase transitions ──────────────────────────────────────────────────
+
+  // dealing → awaiting-12 after dealing animation
+  useEffect(() => {
+    if (phase !== 'dealing') return
+    const t = setTimeout(() => setPhase('awaiting-12'), 1200)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  // 3-second mandatory hold enforcement
+  useEffect(() => {
+    if (phase !== 'holding') return
+    holdStartRef.current = Date.now()
+    const interval = setInterval(() => {
+      if (Date.now() - holdStartRef.current >= 3000) {
+        clearInterval(interval)
+        setPhase('continuing')
+      }
+    }, 100)
+    return () => clearInterval(interval)
+  }, [phase, activePosition])
+
+  // cross-staff-transition timing + GPT fire
+  useEffect(() => {
+    if (phase !== 'cross-staff-transition') return
+    setTransitionVisible(true)
+    // Fire synthesis early while transition text is showing
+    fireEarlySynthesis()
+    // Show text for 2200ms then fade (600ms)
+    const showTimer = setTimeout(() => setTransitionVisible(false), 2200)
+    // After text fades, move to staff phase (position 7)
+    const advanceTimer = setTimeout(() => {
+      setActivePosition(7)
+      reveal(7)
+      setPhase('holding')
+    }, 2800)
+    return () => { clearTimeout(showTimer); clearTimeout(advanceTimer) }
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // final-pause → constellation-text after 2 seconds
+  useEffect(() => {
+    if (phase !== 'final-pause') return
+    const t = setTimeout(() => {
+      setConstellationVisible(true)
+      setPhase('constellation-text')
+    }, 2000)
+    return () => clearTimeout(t)
+  }, [phase])
+
+  // constellation-text: show for 2800ms, fade 800ms, then show synthesis
+  useEffect(() => {
+    if (phase !== 'constellation-text') return
+    // Check for synthesis timeout (90 seconds total budget)
+    const age = Date.now() - synthesisStartTimeRef.current
+    if (synthesisStatus === 'loading' && age > 90_000) {
+      setSynthesisError('timeout')
+      setSynthesisStatus('error')
+    }
+    const fadeTimer = setTimeout(() => setConstellationVisible(false), 2800)
+    const advanceTimer = setTimeout(() => setPhase('synthesis'), 3600)
+    return () => { clearTimeout(fadeTimer); clearTimeout(advanceTimer) }
+  }, [phase, synthesisStatus])
+
+  // Chapter-by-chapter reveal after entering synthesis phase
+  useEffect(() => {
+    if (phase !== 'synthesis') return
+    if (synthesisStatus !== 'ready' || synthesisChapters.length === 0) return
+    if (chaptersDisplayed >= synthesisChapters.length) {
+      setPhase('complete')
+      return
+    }
+    // Immediately show first chapter, then 1200ms between each subsequent one
+    const delay = chaptersDisplayed === 0 ? 0 : 1200
+    const t = setTimeout(() => setChaptersDisplayed(n => n + 1), delay)
+    return () => clearTimeout(t)
+  }, [phase, synthesisStatus, synthesisChapters.length, chaptersDisplayed])
+
+  // ─── Synthesis fire (early, at card-7 onset) ───────────────────────────────
+  const fireEarlySynthesis = useCallback(async () => {
+    if (synthesisFireRef.current) return
+    synthesisFireRef.current = true
+    synthesisStartTimeRef.current = Date.now()
+    setSynthesisStatus('loading')
+
+    try {
+      const payload = buildCelticSynthesisPayload(drawnCards, interpretations, tarotAstroContext, userIntention)
+      const chapters = await getTarotCelticSynthesis(payload)
+      setSynthesisChapters(chapters)
+      setSynthesisStatus('ready')
+      // Chapters are held until constellation-text phase finishes
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        setSynthesisError('rate-limited')
+      } else if (err instanceof Error) {
+        if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+          setSynthesisError('session-expired')
+        } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
+          setSynthesisError('timeout')
+        } else {
+          setSynthesisError('unavailable')
+        }
+      } else {
+        setSynthesisError('unavailable')
+      }
+      setSynthesisStatus('error')
+    }
+  }, [drawnCards, interpretations, tarotAstroContext, userIntention])
+
+  const retrySynthesis = useCallback(() => {
+    synthesisFireRef.current = false
+    setSynthesisError(null)
+    setSynthesisStatus('idle')
+    setChaptersDisplayed(0)
+    void fireEarlySynthesis()
+  }, [fireEarlySynthesis])
+
+  // ─── Card reveal helpers ──────────────────────────────────────────────────
+  const reveal = (position: number) => {
+    setRevealedPositions(prev => new Set(prev).add(position))
+    const card = drawnCards[position - 1]
+    if (card) {
+      setBgTemp(card.arcana === 'major' ? 'warm' : 'cool')
+      setLiveMessage(`${card.cardName}, ${card.reversed ? 'reversed' : 'upright'}, in the position of ${CELTIC_CROSS_POSITIONS[position - 1].name}`)
+    }
+  }
+
+  // ─── User gesture handlers ────────────────────────────────────────────────
+
+  // Tap on the face-down 1/2 pair — reveals both simultaneously
+  const handleReveal12 = useCallback(() => {
+    if (phase !== 'awaiting-12') return
+    reveal(1)
+    reveal(2)
+    setActivePosition(2)
+    // 600ms flip animation then enter hold
+    setTimeout(() => setPhase('holding'), 600)
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Continue gesture — advance to next card or transition
+  const handleContinue = useCallback(() => {
+    if (phase !== 'continuing') return
+    const next = activePosition + 1
+    if (activePosition === 6) {
+      // Cross → Staff transition
+      setPhase('cross-staff-transition')
+    } else if (activePosition === 10) {
+      setPhase('final-pause')
+    } else {
+      // Reveal next card and enter hold
+      reveal(next)
+      setActivePosition(next)
+      setTimeout(() => setPhase('holding'), 600)
+    }
+  }, [phase, activePosition]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Global keyboard handler for Space/Enter continue
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (phase === 'awaiting-12') { e.preventDefault(); handleReveal12() }
+        else if (phase === 'continuing') { e.preventDefault(); handleContinue() }
+      }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [phase, handleReveal12, handleContinue])
+
+  // ─── Save reading ─────────────────────────────────────────────────────────
+  const handleSave = () => {
+    const reading: SavedReading = {
+      schemaVersion: 1,
+      readingType: 'celtic-cross',
+      userId: '',  // set by parent/auth context
+      drawnCards: drawnCards.map((card, i) => ({ position: i + 1, cardId: card.cardId, reversed: card.reversed })),
+      spreadType: 'celtic-cross',
+      userIntention,
+      astroContextSnapshot: {
+        natalFingerprint: '',
+        transitSnapshotDate: new Date().toISOString(),
+        moonPhase: tarotAstroContext.currentMoonPhase,
+        personalDay: tarotAstroContext.personalDay,
+        numerologyYear: tarotAstroContext.numerologyYear,
+      },
+      interpretationPayload: {
+        version: 1,
+        payload: { interpretations },
+      },
+      synthesisText: synthesisChapters.map(c => `${c.heading}\n${c.body}`).join('\n\n'),
+      createdAt: new Date().toISOString(),
+      journalEntryId: null,
+    }
+    onSave(reading)
+  }
+
+  // ─── Derived values ───────────────────────────────────────────────────────
+  const bgColor = bgTemp === 'warm' ? '#1a0f08' : bgTemp === 'cool' ? '#080d1a' : '#0d0d0f'
+  const currentInterp = revealedPositions.has(activePosition) ? interpretations[activePosition - 1] : null
+  const isSynthesisPhase = phase === 'synthesis' || phase === 'complete'
+  const discussContext = isSynthesisPhase
+    ? buildDiscussContext(drawnCards, interpretations, tarotAstroContext, userIntention, synthesisChapters)
+    : ''
+
+  // ─── Card size based on viewport ─────────────────────────────────────────
+  const cardWidth = isMobile ? 'clamp(60px, 20vw, 80px)' : 'clamp(70px, 8vw, 100px)'
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* Global keyframe styles injected once */}
+      <style>{`
+        @keyframes tarot-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.0); border-color: rgba(201,168,76,0.35); }
+          50% { box-shadow: 0 0 16px 4px rgba(201,168,76,0.15); border-color: rgba(201,168,76,0.65); }
+        }
+        @keyframes tarot-fade-in {
+          from { opacity: 0; transform: translateY(6px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes tarot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+          @keyframes tarot-fade-in { from { opacity: 0; } to { opacity: 1; } }
+        }
+      `}</style>
+
+      {/* Accessibility live regions */}
+      <div aria-live="polite" aria-atomic="true" style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0,0,0,0)' }}>
+        {liveMessage}
+      </div>
+
+      {/* Overlays */}
+      <CrossStaffTransition visible={transitionVisible} />
+      <ConstellationOverlay visible={constellationVisible} />
+
+      {/* Main reading container */}
+      <div
+        style={{
+          minHeight: '100vh',
+          background: bgColor,
+          transition: 'background 1.2s ease-in-out',
+          padding: isMobile ? '1.5rem 1rem 3rem' : '2rem 1.5rem 4rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2rem',
+          position: 'relative',
+        }}
+      >
+        {/* Header */}
+        <div style={{ textAlign: 'center', maxWidth: '560px' }}>
+          <h1 className="font-heading" style={{ color: '#c9a84c', fontSize: isMobile ? '1.375rem' : '1.625rem', marginBottom: '0.35rem' }}>
+            Celtic Cross
+          </h1>
+          {userIntention && (
+            <p style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+              {userIntention}
+            </p>
+          )}
+          {phase === 'dealing' && (
+            <p style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.8rem', marginTop: '0.5rem', animation: 'tarot-fade-in 0.5s ease-in' }}>
+              The cards are being placed…
+            </p>
+          )}
+          {phase === 'awaiting-12' && (
+            <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.875rem', marginTop: '0.5rem', animation: 'tarot-fade-in 0.5s ease-in', fontStyle: 'italic' }}>
+              The heart of the matter awaits — reveal when you are ready.
+            </p>
+          )}
+        </div>
+
+        {/* Reading layout: Cross + Staff */}
+        {isMobile ? (
+          <MobileLayout
+            drawnCards={drawnCards}
+            revealedPositions={revealedPositions}
+            activePosition={activePosition}
+            phase={phase}
+            cardWidth={cardWidth}
+            onReveal12={handleReveal12}
+          />
+        ) : (
+          <DesktopLayout
+            drawnCards={drawnCards}
+            revealedPositions={revealedPositions}
+            activePosition={activePosition}
+            phase={phase}
+            cardWidth={cardWidth}
+            onReveal12={handleReveal12}
+          />
+        )}
+
+        {/* Interpretation panel for current card */}
+        {currentInterp && (phase === 'holding' || phase === 'continuing') && (
+          <InterpretationPanel
+            interp={currentInterp}
+            card={drawnCards[activePosition - 1]}
+            phase={phase}
+            onContinue={handleContinue}
+            isMobile={isMobile}
+          />
+        )}
+
+        {/* Synthesis or error */}
+        {isSynthesisPhase && (
+          <div style={{ width: '100%', maxWidth: '680px', animation: 'tarot-fade-in 0.5s ease-in' }}>
+            {synthesisStatus === 'error' && synthesisError && !showAiFree ? (
+              <ErrorPanel
+                kind={synthesisError}
+                cards={drawnCards}
+                interps={interpretations}
+                onRetry={retrySynthesis}
+                onShowIndividual={() => setShowAiFree(true)}
+              />
+            ) : showAiFree ? (
+              <AiFreeReadingSummary cards={drawnCards} interps={interpretations} />
+            ) : (
+              <TarotSynthesisPanel
+                chapters={synthesisChapters}
+                chaptersDisplayed={chaptersDisplayed}
+                loadingMessage={synthesisStatus === 'loading' ? 'The cards are being read as a constellation.' : undefined}
+              />
+            )}
+
+            {/* Save/Discard + Discuss — shown when complete */}
+            {phase === 'complete' && (
+              <div style={{ marginTop: '2.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => setDiscussOpen(true)}
+                  style={{
+                    background: 'none',
+                    border: '1px solid rgba(201,168,76,0.3)',
+                    color: 'rgba(201,168,76,0.7)',
+                    borderRadius: '8px',
+                    padding: '0.6rem 1.5rem',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem',
+                    fontFamily: 'inherit',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  Discuss ✦
+                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <button type="button" onClick={handleSave} style={primaryBtnStyle}>
+                    Save this reading
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDiscard}
+                    style={{ ...outlineBtnStyle, color: 'rgba(201,168,76,0.45)', borderColor: 'rgba(201,168,76,0.15)' }}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Discuss panel */}
+      <TarotDiscussPanel
+        isOpen={discussOpen}
+        onClose={() => setDiscussOpen(false)}
+        contextString={discussContext}
+      />
+    </>
+  )
+}
+
+// ─── Interpretation panel ─────────────────────────────────────────────────────
+function InterpretationPanel({
+  interp,
+  card,
+  phase,
+  onContinue,
+  isMobile,
+}: {
+  interp: InstantInterpretation
+  card: DrawnCard
+  phase: Phase
+  onContinue: () => void
+  isMobile: boolean
+}) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        maxWidth: '580px',
+        animation: 'tarot-fade-in 0.4s ease-in',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.75rem',
+      }}
+    >
+      {/* Position + card name */}
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+          {interp.positionName}
+        </p>
+        <h2 className="font-heading" style={{ color: '#c9a84c', fontSize: isMobile ? '1.25rem' : '1.5rem' }}>
+          {card.cardName}
+          {card.reversed && <span style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.7em', marginLeft: '0.4em' }}>reversed</span>}
+        </h2>
+      </div>
+
+      {/* Interpretation */}
+      <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(201,168,76,0.12)' }}>
+        <p style={{ color: 'rgba(232,230,227,0.85)', fontSize: '0.9rem', lineHeight: 1.75, marginBottom: '0.6rem' }}>
+          {interp.coreMeaning}
+        </p>
+        <p style={{ color: 'rgba(201,168,76,0.6)', fontSize: '0.85rem', lineHeight: 1.7, fontStyle: 'italic' }}>
+          {interp.emotionalMeaning}
+        </p>
+        {interp.reversalNote && (
+          <p style={{ color: 'rgba(200,150,100,0.65)', fontSize: '0.8rem', lineHeight: 1.65, marginTop: '0.5rem' }}>
+            {interp.reversalNote}
+          </p>
+        )}
+        <p style={{ color: 'rgba(201,168,76,0.4)', fontSize: '0.78rem', marginTop: '0.75rem', letterSpacing: '0.02em' }}>
+          {interp.astroConnection}
+        </p>
+        <p style={{ color: 'rgba(201,168,76,0.3)', fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
+          {interp.positionDescription}
+        </p>
+      </div>
+
+      {/* Continue affordance — shown only when phase is 'continuing' */}
+      {phase === 'continuing' && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
+          <button
+            type="button"
+            onClick={onContinue}
+            aria-label="Continue to next card when you are ready"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'rgba(201,168,76,0.3)',
+              fontSize: '1.25rem',
+              animation: 'tarot-pulse 3s ease-in-out infinite',
+              padding: '0.5rem 1rem',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.65)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.3)')}
+          >
+            ↑
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Desktop layout (Cross + Staff side-by-side) ──────────────────────────────
+interface LayoutProps {
+  drawnCards: DrawnCard[]
+  revealedPositions: Set<number>
+  activePosition: number
+  phase: Phase
+  cardWidth: string
+  onReveal12: () => void
+}
+
+function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12 }: LayoutProps) {
+  return (
+    <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start', justifyContent: 'center', width: '100%', maxWidth: '860px' }}>
+      {/* Cross: 3×3 grid, ~60% width */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateAreas: '". p5 ." "p4 p12 p6" ". p3 ."',
+          gridTemplateColumns: `${cardWidth} ${cardWidth} ${cardWidth}`,
+          gridTemplateRows: 'auto auto auto',
+          gap: '12px',
+          flex: '0 0 auto',
+          position: 'relative',
+        }}
+      >
+        <div style={{ gridArea: 'p5' }}>
+          <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        </div>
+        <div style={{ gridArea: 'p4' }}>
+          <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        </div>
+        {/* Positions 1+2 share a cell with 2 rotating over 1 */}
+        <div style={{ gridArea: 'p12', position: 'relative', width: cardWidth, aspectRatio: '2/3' }}>
+          {/* Card 1 (below) */}
+          <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} />
+          </div>
+          {/* Card 2 (crossing, rotated 90°, on top) */}
+          <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing />
+          </div>
+        </div>
+        <div style={{ gridArea: 'p6' }}>
+          <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        </div>
+        <div style={{ gridArea: 'p3' }}>
+          <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        </div>
+      </div>
+
+      {/* Staff: vertical column, 10 at top → 7 at bottom */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: '0 0 auto' }}>
+        {[10, 9, 8, 7].map(pos => (
+          <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Mobile layout (stacked) ──────────────────────────────────────────────────
+function MobileLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12 }: LayoutProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
+      {/* Cross positions 1-6 stacked */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${cardWidth})`, gap: '10px', justifyContent: 'center' }}>
+        {/* Row 1: 5 */}
+        <div />
+        <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <div />
+        {/* Row 2: 4, 1/2, 6 */}
+        <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <div style={{ position: 'relative', width: cardWidth, aspectRatio: '2/3' }}>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
+            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} />
+          </div>
+          <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing />
+          </div>
+        </div>
+        <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        {/* Row 3: 3 */}
+        <div />
+        <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <div />
+      </div>
+
+      {/* Staff divider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0 1rem' }}>
+        <div style={{ flex: 1, height: '1px', background: 'rgba(201,168,76,0.15)' }} />
+        <span style={{ color: 'rgba(201,168,76,0.35)', fontSize: '0.75rem' }}>✦</span>
+        <div style={{ flex: 1, height: '1px', background: 'rgba(201,168,76,0.15)' }} />
+      </div>
+
+      {/* Staff positions 7-10 */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(2, ${cardWidth})`, gap: '10px', justifyContent: 'center' }}>
+        {[7, 8, 9, 10].map(pos => (
+          <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Position slot ────────────────────────────────────────────────────────────
+interface PositionSlotProps {
+  position: number
+  drawnCards: DrawnCard[]
+  revealedPositions: Set<number>
+  activePosition: number
+  phase: Phase
+  isCrossing?: boolean
+  onReveal12?: () => void
+}
+
+function PositionSlot({ position, drawnCards, revealedPositions, activePosition, phase, isCrossing, onReveal12 }: PositionSlotProps) {
+  const pos = CELTIC_CROSS_POSITIONS[position - 1]
+  const card = drawnCards[position - 1] ?? null
+  const isRevealed = revealedPositions.has(position)
+
+  // A card is "active" (pulsing) when it's the next to be tapped
+  const isNextToReveal = !isRevealed && (
+    (phase === 'awaiting-12' && (position === 1 || position === 2)) ||
+    (phase === 'continuing' && position === activePosition + 1 && activePosition < 6) ||
+    (phase === 'cross-staff-transition' && position === 7)
+  )
+
+  return (
+    <TarotCard
+      card={card}
+      position={pos}
+      cardState={isRevealed ? 'face-up' : 'face-down'}
+      isActive={isNextToReveal}
+      isCrossing={isCrossing}
+      onReveal={position === 1 && onReveal12 ? onReveal12 : undefined}
+      tabIndex={isNextToReveal ? 0 : -1}
+      id={`tarot-pos-${position}`}
+    />
+  )
+}
