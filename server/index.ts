@@ -15,6 +15,8 @@ import entriesRouter from './routes/entries.js';
 import gptRouter from './routes/gpt.js';
 import analyticsRouter from './routes/analytics.js';
 import stripeRouter from './routes/stripe.js';
+import readingsRouter from './routes/readings.js';
+import tarotRouter from './routes/tarot.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -114,7 +116,9 @@ app.use('/api/auth', oauthRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/gpt', gptRouter);
+app.use('/api/tarot', tarotRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/readings', readingsRouter);
 
 // Serve compiled frontend in production (dist/ lives one level above server/)
 const distDir = path.resolve(__dirname, '../dist');

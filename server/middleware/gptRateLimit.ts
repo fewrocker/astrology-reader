@@ -27,11 +27,10 @@ const authenticated: Map<number, RateLimitEntry> = new Map()
 // Authenticated counts are the monetization-critical path and are persisted.
 const unauthenticated: Map<string, RateLimitEntry> = new Map()
 
-const TIER_LIMITS: Record<Tier, number> = {
-  free: 3,
-  basic: 20,
-  advanced: 100,
-}
+const TIER_LIMITS: Record<Tier, number> =
+  process.env.NODE_ENV !== 'production'
+    ? { free: 10000, basic: 10000, advanced: 10000 }
+    : { free: 3, basic: 20, advanced: 100 }
 
 // Prepared statements cached at module level for performance (spec §63).
 // Initialized lazily on first use (after DB is ready).
@@ -50,8 +49,8 @@ function getUsageStmt() {
 }
 function upsertUsageStmt() {
   if (!_upsertUsageStmt) _upsertUsageStmt = getDb().prepare(
-    `INSERT INTO gpt_usage (user_id, date, count)
-     VALUES (?, ?, 1)
+    `INSERT INTO gpt_usage (user_id, date, count, request_type)
+     VALUES (?, ?, 1, ?)
      ON CONFLICT (user_id, date)
      DO UPDATE SET count = count + 1
      WHERE count < ?`
@@ -155,9 +154,10 @@ export function gptRateLimit(req: Request, res: Response, next: NextFunction): v
     // If the DB query itself fails, fail open (allow the call) to avoid blocking paying
     // users. A failed quota check that allows an extra call is better than one that
     // blocks a paying user (spec §53).
+    const requestType = (req.body as { type?: string })?.type ?? null
     let dbChanges = 1
     try {
-      const result = upsertUsageStmt().run([userId, today, limit]) as { changes: number }
+      const result = upsertUsageStmt().run([userId, today, requestType, limit]) as { changes: number }
       dbChanges = result.changes
     } catch (err) {
       console.error('[gptRateLimit] DB upsert for gpt_usage failed — failing open:', err)

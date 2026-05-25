@@ -70,6 +70,35 @@ export function getDb(): Database.Database {
       count   INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, date)
     );
+
+    CREATE TABLE IF NOT EXISTS readings (
+      id               TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+      user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reading_type     TEXT NOT NULL CHECK(reading_type IN ('single','three-card','celtic-cross')),
+      spread_mode      TEXT,
+      first_card_name  TEXT NOT NULL,
+      intent_preview   TEXT,
+      cards            TEXT NOT NULL,
+      synthesis        TEXT,
+      schema_version   INTEGER NOT NULL DEFAULT 1,
+      journal_entry_id TEXT REFERENCES entries(id) ON DELETE SET NULL,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_readings_user_created
+      ON readings(user_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tarot_usage (
+      user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      date              TEXT NOT NULL,
+      week_start        TEXT NOT NULL,
+      daily_cards       INTEGER NOT NULL DEFAULT 0,
+      weekly_three_card INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (user_id, date)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tarot_usage_week
+      ON tarot_usage (user_id, week_start);
   `);
 
   // Apply OAuth migration if not already applied.
@@ -116,6 +145,7 @@ export function getDb(): Database.Database {
 
   addColumnIfMissing("ALTER TABLE users ADD COLUMN subscription_tier TEXT DEFAULT 'free'");
   addColumnIfMissing('ALTER TABLE users ADD COLUMN stripe_customer_id TEXT');
+  addColumnIfMissing('ALTER TABLE gpt_usage ADD COLUMN request_type TEXT');
 
   return instance;
 }

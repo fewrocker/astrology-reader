@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import {
   Sun, Wind, Moon, Compass, Heart,
-  BookOpen, Eye, Hash, Sparkles,
+  BookOpen, Eye, Hash, Sparkles, Layers,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { AppAction } from '../../context/appState'
@@ -84,6 +84,18 @@ const GROUPS: ModalGroup[] = [
         label: 'Year Ahead',
         descriptor: 'Your solar return chart — the sky on your next birthday',
         action: { type: 'START_SOLAR_RETURN' },
+      },
+    ],
+  },
+  {
+    heading: 'Divination',
+    items: [
+      {
+        icon: Layers,
+        accent: '#7c3aed',
+        label: 'Tarot Reading',
+        descriptor: 'The symbolic language of the cards, read through your personal sky',
+        action: { type: 'SET_VIEW', view: 'tarot' },
       },
     ],
   },

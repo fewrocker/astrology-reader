@@ -22,7 +22,10 @@ export interface UserRow {
   stripe_customer_id: string | null;
 }
 
-const TIER_LIMITS: Record<string, number> = { free: 3, basic: 20, advanced: 100 };
+const TIER_LIMITS: Record<string, number> =
+  process.env.NODE_ENV !== 'production'
+    ? { free: 10000, basic: 10000, advanced: 10000 }
+    : { free: 3, basic: 20, advanced: 100 };
 
 const router = Router();
 
