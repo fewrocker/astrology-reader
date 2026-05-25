@@ -1,3 +1,4 @@
+import type { TarotView } from './TarotContext'
 import type { City } from '../data/cityTypes'
 import type { ChartData } from '../engine/types'
 import type { Aspect } from '../engine/aspects'
@@ -40,6 +41,7 @@ export type AppView = 'form' | 'loading' | 'results' | 'transit-select' | 'trans
   | 'solar-return-loading' | 'solar-return'
   | 'today'
   | 'journal'
+  | 'tarot'
 
 export const DREAM_SESSION_KEY_PREFIX = 'dream-session-'
 
@@ -80,6 +82,8 @@ export interface AppState {
   solarReturnError: string | null
   // Storage warning
   storageWarning: string | null
+  // Tarot navigation signal — all Tarot reading state lives in TarotContext
+  tarotView: TarotView | null
 }
 
 export type AppAction =
@@ -114,6 +118,7 @@ export type AppAction =
   | { type: 'SET_SYNASTRY_INTERPRETATION'; interpretation: string }
   | { type: 'SET_SOLAR_RETURN_DATA'; data: SolarReturnData; targetYear: number }
   | { type: 'SET_SOLAR_RETURN_INTERPRETATION'; interpretation: string }
+  | { type: 'SET_TAROT_VIEW'; tarotView: TarotView | null }
 
 export const initialBirthData: BirthData = {
   date: '',
@@ -338,6 +343,7 @@ function buildInitialState(): AppState {
     solarReturnTargetYear: null,
     solarReturnError: null,
     storageWarning: null,
+    tarotView: null,
   }
 }
 
@@ -408,6 +414,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, view: 'solar-return', solarReturnData: action.data, solarReturnTargetYear: action.targetYear, solarReturnInterpretation: null, solarReturnError: null }
     case 'SET_SOLAR_RETURN_INTERPRETATION':
       return { ...state, solarReturnInterpretation: action.interpretation }
+    case 'SET_TAROT_VIEW':
+      return { ...state, tarotView: action.tarotView }
     default:
       return state
   }

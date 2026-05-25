@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { AppProvider, useApp } from './context/AppContext'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { TarotProvider } from './context/TarotContext'
 import MigrationBanner from './components/auth/MigrationBanner'
 import ErrorBoundary from './components/ErrorBoundary'
 import StorageWarningBanner from './components/StorageWarningBanner'
@@ -603,6 +604,13 @@ function AppContent() {
         )}
         {state.view === 'journal' && (
           <CosmicJournalPage chartData={journalChartData} birthData={state.birthData} />
+        )}
+        {state.view === 'tarot' && (
+          <TarotProvider>
+            <div className="text-center py-24">
+              <p className="text-mystic-gold font-heading text-xl">Tarot coming soon</p>
+            </div>
+          </TarotProvider>
         )}
       </div>
 
