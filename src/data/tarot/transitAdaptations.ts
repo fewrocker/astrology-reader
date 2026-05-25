@@ -395,3 +395,14 @@ export const TRANSIT_ADAPTATIONS: TransitAdaptation[] = [
     emphasis: 'Jupiter expands the Ten of Pentacles\' generational abundance into a truly vast inheritance — material, relational, and values-based wealth that flows freely across time because it was built with enough generosity that there is no fear of its depletion. This is prosperity that grows by being shared rather than shrinking by being given away.',
   },
 ]
+
+// Engine compatibility: group adaptations by cardId for O(1) lookup
+export const TRANSIT_ADAPTATIONS_BY_CARD: Record<string, TransitAdaptation[]> = TRANSIT_ADAPTATIONS.reduce(
+  (acc, entry) => {
+    if (!entry.cardId) return acc
+    if (!acc[entry.cardId]) acc[entry.cardId] = []
+    acc[entry.cardId].push(entry)
+    return acc
+  },
+  {} as Record<string, TransitAdaptation[]>
+)

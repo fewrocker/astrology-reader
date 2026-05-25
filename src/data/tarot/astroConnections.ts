@@ -718,3 +718,6 @@ export const CARD_ASTRO_CONNECTIONS: Record<string, CardAstroConnection> = {
     baselineNote: 'The King of Pentacles has mastered Earth in its fullest expression — material authority earned through decades of patient, intelligent effort, the builder who lives inside the evidence of what sustained dedication produces.',
   },
 }
+
+// Engine compatibility alias
+export const ASTRO_CONNECTIONS = CARD_ASTRO_CONNECTIONS

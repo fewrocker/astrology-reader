@@ -36,3 +36,6 @@ export const TAROT_CARD_BY_ID: Record<string, TarotCard> = Object.fromEntries(
 )
 
 export const MINOR_ARCANA: TarotCard[] = ALL_TAROT_CARDS.filter(c => c.arcana === 'minor')
+
+// Engine compatibility alias
+export const TAROT_CARDS = ALL_TAROT_CARDS

@@ -1,4 +1,5 @@
-import type { SpreadPosition } from './types'
+import type { SpreadPosition, SpreadType } from './types'
+export type { SpreadType, SpreadPosition } from './types'
 
 export const SPREAD_POSITIONS: SpreadPosition[] = [
   // Single card
