@@ -9,8 +9,8 @@ dist-server/
 build/
 .next/
 
-# SQLite database
-data/
+# SQLite database (root-level only)
+/data/
 
 # Environment
 .env
