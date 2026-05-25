@@ -385,3 +385,57 @@ export async function getCoupleTransitInterpretation(
     return err instanceof Error ? err.message : GPT_SERVER_ERROR
   }
 }
+
+export interface TarotThreeSynthesisPayload {
+  spreadMode: string
+  cards: Array<{
+    position: { label: string; meaning: string }
+    card: {
+      id: string
+      name: string
+      arcana: string
+      number: number | null
+      suit: string | null
+      element: string | null
+    }
+    reversed: boolean
+    instantInterpretation: {
+      coreMeaning: string
+      symbolicTheme: string
+      emotionalMeaning: string
+    }
+  }>
+  synthesisSignals: {
+    dominantArcana: string
+    elementDistribution: Record<string, number>
+    polarityCount: { upright: number; reversed: number }
+    hasFoolOrWorld: boolean
+    suitSpread: string[]
+    elementConflicts: string[]
+    positionalWeights: string[]
+  }
+  userIntention: string | null
+}
+
+export async function getTarotThreeSynthesis(payload: TarotThreeSynthesisPayload): Promise<string> {
+  try {
+    const result = await callProxy('tarot-three-synthesis', payload)
+    return (result as string) || 'Unable to generate synthesis.'
+  } catch (err) {
+    if (err instanceof RateLimitError) throw err
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+
+}
+
+export async function getTarotDiscussResponse(
+  tarotContext: string,
+  messages: ChatMessage[],
+): Promise<string> {
+  try {
+    const result = await callProxy('tarot-discuss', { tarotContext, messages })
+    return (result as string) || 'Unable to generate a response.'
+  } catch (err) {
+    return err instanceof Error ? err.message : GPT_SERVER_ERROR
+  }
+}
