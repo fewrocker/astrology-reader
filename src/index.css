@@ -439,3 +439,48 @@ input[type='range'].has-thumb-halo::-moz-range-thumb {
     opacity: 0.85;
   }
 }
+
+/* === Tarot Draw Ritual === */
+
+@keyframes tarotDeckBreathe {
+  0%, 100% { transform: scale(1.0); }
+  50%       { transform: scale(1.02); }
+}
+
+/* Fan cycle: collapsed → fanned (30%) → hold (70%) → collapsed */
+@keyframes tarotFanLeft {
+  0%, 100% { transform: translateX(-4px) translateY(-4px) rotate(0deg); }
+  30%, 70% { transform: translateX(-40px) translateY(-12px) rotate(-8deg); }
+}
+
+@keyframes tarotFanCenter {
+  0%, 100% { transform: translateX(0px) translateY(0px) rotate(0deg); }
+  30%, 70% { transform: translateX(0px) translateY(4px) rotate(0deg); }
+}
+
+@keyframes tarotFanRight {
+  0%, 100% { transform: translateX(4px) translateY(4px) rotate(0deg); }
+  30%, 70% { transform: translateX(40px) translateY(-12px) rotate(8deg); }
+}
+
+@keyframes tarotCardBreathe {
+  0%, 100% { transform: rotateY(0deg) scale(0.95); }
+  50%       { transform: rotateY(0deg) scale(0.965); }
+}
+
+@keyframes tarotReducedPulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1.0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarot-fan-left,
+  .tarot-fan-center,
+  .tarot-fan-right {
+    animation: tarotReducedPulse 0.5s ease-in-out 3 !important;
+  }
+
+  .tarot-card-breathe   { animation: none !important; }
+  .tarot-deck-breathe   { animation: none !important; }
+  .tarot-fade-overlay   { transition: none !important; opacity: 0 !important; }
+}
