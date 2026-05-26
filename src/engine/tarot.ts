@@ -66,6 +66,7 @@ export interface AstroConnection {
   cardElement: Element | null
   natalDominantElement: Element | null
   elementResonanceNote: string
+  natalResonanceNote: string
   transitInfluence: string
   lunarPhaseNote: string
   advanceCategoryNote: string
@@ -818,6 +819,59 @@ function buildAstroHeadline(
   return `${card.name} speaks to ${kw} — its wisdom arrives exactly when you need it.`
 }
 
+// ─── buildNatalResonanceNote ──────────────────────────────────────────────────
+
+/**
+ * Returns a note describing the most significant correspondence between the card's
+ * symbolic field and the user's natal chart. Returns '' when no meaningful
+ * correspondence exists — the absence of a match is valid and should not produce
+ * a generic filler sentence.
+ *
+ * Correspondence hierarchy (first match wins):
+ *   1. Chart ruler match — card's ruling planet === chartRulerPlanet
+ *   2. Dominant element match — card's element === natalDominantElement
+ *   3. Court card suit element match — court card's element === natalDominantElement
+ */
+export function buildNatalResonanceNote(card: TarotCard, astroContext: TarotAstroContext): string {
+  // Resolve the card's ruling planet: prefer card-level field, fall back to ASTRO_CONNECTIONS
+  const astroConn = ASTRO_CONNECTIONS[card.id]
+  const rulingPlanet: string | null = card.rulingPlanet ?? astroConn?.rulingPlanet ?? null
+
+  // 1. Chart ruler match — the highest resonance signal
+  if (
+    rulingPlanet &&
+    astroContext.chartRulerPlanet &&
+    rulingPlanet === astroContext.chartRulerPlanet
+  ) {
+    const planet = rulingPlanet
+    const ascSign = astroContext.natalAscendantSign ?? 'your Ascendant sign'
+    return `${planet} rules both this card and your ${ascSign} Ascendant — the planet that governs your entire chart is also the symbolic ruler of what you drew. This card's guidance is personally wired into your chart's governing intelligence.`
+  }
+
+  // 2. Dominant element match — card's element is native territory in natal chart
+  if (card.element && astroContext.natalDominantElement && card.element === astroContext.natalDominantElement) {
+    const el = card.element
+    return `This card's ${el} element is native territory for you — ${el} dominates your natal chart, and this card arrives in the element where your deepest instincts already live.`
+  }
+
+  // 3. Court card suit element match — mirror figure when suit element matches natal dominant
+  if (
+    isCourtCard(card) &&
+    card.element &&
+    astroContext.natalDominantElement &&
+    card.element === astroContext.natalDominantElement
+  ) {
+    // Note: this branch is unreachable given branch 2 above covers the same condition.
+    // Kept explicit for clarity per the card hierarchy; can be extended to suit-only court logic.
+    const rank = getCourtRankLabel(card)
+    const el = card.element
+    return `This ${rank} of ${el} mirrors your natal ${el} dominance — the figure in this card moves in the same element that runs deepest in your chart.`
+  }
+
+  // No significant correspondence
+  return ''
+}
+
 function buildElementResonanceNote(card: TarotCard, astroContext: TarotAstroContext): string {
   const cardEl = card.element
   const natalEl = astroContext.natalDominantElement
@@ -877,6 +931,7 @@ export function computeInstantInterpretation(
   const transitInfluence = buildTransitInfluence(card, astroContext, position)
   const astroHeadline = buildAstroHeadline(card, astroContext)
   const elementResonanceNote = buildElementResonanceNote(card, astroContext)
+  const natalResonanceNote = buildNatalResonanceNote(card, astroContext)
   const lunarPhaseNote = buildLunarPhaseNote(astroContext)
   const advanceCategoryNote = buildAdvanceCategoryNote(astroContext)
 
@@ -889,6 +944,7 @@ export function computeInstantInterpretation(
     cardElement: card.element,
     natalDominantElement: astroContext.natalDominantElement,
     elementResonanceNote,
+    natalResonanceNote,
     transitInfluence,
     lunarPhaseNote,
     advanceCategoryNote,
