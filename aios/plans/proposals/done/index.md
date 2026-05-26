@@ -1,5 +1,27 @@
 # Done Proposals
 
+## Sprint 0029 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-celtic-cross-gpt-synthesis-fails](issue-celtic-cross-gpt-synthesis-fails.md) | Issue Fix | merged sprint-0029 |
+| [issue-celtic-cross-no-scroll-on-reveal](issue-celtic-cross-no-scroll-on-reveal.md) | Issue Fix | merged sprint-0029 |
+| [issue-celtic-cross-zero-positional-awareness](issue-celtic-cross-zero-positional-awareness.md) | Issue Fix | merged sprint-0029 |
+| [issue-single-card-ritual-gap](issue-single-card-ritual-gap.md) | Issue Fix | merged sprint-0029 |
+| [issue-three-card-stuck-after-selection](issue-three-card-stuck-after-selection.md) | Issue Fix | merged sprint-0029 |
+| [code-celtic-payload-hardcoded-zeros](code-celtic-payload-hardcoded-zeros.md) | Code Enhancement | merged sprint-0029 |
+
+## Sprint 0028 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-spread-position-import-broken-test](issue-spread-position-import-broken-test.md) | Issue Fix | merged sprint-0028 |
+| [code-dominant-transit-orb-weighting](code-dominant-transit-orb-weighting.md) | Code Enhancement | merged sprint-0028 |
+| [code-gpt-tarot-dead-code-cleanup](code-gpt-tarot-dead-code-cleanup.md) | Code Enhancement | merged sprint-0028 |
+| [code-transit-adaptation-contract-test](code-transit-adaptation-contract-test.md) | Code Enhancement | merged sprint-0028 |
+| [feat-natal-card-correspondence](feat-natal-card-correspondence.md) | Feature | merged sprint-0028 |
+| [feat-three-card-constellation-preview](feat-three-card-constellation-preview.md) | Feature | merged sprint-0028 |
+
 ## Sprint 0027 — Completed
 
 | Proposal | Type | Delivered |

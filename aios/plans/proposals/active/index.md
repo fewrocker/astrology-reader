@@ -1,3 +1,3 @@
 # Active Proposals
 
-No active proposals. All Sprint 0028 proposals have been delivered and moved to done.
+No proposals are currently active. All sprint-0029 proposals have been moved to done.
