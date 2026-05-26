@@ -6,6 +6,7 @@ import {
   computeInstantInterpretation,
   computeThreeCardSynthesis,
   computeDailyDrawSeed,
+  SPREAD_POSITIONS,
 } from '../tarot'
 import { TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotAstroContext } from '../tarot'
@@ -265,6 +266,89 @@ describe('buildTarotAstroContext', () => {
   it('never throws even with malformed chart data', () => {
     const badChart = { planets: [], houses: [], angles: {} as ChartData['angles'], unknownTime: true, houseSystem: 'placidus' as const }
     expect(() => buildTarotAstroContext(badChart, null, 5, null)).not.toThrow()
+  })
+
+  it('tight applying Saturn outscores wide separating Pluto', () => {
+    // Pluto: base priority 10, orb 4.8° separating
+    // Saturn: base priority 7, orb 0.3° applying
+    // Pluto score: 10 * (1 + (8-4.8)/8 * 0.6) * 1.0 = 10 * (1 + 0.24) = 12.4
+    // Saturn score: 7 * (1 + (8-0.3)/8 * 0.6) * 1.15 = 7 * (1 + 0.5775) * 1.15 ≈ 12.69
+    const transitsWithMixedOrbs: TransitData = {
+      period: 'daily',
+      dateRange: { start: '2026-05-25', end: '2026-05-25' },
+      currentPlanets: [],
+      transitAspects: [
+        {
+          transitPlanet: 'Pluto',
+          natalPlanet: 'Sun',
+          natalHouse: 1,
+          natalSign: 'Aries',
+          type: 'trine',
+          orb: 4.8,
+          exactAngle: 120,
+          applying: false,
+          nature: 'harmonious',
+          symbol: '△',
+        },
+        {
+          transitPlanet: 'Saturn',
+          natalPlanet: 'Moon',
+          natalHouse: 4,
+          natalSign: 'Cancer',
+          type: 'opposition',
+          orb: 0.3,
+          exactAngle: 180,
+          applying: true,
+          nature: 'challenging',
+          symbol: '☍',
+        },
+      ],
+      ingresses: [],
+      retrogrades: [],
+    }
+    const ctx = buildTarotAstroContext(mockChartData, transitsWithMixedOrbs, 5, null)
+    expect(ctx.dominantTransitPlanet).toBe('Saturn')
+  })
+
+  it('Pluto still outscores Saturn when both have equal orbs (priority hierarchy preserved)', () => {
+    // With identical orb and both separating, PLANET_PRIORITY determines the winner.
+    // Pluto score: 10 * (1 + (8-2)/8 * 0.6) * 1.0 = 10 * 1.45 = 14.5
+    // Saturn score: 7  * (1 + (8-2)/8 * 0.6) * 1.0 = 7  * 1.45 = 10.15
+    const transitsEqualOrbs: TransitData = {
+      period: 'daily',
+      dateRange: { start: '2026-05-25', end: '2026-05-25' },
+      currentPlanets: [],
+      transitAspects: [
+        {
+          transitPlanet: 'Pluto',
+          natalPlanet: 'Sun',
+          natalHouse: 1,
+          natalSign: 'Aries',
+          type: 'square',
+          orb: 2.0,
+          exactAngle: 90,
+          applying: false,
+          nature: 'challenging',
+          symbol: '□',
+        },
+        {
+          transitPlanet: 'Saturn',
+          natalPlanet: 'Moon',
+          natalHouse: 4,
+          natalSign: 'Cancer',
+          type: 'square',
+          orb: 2.0,
+          exactAngle: 90,
+          applying: false,
+          nature: 'challenging',
+          symbol: '□',
+        },
+      ],
+      ingresses: [],
+      retrogrades: [],
+    }
+    const ctx = buildTarotAstroContext(mockChartData, transitsEqualOrbs, 5, null)
+    expect(ctx.dominantTransitPlanet).toBe('Pluto')
   })
 })
 
