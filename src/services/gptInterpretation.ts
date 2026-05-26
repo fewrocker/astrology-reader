@@ -555,7 +555,7 @@ export interface TarotSingleSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
-  natalDominantModality: string | null
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -581,7 +581,7 @@ export interface TarotThreeSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
-  natalDominantModality: string | null
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -622,7 +622,7 @@ export interface TarotCelticSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
-  natalDominantModality: string | null
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonPhase: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
