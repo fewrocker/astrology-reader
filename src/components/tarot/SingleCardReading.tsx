@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import TarotInterpretationPanel from './TarotInterpretationPanel'
 import SingleCardSynthesisPanel from './SingleCardSynthesisPanel'
@@ -30,13 +30,60 @@ function getArcanaLabel(card: TarotCard): string {
   return 'Minor Arcana'
 }
 
-function getNumberLabel(card: TarotCard): string {
-  if (card.arcana === 'major') {
-    const ROMAN: Record<number, string> = { 0: '0', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI', 7: 'VII', 8: 'VIII', 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 13: 'XIII', 14: 'XIV', 15: 'XV', 16: 'XVI', 17: 'XVII', 18: 'XVIII', 19: 'XIX', 20: 'XX', 21: 'XXI' }
-    return ROMAN[card.number] ?? String(card.number)
+// ─── Build rich discuss context string ────────────────────────────────────────
+function buildDiscussContext(
+  card: TarotCard,
+  reversed: boolean,
+  interpretation: InstantInterpretation,
+  synthesisPayload: TarotSingleSynthesisPayload | null,
+  synthesisText: string | null,
+): string {
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  const arcanaLabel = getArcanaLabel(card)
+  const payload = synthesisPayload
+
+  let ctx = `User intention: ${payload?.userIntention ?? 'Not stated'}\n\n`
+  ctx += `SINGLE CARD TAROT READING — ${date}\n`
+
+  // Natal + sky line
+  const natalSun = payload?.natalSunSign ?? ''
+  const natalMoon = payload?.natalMoonSign ?? ''
+  const natalAsc = payload?.natalAscSign ?? ''
+  const lunarPhase = payload?.moonPhaseName ?? ''
+  const personalDay = payload?.personalDay ?? 0
+  ctx += `Natal: ${natalSun}, ${natalMoon}, ${natalAsc} | Moon: ${lunarPhase} | Personal Day: ${personalDay}\n`
+
+  // Advance category when present
+  if (payload?.advanceCategory) ctx += `Advance category: ${payload.advanceCategory}\n`
+
+  // Card line
+  ctx += `\nCARD:\n`
+  ctx += `${card.name} (${reversed ? 'Reversed' : 'Upright'}) — ${arcanaLabel}\n`
+  ctx += `Core Meaning: ${interpretation.coreMeaning}\n`
+  ctx += `Symbolic Theme: ${interpretation.symbolicTheme}\n`
+  ctx += `Emotional Meaning: ${interpretation.emotionalMeaning}\n`
+  ctx += `Practical Guidance: ${interpretation.practicalGuidance}\n`
+  ctx += `Reflection Question: ${interpretation.reflectionQuestion}\n`
+
+  // Astro connection headline and transit note from instant interpretation
+  if (interpretation.astroConnection.astroHeadline) {
+    ctx += `Astro Headline: ${interpretation.astroConnection.astroHeadline}\n`
   }
-  const WORDS: Record<number, string> = { 1: 'Ace', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten', 11: 'Page', 12: 'Knight', 13: 'Queen', 14: 'King' }
-  return WORDS[card.number] ?? String(card.number)
+  if (interpretation.astroConnection.transitInfluence) {
+    ctx += `Transit Influence: ${interpretation.astroConnection.transitInfluence}\n`
+  }
+
+  // Daily transit summary (top context from the live sky)
+  if (payload?.dailyTransitSummary) {
+    ctx += `\nDAILY TRANSIT CONTEXT:\n${payload.dailyTransitSummary}\n`
+  }
+
+  // GPT synthesis text when loaded
+  if (synthesisText) {
+    ctx += `\nAI SYNTHESIS:\n${synthesisText}\n`
+  }
+
+  return ctx
 }
 
 export default function SingleCardReading({
@@ -57,24 +104,19 @@ export default function SingleCardReading({
   const [selectedCount, setSelectedCount] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [discussOpen, setDiscussOpen] = useState(false)
+  const [loadedSynthesisText, setLoadedSynthesisText] = useState<string | null>(null)
   const personalDayMatchesCard = card?.number === personalDay
   const revealReady = selectedCount > 0
   const cardLabel = useMemo(() => (card ? `${card.name}${reversed ? ', reversed' : ''}` : 'Face-down tarot card'), [card, reversed])
 
+  const handleSynthesisLoaded = useCallback((text: string) => {
+    setLoadedSynthesisText(text)
+  }, [])
+
   const discussContext = useMemo(() => {
     if (!card || !interpretation) return ''
-    return [
-      'SINGLE CARD TAROT READING',
-      `Card: ${card.name} (${reversed ? 'Reversed' : 'Upright'})`,
-      `Arcana: ${card.arcana}${card.suit ? `, ${card.suit}` : ''}`,
-      `Core Meaning: ${interpretation.coreMeaning}`,
-      `Symbolic Theme: ${interpretation.symbolicTheme}`,
-      `Emotional Meaning: ${interpretation.emotionalMeaning}`,
-      `Practical Guidance: ${interpretation.practicalGuidance}`,
-      `Reflection Question: ${interpretation.reflectionQuestion}`,
-      `Personal Day: ${personalDay}`,
-    ].join('\n')
-  }, [card, interpretation, personalDay, reversed])
+    return buildDiscussContext(card, reversed, interpretation, synthesisPayload, loadedSynthesisText)
+  }, [card, interpretation, reversed, synthesisPayload, loadedSynthesisText])
 
   const bgTint = card?.element === 'Fire'
     ? 'rgba(255,120,0,0.03)'
@@ -211,6 +253,7 @@ export default function SingleCardReading({
         {revealed && card && interpretation && (
           <SingleCardSynthesisPanel
             synthesisPayload={synthesisPayload}
+            onSynthesisLoaded={handleSynthesisLoaded}
             onDiscuss={() => {
               onDiscuss()
               setDiscussOpen(true)
