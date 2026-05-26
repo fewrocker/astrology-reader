@@ -18,6 +18,7 @@ type SynthesisState = 'loading' | 'success' | 'unavailable' | 'rate-limited'
 interface TarotSynthesisPanelProps {
   synthesisPayload: TarotSingleSynthesisPayload | null
   onDiscuss: () => void
+  onSynthesisLoaded?: (text: string) => void
 }
 
 function splitReadableParagraphs(text: string): string[] {
@@ -80,6 +81,7 @@ async function callTarotSynthesis(
 export default function SingleCardSynthesisPanel({
   synthesisPayload,
   onDiscuss,
+  onSynthesisLoaded,
 }: TarotSynthesisPanelProps) {
   const [state, setState] = useState<SynthesisState>('loading')
   const [text, setText] = useState<string | null>(null)
@@ -108,6 +110,7 @@ export default function SingleCardSynthesisPanel({
         setTimeout(() => {
           setText(result)
           setState('success')
+          onSynthesisLoaded?.(result)
         }, delay)
       })
       .catch(err => {
