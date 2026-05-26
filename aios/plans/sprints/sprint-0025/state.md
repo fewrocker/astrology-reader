@@ -15,6 +15,6 @@ sprint-0025
 | 0003 | sprint-0025-task-0003-issue-save-wiring-no-ops | completed |
 | 0004 | sprint-0025-task-0004-issue-threecardreading-phantom-dependency | completed |
 | 0005 | sprint-0025-task-0005-issue-transit-context-null | completed |
-| 0006 | sprint-0025-task-0006-code-tarot-shared-utilities | in-progress |
+| 0006 | sprint-0025-task-0006-code-tarot-shared-utilities | completed |
 | 0007 | sprint-0025-task-0007-feat-natal-house-context | in-progress |
 | 0008 | sprint-0025-task-0008-feat-saved-reading-detail-view | completed |
