@@ -629,8 +629,8 @@ export interface TarotCelticSynthesisPayload {
   natalNorthNodeHouse: number | null
   natalMarsHouse: number | null
   personalDay: number
-  personalYear: number
-  lifePathNumber: number
+  personalYear: number | null
+  lifePathNumber: number | null
   advanceCategory: string | null
   advanceReason: string | null
   moonPhaseName: string
