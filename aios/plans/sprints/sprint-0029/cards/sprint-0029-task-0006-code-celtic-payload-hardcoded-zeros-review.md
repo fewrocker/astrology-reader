@@ -1,30 +1,46 @@
 # Review: code-celtic-payload-hardcoded-zeros
 
-## What was done
+**Task:** sprint-0029-task-0006
+**Branch:** sprint-0029-task-0006-code-celtic-payload-hardcoded-zeros
+**Status:** Complete
+
+---
+
+## What Was Done
 
 Three files were changed:
 
-### 1. `src/services/gptInterpretation.ts` — client-side type interface
-`TarotCelticSynthesisPayload.personalYear` and `lifePathNumber` changed from `number` to `number | null`. This makes the optionality explicit at the API boundary — a future reader of this interface understands these fields are not always available, rather than assuming a valid numerology value is always present.
+### `src/components/tarot/CelticCrossReading.tsx`
 
-### 2. `server/services/gptTarot.ts` — server-side type interface + prompt rendering
-Same type change on `TarotCelticSynthesisPayload`. The GPT prompt rendering at lines 1054–1055 was updated to omit each line when its value is null:
-- `Life Path:` line is omitted entirely when `authorizedLifePath` is null
-- `Personal Year:` prefix is omitted when `authorizedPersonalYear` is null; `Personal Day:` is always included
+`buildCelticSynthesisPayload` now passes `personalYear: null` and `lifePathNumber: null` instead of the hardcoded zeros. These fields have no valid source at the Celtic Cross client boundary — the component receives no `birthDate` prop and cannot compute them. Sending `null` accurately represents "unavailable" instead of fabricating `0`, which GPT cannot distinguish from a real numerology value.
+
+### `server/services/gptTarot.ts`
+
+Two changes in tandem:
+
+1. Interface update — `TarotCelticSynthesisPayload` now types both fields as `number | null`.
+
+2. Prompt template update — the lines that emit `Life Path` and `Personal Year` into the GPT context are now conditional. When values are unavailable, those lines are omitted entirely. `personalDay` is always written because it derives from the calendar date, not from birth data, and is always valid.
 
 For authenticated users whose birth context resolves server-side, `calculatePersonalYear()` and `calculateLifePath()` overwrite null with real computed values — that path is unchanged. For unauthenticated users (the broken path), GPT now receives no life path or personal year line rather than `Life Path: 0` / `Personal Year: 0`.
 
-### 3. `src/components/tarot/CelticCrossReading.tsx` — payload assembly
-`buildCelticSynthesisPayload` now passes `personalYear: null` and `lifePathNumber: null` instead of the hardcoded zeros.
+### `src/services/gptInterpretation.ts`
 
-## Verification
+The client-side mirror of `TarotCelticSynthesisPayload` was updated to match the server interface: `personalYear: number | null` and `lifePathNumber: number | null`. Both sides of the API boundary now agree on the true optionality of these fields.
 
-- `npm run build` — clean, no TypeScript errors
-- `npm run server:build` — clean, no TypeScript errors
+---
 
-## What this does not change
+## Design Decisions
 
-- The authenticated path: when `userId` is present and `resolveUserBirthContext` succeeds, the server still overwrites null with server-computed values (lines 952–953). No behavior change for authenticated users.
-- `personalDay` is not nulled — it is derived from `astroContext.personalDay` which is computed independently of birth date via the transit context.
-- `TarotSingleSynthesisPayload` and `TarotThreeSynthesisPayload` are not changed — those flows receive real values from parent components that compute them before passing down.
-- `buildTarotDiscussContext` in `gptInterpretation.ts` (exported, currently unused by any component) retains `lifePathNumber: number` and `personalYear: number` in its `natal` parameter — no callers pass Celtic Cross null values to it.
+**Prompt omission over fallback text:** When `authorizedLifePath` or `authorizedPersonalYear` is null, the corresponding line is dropped from the prompt entirely rather than rendered as "unknown" or a placeholder. An absent line produces no GPT hallucination; a rendered placeholder might prompt GPT to speculate. Silence is correct here.
+
+**No prop threading:** The option to pass `birthDate` through `CelticCrossReading`'s props for client-side computation was evaluated and deferred. The immediate need is correctness — eliminating the fabricated zeros. Prop threading is a separate enhancement that can be revisited if numerology context proves valuable to unauthenticated Celtic Cross readings.
+
+**What this does not change:** `TarotSingleSynthesisPayload` and `TarotThreeSynthesisPayload` are not changed — those flows receive real values from parent components that compute them before passing down. `buildTarotDiscussContext` in `gptInterpretation.ts` retains `lifePathNumber: number` and `personalYear: number` in its `natal` parameter — no callers pass Celtic Cross null values to it.
+
+---
+
+## Build
+
+- `npm run build` (Vite client): clean, no errors
+- `npm run server:build` (TypeScript server): clean, no errors
