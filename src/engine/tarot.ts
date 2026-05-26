@@ -682,9 +682,28 @@ function buildTransitInfluence(
   astroContext: TarotAstroContext,
   position: SpreadPosition | null,
 ): string {
-  // Level 1: specific transit adaptation lookup
+  // Level 1: specific transit adaptation lookup (two-pass)
+  // Pass 1: dominant-planet entries only — ensures dominantTransitPlanet always wins
+  // over a retrograde entry for a lower-priority planet, regardless of array order.
   const adaptations = TRANSIT_ADAPTATIONS[card.id]
   if (adaptations && adaptations.length > 0) {
+    for (const entry of adaptations) {
+      if (astroContext.dominantTransitPlanet !== entry.planet) continue
+      if (entry.condition === 'retrograde') {
+        if (astroContext.retrogradeplanets.includes(entry.planet)) {
+          return entry.emphasis
+        }
+      } else if (entry.condition === 'direct') {
+        if (!astroContext.retrogradeplanets.includes(entry.planet)) {
+          return entry.emphasis
+        }
+      } else {
+        // 'any' — dominant planet matched; return immediately
+        return entry.emphasis
+      }
+    }
+
+    // Pass 2: retrograde and element-affinity checks (no dominant-planet constraint)
     for (const entry of adaptations) {
       if (entry.condition === 'retrograde') {
         if (astroContext.retrogradeplanets.includes(entry.planet)) {
