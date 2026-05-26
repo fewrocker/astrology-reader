@@ -63,7 +63,8 @@ export default function TarotHomeView({ onExit }: TarotHomeViewProps) {
     dispatch({ type: 'SET_READING_MODE', mode })
     if (mode === 'single') {
       setShowThreeSpreadOptions(false)
-      dispatch({ type: 'NAVIGATE_TAROT', subView: 'single-reading' })
+      // Navigate to the shuffle ritual — it will forward to single-reading on reveal
+      dispatch({ type: 'NAVIGATE_TAROT', subView: 'shuffle-ritual' })
       return
     }
     setShowThreeSpreadOptions(true)
@@ -72,7 +73,8 @@ export default function TarotHomeView({ onExit }: TarotHomeViewProps) {
   const handleSelectThreeSpread = (mode: SpreadMode, label: string, positions: string[]) => {
     dispatch({ type: 'SET_READING_MODE', mode: 'three' })
     dispatch({ type: 'SET_SPREAD_MODE', spreadMode: { id: mode, label, positions } })
-    dispatch({ type: 'NAVIGATE_TAROT', subView: 'three-reading' })
+    // Navigate to the shuffle ritual — it will forward to three-reading on reveal
+    dispatch({ type: 'NAVIGATE_TAROT', subView: 'shuffle-ritual' })
   }
 
   return (
