@@ -106,6 +106,8 @@ export interface TarotCelticSynthesisPayload {
   advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   localDate: string
 }
 
@@ -456,6 +458,9 @@ export async function handleTarotCelticSynthesis(
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
   let natalMoonPhase = payload.natalMoonPhase
+  let dailyTransitSummary = payload.dailyTransitSummary
+  let weeklyTransitSummary = payload.weeklyTransitSummary
+  let currentMoonSign = payload.moonSign
 
   if (userId) {
     const ctx = resolveUserBirthContext(userId)
@@ -468,6 +473,11 @@ export async function handleTarotCelticSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      const dailyTransitData = calculateTransits(natalChart, 'daily')
+      const weeklyTransitData = calculateTransits(natalChart, 'weekly')
+      dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
+      weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
+      currentMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? payload.moonSign
     }
   }
 
@@ -511,8 +521,14 @@ Sun in ${natalSunSign}, Moon in ${natalMoonSign}, Ascendant in ${natalAscSign}
 ${natalMoonPhase ? `Natal Moon Phase: ${natalMoonPhase}` : ''}
 Life Path: ${authorizedLifePath}
 Personal Year: ${authorizedPersonalYear}, Personal Day: ${authorizedPersonalDay}
-Current Moon: ${payload.moonPhaseName} in ${payload.moonSign}
+Current Moon: ${payload.moonPhaseName} in ${currentMoonSign}
 ${payload.advanceCategory ? `Advance signal: ${payload.advanceCategory} — ${payload.advanceReason ?? ''}` : ''}
+
+## Daily Transit Context
+${dailyTransitSummary ?? 'No daily transit summary available.'}
+
+## Weekly Transit Context
+${weeklyTransitSummary ?? 'No weekly transit summary available.'}
 
 ## Structure Your Synthesis in These Named Sections
 
@@ -535,7 +551,7 @@ Position 9 (hopes/fears are one card — it names both) and position 10 (outcome
 The dominant psychological pattern this ten-card constellation reveals — a single named quality or dynamic that runs through the entire reading like a thread.
 
 **Astrology Resonance**
-Where do the natal chart and current sky echo the spread's symbolic themes? Be specific — name the sign or transit that directly amplifies a card's meaning.
+Where do the natal chart, daily transits, and weekly transits echo the spread's symbolic themes? Be specific — name the sign or transit that directly amplifies a card's meaning. Connect at least one daily transit feature and one weekly transit feature back to specific cards in this spread.
 
 **Practical Integration**
 Not prescriptive steps. Invitations: what does this constellation invite this person to move toward, release, or hold differently?

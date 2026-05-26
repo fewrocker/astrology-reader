@@ -152,14 +152,20 @@ function buildThreeAstroCtx(
   }
 }
 
-function buildCelticAstroCtx(chartData: ChartData, birthDate: string): CelticCtx {
+function buildCelticAstroCtx(
+  chartData: ChartData,
+  birthDate: string,
+  dailyTransitSummary: string,
+  weeklyTransitSummary: string,
+  currentMoonSign: string,
+): CelticCtx {
   return {
     sunSign: chartData.planets.find(p => p.name === 'Sun')?.sign ?? '',
     moonSign: chartData.planets.find(p => p.name === 'Moon')?.sign ?? '',
     ascendant: chartData.angles?.ascendant?.sign ?? '',
     dominantElement: computeDominantElement(chartData) ?? '',
-    currentMoonPhase: '',
-    significantTransits: [],
+    currentMoonPhase: currentMoonSign,
+    significantTransits: [dailyTransitSummary, weeklyTransitSummary].filter(Boolean),
     personalDay: computePersonalDay(birthDate),
     advanceCategory: null,
     numerologyYear: computePersonalYear(birthDate),
@@ -416,6 +422,48 @@ function ThreeReadingFlow({
   )
 }
 
+function CelticReadingFlow({
+  chartData,
+  birthDate,
+  userIntention,
+  onBack,
+}: {
+  chartData: ChartData
+  birthDate: string
+  userIntention: string | null
+  onBack: () => void
+}) {
+  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
+  const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
+  const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+
+  const currentMoonSign = useMemo(
+    () => dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? '',
+    [dailyTransitData],
+  )
+
+  const astroContext = useMemo(
+    () => buildCelticAstroCtx(
+      chartData,
+      birthDate,
+      formatTransitSummary(dailyTransitData, 'Daily'),
+      formatTransitSummary(weeklyTransitData, 'Weekly'),
+      currentMoonSign,
+    ),
+    [chartData, birthDate, dailyTransitData, weeklyTransitData, currentMoonSign],
+  )
+
+  return (
+    <CelticCrossReading
+      userIntention={userIntention || null}
+      tarotAstroContext={astroContext}
+      engineAstroContext={engineCtx}
+      onSave={() => {}}
+      onDiscard={onBack}
+    />
+  )
+}
+
 // ─── Inner component (inside TarotProvider) ───────────────────────────────────
 
 export interface TarotPageProps {
@@ -470,11 +518,11 @@ function TarotPageInner({
 
     case 'celtic-reading':
       return (
-        <CelticCrossReading
+        <CelticReadingFlow
+          chartData={chartData}
+          birthDate={birthDate}
           userIntention={state.userIntention || null}
-          tarotAstroContext={buildCelticAstroCtx(chartData, birthDate)}
-          onSave={() => {}}
-          onDiscard={onBackToHome}
+          onBack={onBackToHome}
         />
       )
 

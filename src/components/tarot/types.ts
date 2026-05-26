@@ -70,6 +70,7 @@ export interface CelticSynthesisPayload {
     arcana: TarotArcana
     suit?: string
     element: string | null
+    number?: number
     reversed: boolean
     coreMeaning: string
     symbolicTheme: string
