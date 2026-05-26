@@ -118,25 +118,23 @@ describe('Tarot card data completeness', () => {
     }
   })
 
-  // Coverage contract: every pip card Two–Nine of all four suits must have at least one
-  // transit adaptation entry. This test documents the contract established when sprint-0027
-  // closes the 28-card pip gap. It is marked todo so the build passes while task-0006
-  // (which adds the pip entries) is still in progress. Activate by replacing it.todo with
-  // it once all 32 pip cards have entries in transitAdaptations.ts.
-  it.todo('every pip card Two–Nine of all four suits has at least one transit adaptation entry', () => {
-    const PIP_NUMBERS = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
-    const SUITS = ['wands', 'cups', 'swords', 'pentacles'] as const
+  it('all pip cards (Two through Nine) have at least one transit adaptation entry', () => {
+    const suits = ['wands', 'cups', 'swords', 'pentacles'] as const
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
     const coveredCardIds = new Set(TRANSIT_ADAPTATIONS.map(e => e.cardId))
     const missing: string[] = []
-    for (const suit of SUITS) {
-      for (const num of PIP_NUMBERS) {
-        const id = `${num}-of-${suit}`
+    for (const suit of suits) {
+      for (const number of numbers) {
+        const id = `${number}-of-${suit}`
         if (!coveredCardIds.has(id)) {
           missing.push(id)
         }
       }
     }
-    expect(missing, `Missing transit adaptations for: ${missing.join(', ')}`).toHaveLength(0)
+    expect(
+      missing,
+      missing.length > 0 ? `Missing transit adaptations for: ${missing.join(', ')}` : ''
+    ).toHaveLength(0)
   })
 
   it('astro connections covers exactly 78 cards', () => {
