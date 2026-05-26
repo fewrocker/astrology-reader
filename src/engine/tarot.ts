@@ -147,6 +147,178 @@ const ADVANCE_CATEGORY_NOTES: Record<string, string> = {
   neutral: 'The sky holds steady — this card speaks on its own terms, uncolored by dramatic transits.',
 }
 
+type ThreeCardSpreadProfile = {
+  spreadName: string
+  slotRole: [string, string, string]
+  coreFrame: [string, string, string]
+  emotionalFrame: [string, string, string]
+  practicalFrame: [string, string, string]
+  reflectionFrame: [string, string, string]
+}
+
+const THREE_CARD_SPREAD_PROFILES: Record<Exclude<SpreadType, 'single' | 'celtic-cross'>, ThreeCardSpreadProfile> = {
+  'three-past-present-future': {
+    spreadName: 'Past / Present / Future',
+    slotRole: ['what formed the ground', 'what is alive now', 'what is emerging next'],
+    coreFrame: [
+      'In the past position, this card describes the pattern, atmosphere, or unfinished residue that still shapes the present.',
+      'In the present position, this card names the energy you are actively standing in now.',
+      'In the future position, this card shows the direction current energies are already beginning to take.',
+    ],
+    emotionalFrame: [
+      'Emotionally, it shows what the past still asks you to feel or understand instead of simply leaving behind.',
+      'Emotionally, it reveals the tone beneath the surface of the current moment.',
+      'Emotionally, it hints at the feeling-tone that is gathering if the present pattern continues.',
+    ],
+    practicalFrame: [
+      'Practically, the work is to recognize how this older pattern is still informing your current choices.',
+      'Practically, the card asks you to respond to what is true now rather than what used to be true.',
+      'Practically, the card points toward the adjustment that would meet the future consciously rather than passively.',
+    ],
+    reflectionFrame: [
+      'What from the past is still asking to be understood before it can truly become the past?',
+      'What is this present moment asking you to face without delay or projection?',
+      'If this card is showing where things are heading, what would it mean to meet that direction consciously now?',
+    ],
+  },
+  'three-situation-challenge-advice': {
+    spreadName: 'Situation / Challenge / Advice',
+    slotRole: ['the true situation', 'the living friction', 'the symbolic direction forward'],
+    coreFrame: [
+      'In the situation position, this card names the real condition you are inside, beneath any story about it.',
+      'In the challenge position, this card shows the exact pressure, resistance, or paradox that makes the situation difficult.',
+      'In the advice position, this card becomes orientation rather than description: the quality of response the spread is asking for.',
+    ],
+    emotionalFrame: [
+      'Emotionally, it shows what the situation feels like from within, not merely how it appears from outside.',
+      'Emotionally, it reveals the feeling-complex that is most likely to create friction if left unconscious.',
+      'Emotionally, it suggests the inner stance that would let the advice become embodied rather than theoretical.',
+    ],
+    practicalFrame: [
+      'Practically, the card asks you to see the landscape clearly before trying to solve it.',
+      'Practically, the card tells you what must be worked with rather than bypassed.',
+      'Practically, the card points toward what to cultivate, release, or emphasize as you move forward.',
+    ],
+    reflectionFrame: [
+      'What becomes clearer about the situation when you stop interpreting it and simply look at it?',
+      'What kind of pressure is this challenge trying to refine in you rather than merely block?',
+      'If this card is advice rather than prediction, what quality of response is it asking you to practice?',
+    ],
+  },
+  'three-mind-heart-action': {
+    spreadName: 'Mind / Heart / Action',
+    slotRole: ['the mental frame', 'the emotional truth', 'the action that aligns them'],
+    coreFrame: [
+      'In the mind position, this card describes the thought-pattern, narrative, or perspective through which you are interpreting events.',
+      'In the heart position, this card speaks to the deeper emotional truth beneath analysis.',
+      'In the action position, this card shows what movement would bring thought and feeling into lived coherence.',
+    ],
+    emotionalFrame: [
+      'Emotionally, it reveals how the mind may be protecting, distorting, or clarifying what you feel.',
+      'Emotionally, it names the feeling-current that logic alone cannot resolve.',
+      'Emotionally, it suggests what kind of action would honor the heart without abandoning discernment.',
+    ],
+    practicalFrame: [
+      'Practically, the card asks you to examine whether this way of thinking is helping you see clearly.',
+      'Practically, the card invites you to make room for the feeling it names rather than overriding it.',
+      'Practically, the card points toward the next step that would convert inner clarity into motion.',
+    ],
+    reflectionFrame: [
+      'What thought-pattern is this card revealing at the level of mind?',
+      'What emotional truth has this card been waiting for you to admit at the level of heart?',
+      'What action would make your inner world less divided and more honest?',
+    ],
+  },
+  'three-self-other-bridge': {
+    spreadName: 'Self / Other / Bridge',
+    slotRole: ['your side of the dynamic', 'the other side of the dynamic', 'the bridge between them'],
+    coreFrame: [
+      'In the self position, this card reflects your energy, stance, need, or role inside the dynamic.',
+      'In the other position, this card shows the energy on the other side of the exchange as the cards understand it.',
+      'In the bridge position, this card reveals what could connect, transform, or mediate between self and other.',
+    ],
+    emotionalFrame: [
+      'Emotionally, it shows what you may be carrying into the dynamic whether or not you intend to.',
+      'Emotionally, it suggests what the other side may be organized around, defending, or expressing.',
+      'Emotionally, it points to the quality that could soften opposition and create relation.',
+    ],
+    practicalFrame: [
+      'Practically, the card asks for self-honesty before any attempt to change the dynamic externally.',
+      'Practically, the card asks you to understand the other side as a real symbolic force rather than a projection.',
+      'Practically, the card suggests the method, tone, or shift that could become a bridge rather than a wall.',
+    ],
+    reflectionFrame: [
+      'What is this card showing you about your own role in the pattern?',
+      'What is this card asking you to understand about the other side without collapsing into agreement or blame?',
+      'If this card is the bridge, what would it look like to embody that bridge rather than merely wish for connection?',
+    ],
+  },
+  'three-theme-shadow-gift': {
+    spreadName: 'Theme / Shadow / Gift',
+    slotRole: ['the central lesson', 'what is hidden beneath it', 'what becomes available through it'],
+    coreFrame: [
+      'In the theme position, this card names the central lesson or pattern trying to become conscious in your life.',
+      'In the shadow position, this card reveals what has been operating below awareness and shaping the theme from underneath.',
+      'In the gift position, this card shows what becomes possible when the theme is met honestly and the shadow is brought into the light.',
+    ],
+    emotionalFrame: [
+      'Emotionally, it reveals the repeating tone that keeps returning until it is understood.',
+      'Emotionally, it points to what may be avoided, repressed, or displaced yet still powerful.',
+      'Emotionally, it suggests the quality of aliveness or freedom that emerges when the pattern is engaged consciously.',
+    ],
+    practicalFrame: [
+      'Practically, the card asks you to identify this theme where it appears across different areas of life.',
+      'Practically, the card asks for honest contact with what has been hidden rather than moral judgment about it.',
+      'Practically, the card points toward the capacity, resource, or orientation that can now be claimed.',
+    ],
+    reflectionFrame: [
+      'Where is this theme already repeating strongly enough that it can no longer be mistaken for coincidence?',
+      'What hidden element of this pattern has been influencing you most from below awareness?',
+      'What becomes possible if you receive the gift in this card as something to embody, not just admire?',
+    ],
+  },
+}
+
+function getThreeCardSpreadProfile(position: SpreadPosition | null): ThreeCardSpreadProfile | null {
+  if (!position || position.spreadType === 'single' || position.spreadType === 'celtic-cross') return null
+  return THREE_CARD_SPREAD_PROFILES[position.spreadType]
+}
+
+function mergeSentence(base: string, addition: string): string {
+  const trimmedBase = base.trim()
+  const trimmedAddition = addition.trim()
+  if (!trimmedBase) return trimmedAddition
+  if (!trimmedAddition) return trimmedBase
+  return `${trimmedBase} ${trimmedAddition}`
+}
+
+function adaptInterpretationToPosition(
+  interpretation: {
+    coreMeaning: string
+    emotionalMeaning: string
+    practicalGuidance: string
+    reflectionQuestion: string
+    symbolicTheme: string
+  },
+  position: SpreadPosition | null,
+): typeof interpretation {
+  const profile = getThreeCardSpreadProfile(position)
+  if (!position || !profile) return interpretation
+
+  const index = position.positionIndex as 0 | 1 | 2
+  const positionLead = `${profile.coreFrame[index]} ${position.meaning}`
+  const symbolicTheme = `${interpretation.symbolicTheme} In ${profile.spreadName}, ${position.label.toLowerCase()} names ${profile.slotRole[index]}.`
+
+  return {
+    ...interpretation,
+    coreMeaning: mergeSentence(positionLead, interpretation.coreMeaning),
+    emotionalMeaning: mergeSentence(profile.emotionalFrame[index], interpretation.emotionalMeaning),
+    practicalGuidance: mergeSentence(profile.practicalFrame[index], interpretation.practicalGuidance),
+    reflectionQuestion: `${profile.reflectionFrame[index]} ${interpretation.reflectionQuestion}`,
+    symbolicTheme,
+  }
+}
+
 // ─── Seed utilities ───────────────────────────────────────────────────────────
 
 function seedToNumber(seed: string): number {
@@ -530,6 +702,17 @@ export function computeInstantInterpretation(
     astroHeadline,
   }
 
+  const positionAwareInterpretation = adaptInterpretationToPosition(
+    {
+      coreMeaning: reversed ? card.reversedMeaning : card.uprightMeaning,
+      symbolicTheme: card.symbolicTheme,
+      emotionalMeaning: card.emotionalMeaning,
+      practicalGuidance: card.practicalGuidance,
+      reflectionQuestion: card.reflectionQuestion,
+    },
+    position,
+  )
+
   return {
     cardId: card.id,
     cardName: card.name,
@@ -538,11 +721,11 @@ export function computeInstantInterpretation(
     reversed,
     positionLabel: position?.label ?? null,
     positionMeaning: position?.meaning ?? null,
-    coreMeaning: reversed ? card.reversedMeaning : card.uprightMeaning,
-    symbolicTheme: card.symbolicTheme,
-    emotionalMeaning: card.emotionalMeaning,
-    practicalGuidance: card.practicalGuidance,
-    reflectionQuestion: card.reflectionQuestion,
+    coreMeaning: positionAwareInterpretation.coreMeaning,
+    symbolicTheme: positionAwareInterpretation.symbolicTheme,
+    emotionalMeaning: positionAwareInterpretation.emotionalMeaning,
+    practicalGuidance: positionAwareInterpretation.practicalGuidance,
+    reflectionQuestion: positionAwareInterpretation.reflectionQuestion,
     numerologyNote,
     astroConnection,
   }

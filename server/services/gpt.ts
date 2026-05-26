@@ -1023,13 +1023,13 @@ export async function handleGptRequest(
     case 'couple-transit-interpretation':
       return handleCoupleTransitInterpretation(payload as Parameters<typeof handleCoupleTransitInterpretation>[0])
     case 'tarot-single-synthesis':
-      return handleTarotSingleSynthesis(payload as TarotSingleSynthesisPayload, userId)
+      return handleTarotSingleSynthesis(payload as unknown as TarotSingleSynthesisPayload, userId)
     case 'tarot-three-synthesis':
-      return handleTarotThreeSynthesis(payload as TarotThreeSynthesisPayload, userId)
+      return handleTarotThreeSynthesis(payload as unknown as TarotThreeSynthesisPayload, userId)
     case 'tarot-celtic-synthesis':
-      return handleTarotCelticSynthesis(payload as TarotCelticSynthesisPayload, userId)
+      return handleTarotCelticSynthesis(payload as unknown as TarotCelticSynthesisPayload, userId)
     case 'tarot-discuss':
-      return handleTarotDiscuss(payload as TarotDiscussPayload)
+      return handleTarotDiscuss(payload as unknown as TarotDiscussPayload)
     default:
       throw new Error(`Unknown GPT type: ${type}`)
   }

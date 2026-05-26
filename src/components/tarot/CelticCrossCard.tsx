@@ -1,4 +1,7 @@
 import React from 'react'
+import { TAROT_CARD_BY_ID } from '../../data/tarot/cards'
+import { CardBack } from './CardBack'
+import { TarotCard as TarotCardComponent } from './TarotCard'
 import type { DrawnCard } from './types'
 import type { CelticCrossPosition } from '../../data/tarot/spreadPositions'
 
@@ -11,6 +14,7 @@ interface CelticCrossCardProps {
   onReveal?: () => void
   tabIndex?: number
   id?: string
+  hidden?: boolean
 }
 
 export default function CelticCrossCard({
@@ -22,18 +26,59 @@ export default function CelticCrossCard({
   onReveal,
   tabIndex = -1,
   id,
+  hidden = false,
 }: CelticCrossCardProps) {
+  if (hidden) {
+    return (
+      <div
+        id={id}
+        aria-hidden="true"
+        style={{ width: '100%', aspectRatio: '2/3', opacity: 0 }}
+      />
+    )
+  }
+
   const isRevealed = cardState === 'face-up'
+  const tarotCard = card ? TAROT_CARD_BY_ID[card.cardId] : null
 
   const baseStyle: React.CSSProperties = {
     width: '100%',
-    aspectRatio: '2/3',
+    // Match standard tarot art ratio (2:3.5) so generated images fit without
+    // cropping. Previously this was 2/3, which caused ~14% of the bottom of
+    // every card to be clipped by the slot's overflow:hidden.
+    aspectRatio: '4/7',
     borderRadius: '8px',
     transition: 'transform 0.6s ease, box-shadow 0.3s ease',
     ...(isCrossing ? { transform: 'rotate(90deg)' } : {}),
   }
 
   if (!isRevealed) {
+    // Empty slot — position is in the spread but no card has been drawn for it yet
+    if (!card) {
+      return (
+        <div
+          id={id}
+          aria-label={`${position.name} — empty slot`}
+          style={{
+            ...baseStyle,
+            border: '1px dashed rgba(201,168,76,0.28)',
+            background:
+              'linear-gradient(160deg, rgba(28,20,40,0.55) 0%, rgba(13,10,26,0.55) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(201,168,76,0.4)',
+            fontSize: '0.85rem',
+            fontFamily: 'inherit',
+            boxShadow: 'inset 0 0 12px rgba(0,0,0,0.35)',
+          }}
+        >
+          {position.number}
+        </div>
+      )
+    }
+
+    // Card has been placed but not yet revealed — show the deck back art
     return (
       <div
         id={id}
@@ -47,15 +92,12 @@ export default function CelticCrossCard({
         style={{
           ...baseStyle,
           cursor: isActive ? 'pointer' : 'default',
-          background: 'linear-gradient(135deg, #1a1030 0%, #0d0a1a 100%)',
-          border: `1px solid ${isActive ? 'rgba(201,168,76,0.45)' : 'rgba(201,168,76,0.18)'}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: isActive ? 'tarot-pulse 3s ease-in-out infinite' : undefined,
+          border: isActive ? '1px solid rgba(255,210,120,0.6)' : '1px solid transparent',
+          borderRadius: '10px',
+          animation: isActive ? 'tarot-pulse 1.8s ease-in-out infinite' : undefined,
         }}
       >
-        <span style={{ fontSize: '1.5rem', color: 'rgba(201,168,76,0.35)' }} aria-hidden="true">✦</span>
+        <CardBack aria-label={`${position.name} — tap to reveal`} />
       </div>
     )
   }
@@ -74,41 +116,22 @@ export default function CelticCrossCard({
       id={id}
       style={{
         ...baseStyle,
-        background: 'linear-gradient(160deg, #1c1428 0%, #0d0a1a 100%)',
+        position: 'relative',
+        overflow: 'hidden',
         border: `1px solid ${accentColor}`,
         boxShadow: `0 4px 20px rgba(0,0,0,0.5), 0 0 12px rgba(201,168,76,0.08)`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '8px 6px',
-        gap: '4px',
-        position: 'relative',
       }}
       aria-label={`${card?.cardName ?? 'Unknown'}, ${card?.reversed ? 'reversed' : 'upright'}, in the position of ${position.name}`}
     >
-      <span style={{ fontSize: '0.55rem', color: 'rgba(201,168,76,0.45)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-        {card?.arcana === 'major' ? 'Major' : (card?.suit ?? 'Minor')}
-      </span>
-
-      <span
-        className="font-heading"
-        style={{
-          fontSize: '0.75rem',
-          color: arcanaColor,
-          textAlign: 'center',
-          lineHeight: 1.25,
-          ...(card?.reversed ? { transform: 'rotate(180deg)', display: 'block' } : {}),
-        }}
-      >
-        {card?.cardName ?? '—'}
-      </span>
-
-      {card?.reversed && (
-        <span style={{ fontSize: '0.5rem', color: 'rgba(201,168,76,0.4)', letterSpacing: '0.06em' }}>
-          reversed
-        </span>
-      )}
+      {tarotCard ? (
+        <TarotCardComponent
+          card={tarotCard}
+          face="up"
+          reversed={card?.reversed}
+          size="md"
+          className="tarot-card-fill"
+        />
+      ) : null}
 
       <span
         style={{

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="770" viewBox="0 0 440 770" fill="none">
+  <rect width="440" height="770" rx="32" fill="#12121A"/>
+  <rect x="18" y="18" width="404" height="734" rx="24" fill="url(#bg)" stroke="#C9A84C" stroke-opacity="0.35"/>
+  <rect x="42" y="42" width="356" height="686" rx="18" stroke="#C9A84C" stroke-opacity="0.18"/>
+  <path d="M220 180L248 252L320 280L248 308L220 380L192 308L120 280L192 252L220 180Z" fill="#C9A84C" fill-opacity="0.16" stroke="#C9A84C" stroke-opacity="0.35" stroke-width="8"/>
+  <circle cx="220" cy="280" r="22" fill="#C9A84C" fill-opacity="0.2"/>
+  <text x="220" y="500" text-anchor="middle" fill="#C9A84C" fill-opacity="0.92" font-family="Cormorant Garamond, Georgia, serif" font-size="64" letter-spacing="10">TODO</text>
+  <text x="220" y="554" text-anchor="middle" fill="#E8E6E3" fill-opacity="0.6" font-family="Inter, Arial, sans-serif" font-size="22" letter-spacing="6">ART PENDING</text>
+  <defs>
+    <linearGradient id="bg" x1="220" y1="18" x2="220" y2="752" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1C1428"/>
+      <stop offset="1" stop-color="#0D0A1A"/>
+    </linearGradient>
+  </defs>
+</svg>

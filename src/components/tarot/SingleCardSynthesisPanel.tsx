@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import GptSkeleton from '../ui/GptSkeleton'
 import UpgradeModal from '../subscription/UpgradeModal'
 import { RateLimitError } from '../../services/gptInterpretation'
-import type { TarotCard, InstantInterpretation } from './TarotInterpretationPanel'
+import type { TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import { AUTH_TOKEN_KEY } from '../../services/authService'
 
 const SYNTHESIS_LOADING_VARIANTS = [
@@ -16,18 +16,30 @@ const GPT_REQUEST_TIMEOUT_MS = 30_000
 type SynthesisState = 'loading' | 'success' | 'unavailable' | 'rate-limited'
 
 interface TarotSynthesisPanelProps {
-  card: TarotCard
-  reversed: boolean
-  interpretation: InstantInterpretation
-  userIntention: string | null
+  synthesisPayload: TarotSingleSynthesisPayload | null
   onDiscuss: () => void
 }
 
+function splitReadableParagraphs(text: string): string[] {
+  const normalized = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  if (normalized.length > 1) return normalized
+
+  const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map(sentence => sentence.trim()).filter(Boolean) ?? []
+  if (sentences.length <= 3) return [text.trim()]
+
+  const chunks: string[] = []
+  for (let index = 0; index < sentences.length; index += 2) {
+    chunks.push(sentences.slice(index, index + 2).join(' '))
+  }
+  return chunks
+}
+
 async function callTarotSynthesis(
-  card: TarotCard,
-  reversed: boolean,
-  interpretation: InstantInterpretation,
-  userIntention: string | null,
+  synthesisPayload: TarotSingleSynthesisPayload,
   signal: AbortSignal,
 ): Promise<string> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -41,12 +53,7 @@ async function callTarotSynthesis(
     headers,
     body: JSON.stringify({
       type: 'tarot-single-synthesis',
-      payload: {
-        card: { id: card.id, name: card.name, number: card.number, arcana: card.arcana, suit: card.suit, element: card.element },
-        reversed,
-        interpretation,
-        userIntention,
-      },
+      payload: synthesisPayload,
     }),
     signal,
   })
@@ -71,10 +78,7 @@ async function callTarotSynthesis(
 }
 
 export default function SingleCardSynthesisPanel({
-  card,
-  reversed,
-  interpretation,
-  userIntention,
+  synthesisPayload,
   onDiscuss,
 }: TarotSynthesisPanelProps) {
   const [state, setState] = useState<SynthesisState>('loading')
@@ -87,6 +91,7 @@ export default function SingleCardSynthesisPanel({
   const loadStartRef = useRef<number>(0)
 
   const runSynthesis = () => {
+    if (!synthesisPayload) return
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
@@ -96,7 +101,7 @@ export default function SingleCardSynthesisPanel({
 
     const timeoutId = setTimeout(() => controller.abort(), GPT_REQUEST_TIMEOUT_MS)
 
-    callTarotSynthesis(card, reversed, interpretation, userIntention, controller.signal)
+    callTarotSynthesis(synthesisPayload, controller.signal)
       .then(result => {
         const elapsed = Date.now() - loadStartRef.current
         const delay = Math.max(0, 1000 - elapsed)
@@ -121,9 +126,10 @@ export default function SingleCardSynthesisPanel({
   }
 
   useEffect(() => {
+    if (!synthesisPayload) return
     runSynthesis()
     return () => { abortRef.current?.abort() }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [synthesisPayload]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const thresholdDivider = (
     <div className="flex items-center gap-3 my-6">
@@ -143,7 +149,7 @@ export default function SingleCardSynthesisPanel({
   }
 
   if (state === 'success' && text) {
-    const paragraphs = text.split('\n').filter(p => p.trim().length > 0)
+    const paragraphs = splitReadableParagraphs(text)
     return (
       <div className="mb-4">
         {thresholdDivider}

@@ -439,6 +439,8 @@ export interface TarotSingleSynthesisPayload {
   advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   spreadMode: string | null
   localDate: string
 }
@@ -453,9 +455,13 @@ export interface TarotThreeSynthesisPayload {
   natalMoonSign: string
   natalAscSign: string
   personalDay: number
+  personalYear: number
   advanceCategory: string | null
+  advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   localDate: string
 }
 
@@ -506,23 +512,83 @@ export async function getTarotThreeSynthesis(
 }
 
 // Parses GPT response into chapters.
-// The server returns a plain string with sections delimited by numbered headings.
+// Server emits sections in any of these heading styles: "## Heading", "**Heading**", or "1. Heading".
 function parseCelticChapters(raw: unknown): SynthesisChapter[] {
   if (!raw || typeof raw !== 'string') return []
-  const sections = raw.split(/\n(?=\d+\.\s)/).map(s => s.trim()).filter(Boolean)
-  return sections.map(section => {
-    const newline = section.indexOf('\n')
-    if (newline === -1) return { heading: section, body: '' }
-    const heading = section.slice(0, newline).replace(/^\d+\.\s+/, '').trim()
-    const body = section.slice(newline + 1).trim()
-    return { heading, body }
+  const text = raw.trim()
+  // Split on a newline preceding any heading marker: ##, **...**, or "N. "
+  const parts = text
+    .split(/\n(?=(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$|\d+\.\s+[A-Z]))/m)
+    .map(s => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return []
+  const chapters = parts.map(section => {
+    // Markdown heading: ## Heading\nbody
+    const mdHeading = section.match(/^#{1,6}\s+([^\n]+)\n?([\s\S]*)$/)
+    if (mdHeading) {
+      return { heading: mdHeading[1].trim(), body: mdHeading[2].trim() }
+    }
+    // Bold heading: **Heading**\nbody
+    const boldHeading = section.match(/^\*\*([^*\n]+)\*\*\s*\n?([\s\S]*)$/)
+    if (boldHeading) {
+      return { heading: boldHeading[1].trim(), body: boldHeading[2].trim() }
+    }
+    // Numbered heading: 1. Heading\nbody
+    const numberedMatch = section.match(/^\d+\.\s+([^\n]+)\n([\s\S]*)$/)
+    if (numberedMatch) {
+      return { heading: numberedMatch[1].trim(), body: numberedMatch[2].trim() }
+    }
+    return { heading: 'Synthesis', body: section }
   })
+  return chapters.filter(c => c.body.length > 0 || c.heading !== 'Synthesis')
 }
 
 export async function getTarotCelticSynthesis(
   payload: CelticSynthesisPayload,
 ): Promise<SynthesisChapter[]> {
-  const result = await callProxy('tarot-celtic-synthesis', payload)
+  // Adapt client-shaped CelticSynthesisPayload to the server-shaped
+  // TarotCelticSynthesisPayload that handleTarotCelticSynthesis expects.
+  const localDate = new Date().toISOString().slice(0, 10)
+  const serverPayload: TarotCelticSynthesisPayload = {
+    cards: payload.cards.map(c => ({
+      id: c.cardId,
+      name: c.cardName,
+      arcana: c.arcana,
+      suit: c.suit,
+      number: 0,
+      element: c.element,
+      reversed: c.reversed,
+      coreMeaning: c.coreMeaning,
+      symbolicTheme: c.symbolicTheme,
+      emotionalMeaning: c.emotionalMeaning,
+      practicalGuidance: '',
+      reflectionQuestion: '',
+      numerologyResonance: '',
+      astroHeadline: c.astroConnection,
+      transitInfluence: '',
+      lunarPhaseNote: null,
+    })),
+    positions: payload.cards.map((c, i) => ({
+      index: i,
+      label: c.positionName,
+      meaning: c.positionDescription,
+    })),
+    userIntention: payload.userIntention,
+    natalSunSign: payload.astroContext.sunSign,
+    natalMoonSign: payload.astroContext.moonSign,
+    natalAscSign: payload.astroContext.ascendant,
+    natalMoonPhase: null,
+    personalDay: payload.astroContext.personalDay,
+    personalYear: payload.astroContext.numerologyYear,
+    lifePathNumber: 0,
+    advanceCategory: payload.astroContext.advanceCategory,
+    advanceReason: null,
+    moonPhaseName: payload.astroContext.currentMoonPhase,
+    moonSign: payload.astroContext.moonSign,
+    localDate,
+  }
+
+  const result = await callProxy('tarot-celtic-synthesis', serverPayload)
   const chapters = parseCelticChapters(result)
   if (chapters.length === 0) throw new Error('Empty synthesis response')
   return chapters

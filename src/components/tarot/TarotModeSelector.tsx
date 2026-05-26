@@ -42,7 +42,7 @@ const MODE_CARDS: ModeCardDef[] = [
     subtitle: 'A full symbolic portrait of your moment',
     time: '20–35 minutes',
     getTag: () => 'Advanced',
-    isLocked: tier => tier !== 'advanced',
+    isLocked: () => false,
   },
 ]
 

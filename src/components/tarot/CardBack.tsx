@@ -37,6 +37,7 @@ export function CardBack({
         border: '1px solid rgba(201, 168, 76, 0.35)',
         borderRadius: '12px',
         overflow: 'hidden',
+        pointerEvents: interactive ? 'auto' : 'none',
       }}
     >
       {/* Inset gold frame */}

@@ -54,6 +54,9 @@ export interface TarotAstroContext {
   dominantModality: string
   topTransits: string[]
   advanceCategory: string | null
+  advanceReason: string | null
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
 }
 
 export interface ThreeCardSynthesisSkeleton {

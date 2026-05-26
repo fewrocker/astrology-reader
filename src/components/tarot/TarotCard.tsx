@@ -1,5 +1,6 @@
 import React from 'react';
 import type { TarotCard as TarotCardData, TarotSuit } from '../../data/tarot/types';
+import { getTarotCardArtUrl } from '../../data/tarot/cardArt';
 import { CardBack } from './CardBack';
 import './tarot.css';
 
@@ -8,7 +9,7 @@ export interface TarotCardProps {
   face: 'up' | 'down';
   reversed?: boolean;
   imageUrl?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'hero';
   glowOnReveal?: boolean;
   onClick?: () => void;
   className?: string;
@@ -388,10 +389,17 @@ interface CardFaceProps {
 }
 
 function CardFace({ card, imageUrl, glowing, sizePx }: CardFaceProps) {
+  const [failedImageUrl, setFailedImageUrl] = React.useState<string | null>(null);
   const isMajor = card.arcana === 'major';
   const isCourtCard = !isMajor && card.number >= 11;
   const isHighPipCard = !isMajor && card.number >= 8 && card.number <= 10;
   const elementTint = card.element ? ELEMENT_TINT[card.element.toLowerCase()] : undefined;
+  const resolvedImageUrl = imageUrl && imageUrl !== failedImageUrl ? imageUrl : null;
+  const hasGeneratedArt = Boolean(resolvedImageUrl);
+
+  React.useEffect(() => {
+    setFailedImageUrl(null);
+  }, [imageUrl, card.id]);
 
   const pipSymbolPx = Math.round(sizePx.w * 0.22);
   const largeSuitPx = Math.round(sizePx.w * 0.48);
@@ -423,44 +431,50 @@ function CardFace({ card, imageUrl, glowing, sizePx }: CardFaceProps) {
         position: 'relative',
         width: '100%',
         height: '100%',
-        background: `radial-gradient(ellipse at 50% 50%, #f5f0e8 60%, #e8e0d0 100%)${elementTint ? `, ${elementTint}` : ''}`,
-        border: '1px solid rgba(201,168,76,0.4)',
-        borderRadius: '12px',
+        background: hasGeneratedArt
+          ? 'transparent'
+          : `radial-gradient(ellipse at 50% 50%, #f5f0e8 60%, #e8e0d0 100%)${elementTint ? `, ${elementTint}` : ''}`,
+        border: hasGeneratedArt ? 'none' : '1px solid rgba(201,168,76,0.4)',
+        borderRadius: hasGeneratedArt ? '0' : '12px',
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '6px 4px',
+        padding: hasGeneratedArt ? '0' : '6px 4px',
         boxSizing: 'border-box',
       }}
       role="img"
     >
       {/* Corner vignette */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(ellipse at center, transparent 55%, rgba(120,100,60,0.12) 100%)',
-          borderRadius: 'inherit',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
+      {!hasGeneratedArt && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'radial-gradient(ellipse at center, transparent 55%, rgba(120,100,60,0.12) 100%)',
+            borderRadius: 'inherit',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
+      )}
 
       {/* Reveal glow overlay */}
       {glowing && <div className="card-face-glow" aria-hidden="true" />}
 
       {/* ── Top label ── */}
-      <div style={{ ...silverTextStyle, alignSelf: 'flex-start', paddingLeft: '4px', zIndex: 1 }}>
-        {isMajor
-          ? card.number === 0 ? null : ROMAN[card.number]
-          : isCourtCard
-          ? <span style={{ fontSize: '9px' }}>{COURT[card.number]}</span>
-          : card.number
-        }
-      </div>
+      {!hasGeneratedArt && (
+        <div style={{ ...silverTextStyle, alignSelf: 'flex-start', paddingLeft: '4px', zIndex: 1 }}>
+          {isMajor
+            ? card.number === 0 ? null : ROMAN[card.number]
+            : isCourtCard
+            ? <span style={{ fontSize: '9px' }}>{COURT[card.number]}</span>
+            : card.number
+          }
+        </div>
+      )}
 
       {/* ── Main visual area ── */}
       <div
@@ -474,11 +488,12 @@ function CardFace({ card, imageUrl, glowing, sizePx }: CardFaceProps) {
           zIndex: 1,
         }}
       >
-        {imageUrl ? (
+        {resolvedImageUrl ? (
           <img
-            src={imageUrl}
+            src={resolvedImageUrl}
             alt={card.name}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '8px' }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '0', display: 'block' }}
+            onError={() => setFailedImageUrl(resolvedImageUrl)}
           />
         ) : isMajor ? (
           // Major Arcana: distinctive SVG symbol
@@ -533,9 +548,11 @@ function CardFace({ card, imageUrl, glowing, sizePx }: CardFaceProps) {
       </div>
 
       {/* ── Card name ── */}
-      <div style={{ ...cardNameStyle, zIndex: 1, paddingBottom: '2px' }}>
-        {card.name}
-      </div>
+      {!hasGeneratedArt && (
+        <div style={{ ...cardNameStyle, zIndex: 1, paddingBottom: '2px' }}>
+          {card.name}
+        </div>
+      )}
     </div>
   );
 }
@@ -555,8 +572,9 @@ export function TarotCard({
   const defaultAriaLabel = face === 'down'
     ? 'Face-down tarot card'
     : `${card.name}${reversed ? ', reversed' : ''}`;
+  const resolvedImageUrl = imageUrl ?? getTarotCardArtUrl(card.id) ?? `/tarot/generated/${card.id}.png`
 
-  const SIZE_PX = { sm: { w: 80, h: 140 }, md: { w: 120, h: 210 }, lg: { w: 160, h: 280 } };
+  const SIZE_PX = { sm: { w: 80, h: 140 }, md: { w: 120, h: 210 }, lg: { w: 160, h: 280 }, xl: { w: 220, h: 385 }, hero: { w: 440, h: 770 } };
   const sizePx = SIZE_PX[size];
 
   return (
@@ -577,7 +595,7 @@ export function TarotCard({
       ) : (
         <CardFace
           card={card}
-          imageUrl={imageUrl}
+          imageUrl={resolvedImageUrl}
           glowing={glowOnReveal}
           sizePx={sizePx}
         />

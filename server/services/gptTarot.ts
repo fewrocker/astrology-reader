@@ -6,6 +6,7 @@ import {
   type BirthContext,
 } from './gpt.js'
 import { calculateChart } from '../engine/chartEngine.js'
+import { calculateTransits } from '../engine/transitEngine.js'
 import {
   calculatePersonalDay,
   calculatePersonalYear,
@@ -64,6 +65,8 @@ export interface TarotSingleSynthesisPayload {
   advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   spreadMode: string | null
   localDate: string
 }
@@ -78,9 +81,13 @@ export interface TarotThreeSynthesisPayload {
   natalMoonSign: string
   natalAscSign: string
   personalDay: number
+  personalYear: number
   advanceCategory: string | null
+  advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   localDate: string
 }
 
@@ -107,6 +114,105 @@ export interface TarotDiscussPayload {
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
 }
 
+function formatTransitSummary(
+  transitData: ReturnType<typeof calculateTransits>,
+  periodLabel: 'Daily' | 'Weekly',
+): string {
+  const moon = transitData.currentPlanets.find(planet => planet.name === 'Moon')
+  const topAspects = transitData.transitAspects.slice(0, periodLabel === 'Daily' ? 5 : 7)
+  const ingresses = transitData.ingresses.slice(0, periodLabel === 'Daily' ? 2 : 4)
+  const retrogrades = transitData.retrogrades.filter(item => item.isRetro || item.status.includes('Stationing')).slice(0, 5)
+
+  const lines: string[] = []
+  lines.push(`${periodLabel} window: ${transitData.dateRange.start} to ${transitData.dateRange.end}`)
+  if (moon) {
+    lines.push(`Current Moon: ${moon.degree}°${moon.minute}' ${moon.sign}${moon.retrograde ? ' [Rx]' : ''}`)
+  }
+  if (topAspects.length > 0) {
+    lines.push(`${periodLabel} transit aspects:`)
+    for (const aspect of topAspects) {
+      const houseText = aspect.natalHouse ? `, natal house ${aspect.natalHouse}` : ''
+      lines.push(`- ${aspect.transitPlanet} ${aspect.symbol} natal ${aspect.natalPlanet} (${aspect.type}, orb ${aspect.orb}°, ${aspect.applying ? 'applying' : 'separating'}, ${aspect.nature}${houseText})`)
+    }
+  }
+  if (ingresses.length > 0) {
+    lines.push(`${periodLabel} sign changes:`)
+    for (const ingress of ingresses) {
+      lines.push(`- ${ingress.planet} moves from ${ingress.fromSign} to ${ingress.toSign} around ${ingress.approximateDate}`)
+    }
+  }
+  if (retrogrades.length > 0) {
+    lines.push(`${periodLabel} retrograde activity:`)
+    for (const retrograde of retrogrades) {
+      lines.push(`- ${retrograde.planet}: ${retrograde.status}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+function getThreeCardSpreadPromptConfig(
+  spreadMode: TarotThreeSynthesisPayload['spreadMode'],
+  positions: TarotThreeSynthesisPayload['positions'],
+) {
+  switch (spreadMode) {
+    case 'past-present-future':
+      return {
+        spreadSummary: 'This spread is temporal. Read the cards as a moving arc from what shaped the present, to what is alive now, to what is emerging next.',
+        directionInstruction: `DIRECTION: One short paragraph on what the ${positions[2].label} card reveals about the trajectory already forming from ${positions[0].label} through ${positions[1].label}.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about the tension between what was formed in ${positions[0].label} and what is gathering in ${positions[2].label}.`,
+        adviceInstruction: 'ADVICE: One short paragraph with grounded integration guidance that helps the person respond consciously to the arc from past to future.',
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming the repeating pattern or developmental movement linking past, present, and future.',
+        timingInstruction: 'TIMING: One short paragraph on how this sequence is likely to unfold over the next days and week, keeping the temporal progression central.',
+      }
+    case 'situation-challenge-advice':
+      return {
+        spreadSummary: 'This spread is diagnostic and directional. Read the first card as the true situation, the second as the living friction within it, and the third as the symbolic orientation forward.',
+        directionInstruction: `DIRECTION: One short paragraph on how the ${positions[2].label} card reorients the person in relation to the ${positions[0].label} and the ${positions[1].label}.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about the hidden pressure or paradox inside the ${positions[0].label}.`,
+        adviceInstruction: `ADVICE: One short paragraph translating the ${positions[2].label} card into grounded, practical guidance without reducing it to a cliché or command.`,
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming how the person may be participating in, resisting, or refining the situation-challenge dynamic.',
+        timingInstruction: 'TIMING: One short paragraph on how the tension between situation and challenge is likely to evolve if the advice is taken seriously over the coming days and week.',
+      }
+    case 'mind-heart-action':
+      return {
+        spreadSummary: 'This spread is about inner alignment. Read the first card as the mental frame, the second as the emotional truth, and the third as the action that could bring them into coherence.',
+        directionInstruction: `DIRECTION: One short paragraph on what the ${positions[2].label} card reveals about the action, gesture, or decision that could align the ${positions[0].label} and ${positions[1].label}.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about where feeling complicates, contradicts, or deepens the ${positions[0].label}.`,
+        adviceInstruction: 'ADVICE: One short paragraph of grounded integration guidance that helps the person translate mental clarity and emotional truth into embodied action.',
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming the inner split, harmony, or compensation pattern running between mind and heart.',
+        timingInstruction: 'TIMING: One short paragraph on how alignment or misalignment between mind, heart, and action is likely to develop over the coming days and week.',
+      }
+    case 'self-other-bridge':
+      return {
+        spreadSummary: 'This spread is relational. Read the first card as the self-position, the second as the other side of the dynamic, and the third as the bridge that could transform or connect the two.',
+        directionInstruction: `DIRECTION: One short paragraph on what the ${positions[2].label} card reveals about how connection, repair, or transformation could happen between ${positions[0].label} and ${positions[1].label}.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about the dynamic the ${positions[0].label} card is meeting, resisting, or misunderstanding.`,
+        adviceInstruction: 'ADVICE: One short paragraph of grounded guidance focused on what the person can embody to become a real bridge rather than stay inside projection or opposition.',
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming the relational pattern, projection, defense, or invitation running between self and other.',
+        timingInstruction: 'TIMING: One short paragraph on how the self-other dynamic is likely to evolve over the next days and week, especially if the bridge card is or is not embodied.',
+      }
+    case 'theme-shadow-gift':
+      return {
+        spreadSummary: 'This spread is initiatory. Read the first card as the central theme, the second as the shadow shaping it from below awareness, and the third as the gift that becomes available through honest engagement.',
+        directionInstruction: `DIRECTION: One short paragraph on what the ${positions[2].label} card reveals about the capacity, opening, or blessing that becomes available when the ${positions[0].label} and ${positions[1].label} are consciously engaged.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about the unseen force operating beneath the ${positions[0].label}.`,
+        adviceInstruction: 'ADVICE: One short paragraph of grounded guidance focused on how to work honestly with the theme and shadow so the gift becomes livable rather than abstract.',
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming the deeper initiation, defense, or maturation process running through theme, shadow, and gift.',
+        timingInstruction: 'TIMING: One short paragraph on how this initiatory process is likely to deepen across the coming days and week, keeping the gift conditional on real engagement.',
+      }
+    default:
+      return {
+        spreadSummary: 'Read the three cards as a single constellation whose meaning depends on the specific role of each position.',
+        directionInstruction: `DIRECTION: One short paragraph on what the ${positions[2].label} card reveals about where the spread is moving.`,
+        hiddenInstruction: `HIDDEN_INFLUENCE: One short paragraph on what the ${positions[1].label} card reveals about the dynamic between ${positions[0].label} and ${positions[2].label}, including any polarity, element, or suit tension.`,
+        adviceInstruction: 'ADVICE: One short paragraph with grounded integration guidance.',
+        psychologicalInstruction: 'PSYCHOLOGICAL_PATTERN: One short paragraph naming the psychological pattern running through the whole spread.',
+        timingInstruction: 'TIMING: One short paragraph on how the spread energy is likely to develop over the coming days and week, again keeping the three cards central.',
+      }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
@@ -119,6 +225,9 @@ export async function handleTarotSingleSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let dailyTransitSummary = payload.dailyTransitSummary
+  let weeklyTransitSummary = payload.weeklyTransitSummary
+  let currentMoonSign = payload.moonSign
 
   if (userId) {
     const ctx = resolveUserBirthContext(userId)
@@ -129,6 +238,11 @@ export async function handleTarotSingleSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      const dailyTransitData = calculateTransits(natalChart, 'daily')
+      const weeklyTransitData = calculateTransits(natalChart, 'weekly')
+      dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
+      weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
+      currentMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? payload.moonSign
     }
   }
 
@@ -164,24 +278,43 @@ Numerology resonance: ${card.numerologyResonance}
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}, Ascendant in ${natalAscSign}
 Personal Day: ${authorizedPersonalDay}
-Moon: ${payload.moonPhaseName} in ${payload.moonSign}
+Personal Year: ${payload.personalYear}
+Moon: ${payload.moonPhaseName} in ${currentMoonSign}
 ${payload.advanceCategory ? `Advance signal: ${payload.advanceCategory} — ${payload.advanceReason ?? ''}` : ''}
 Astro connection the instant interpretation found: ${card.astroHeadline}
 Transit influence on this card: ${card.transitInfluence}
 ${card.lunarPhaseNote ? `Lunar note: ${card.lunarPhaseNote}` : ''}
 
-Write a 3–4 sentence synthesis that makes this card feel personally addressed to this person at this exact moment. Do not describe the card generically. Start from what the card means in combination with what this person's sky is actually doing. If they stated an intention, address it through the card's symbolic lens without treating the card as an answer to a question. The tone is mystical but grounded — symbolic, never fatalistic, never fear-inducing. End with a single reflection question that emerges from the card-sky combination, not a generic prompt from the card data.`
+## Daily Transit Context
+${dailyTransitSummary ?? 'No daily transit summary available.'}
+
+## Weekly Transit Context
+${weeklyTransitSummary ?? 'No weekly transit summary available.'}
+
+Write a complete single-card synthesis in exactly 4 short paragraphs plus 1 final reflection question line.
+
+Paragraph 1: Start with the card interpretation itself. Lead with the card's symbolic and psychological meaning in the context of the person's intention. This paragraph should name the living tension, threshold, or opportunity in the card before moving into astrology.
+
+Paragraph 2: Connect the card to the natal chart. Mention at least one natal placement and explain why this specific card — its symbolism, element, arcana, and reversal if present — resonates with this person's birth pattern specifically. Use the Sun, Moon, Ascendant, Personal Day, Personal Year, and advance signal only when they genuinely sharpen the reading.
+
+Paragraph 3: Connect the card to the daily transits. Use the Daily Transit Context above concretely, but every transit point you mention must be explicitly tied back to the card. Do not write a standalone daily transit reading. Show how the most relevant transit planets, aspects, retrogrades, sign changes, or Moon movement activate, complicate, sharpen, or echo the card's symbolic message today.
+
+Paragraph 4: Connect the card to the weekly transits. Use the Weekly Transit Context above to explain how the card's energy develops across the coming week, but keep the card central in every sentence. Do not write a standalone weekly transit reading. Show how the week's transits extend, pressure-test, deepen, or unfold the meaning of this exact card over time.
+
+Then end with a single final line beginning exactly with "REFLECTION:" followed by one strong reflection question that could only arise from this exact card-sky combination.
+
+Formatting rules: separate each paragraph with a blank line. Keep each paragraph to 2–4 sentences. Do not output headings. Do not produce one long block of text. Every paragraph must remain card-centered. The daily and weekly paragraphs must each cite at least one concrete transit feature from their respective context blocks and explicitly connect that feature back to the card's symbolism, element, or reversed/upright condition.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI(
       [
         {
           role: 'system',
-          content: `You are a symbolic interpreter and reflective guide — not a fortune teller. You read Tarot as a language of the psyche, enriched by the living sky. You speak directly to the person in second person. You are personal, specific, and never generic. You do not predict events. You illuminate what is already present. The tone is mystical but grounded: poetic precision, not spiritual performance. You never evoke fear, never claim certainty about outcomes, and never use Tarot to manipulate or destabilize. Every reading ends with possibility, not fate.`,
+          content: `You are a symbolic interpreter and reflective guide — not a fortune teller. You read Tarot as a language of the psyche, enriched by the living sky. You speak directly to the person in second person. You are personal, specific, and never generic. You do not predict events. You illuminate what is already present. The tone is mystical but grounded: poetic precision, not spiritual performance. You never evoke fear, never claim certainty about outcomes, and never use Tarot to manipulate or destabilize. Every reading ends with possibility, not fate. You must connect the card to the person's actual sky in a concrete way; avoid generic card summaries. You must format the response as 4 short paragraphs separated by blank lines, followed by one final line starting with "REFLECTION:".`,
         },
         { role: 'user', content: prompt },
       ],
-      { temperature: 0.85, max_tokens: 400 },
+      { temperature: 0.85, max_tokens: 900 },
     ),
   )
   return result || 'Unable to generate synthesis.'
@@ -192,23 +325,34 @@ export async function handleTarotThreeSynthesis(
   userId?: number,
 ): Promise<string> {
   let authorizedPersonalDay = payload.personalDay
+  let authorizedPersonalYear = payload.personalYear
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let dailyTransitSummary = payload.dailyTransitSummary
+  let weeklyTransitSummary = payload.weeklyTransitSummary
+  let currentMoonSign = payload.moonSign
 
   if (userId) {
     const ctx = resolveUserBirthContext(userId)
     if (ctx) {
       const targetDate = new Date(payload.localDate)
       authorizedPersonalDay = calculatePersonalDay(ctx.birthDate, targetDate)
+      authorizedPersonalYear = calculatePersonalYear(ctx.birthDate)
       const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      const dailyTransitData = calculateTransits(natalChart, 'daily')
+      const weeklyTransitData = calculateTransits(natalChart, 'weekly')
+      dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
+      weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
+      currentMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? payload.moonSign
     }
   }
 
   const { cards, positions, signals, spreadMode } = payload
+  const spreadPromptConfig = getThreeCardSpreadPromptConfig(spreadMode, positions)
 
   const cardLines = cards.map((card, i) => {
     const pos = positions[i]
@@ -240,6 +384,7 @@ export async function handleTarotThreeSynthesis(
   const prompt = `${intentionLine}
 
 ## Spread: ${spreadMode}
+${spreadPromptConfig.spreadSummary}
 ${cardLines}
 
 ## Pre-Computed Structural Signals (use these as given facts — do not re-derive from card names)
@@ -248,25 +393,53 @@ ${signalLines.join('\n')}
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}, Ascendant in ${natalAscSign}
 Personal Day: ${authorizedPersonalDay}
-Moon: ${payload.moonPhaseName} in ${payload.moonSign}
-${payload.advanceCategory ? `Advance signal: ${payload.advanceCategory}` : ''}
+Personal Year: ${authorizedPersonalYear}
+Moon: ${payload.moonPhaseName} in ${currentMoonSign}
+${payload.advanceCategory ? `Advance signal: ${payload.advanceCategory} — ${payload.advanceReason ?? ''}` : ''}
 
-INSTRUCTION: Begin with exactly ONE sentence that names all three cards together as a single symbolic statement — the constellation they form, not a list. This sentence is the most important line you will write. Example of the kind of sentence this should be (do not copy it — generate one specific to these three cards): "The Hermit, Death, and The Star together trace a journey of deliberate withdrawal, necessary dissolution, and the quiet radiance that emerges when the old structure is finally released."
+## Daily Transit Context
+${dailyTransitSummary ?? 'No daily transit summary available.'}
 
-After that opening sentence, write 3–5 paragraphs covering: the main tension in this spread, what the ${positions[1].label} card reveals about the dynamic between ${positions[0].label} and ${positions[2].label}, the astrological resonance of this constellation, what the structural signals (arcana composition, elements, polarity) amplify or complicate, and a closing practical integration thread. End with one reflection question that could only be asked of this specific person with these specific three cards.
+## Weekly Transit Context
+${weeklyTransitSummary ?? 'No weekly transit summary available.'}
 
-Tone: mystical but grounded, symbolic not deterministic, emotionally intelligent, never fear-inducing. Speak in second person. Do not predict outcomes.`
+INSTRUCTION: You must return the reading using the exact labeled sections below so the app can render them. Do not add any extra headings.
+
+OPENING_SENTENCE: One sentence only. Name all three cards together as a single symbolic statement — the constellation they form, not a list.
+
+MAIN_THEME: One short paragraph on the living theme of the whole spread, using the exact logic of this spread type rather than treating it as a generic three-card pull.
+
+MAIN_TENSION: One short paragraph on the main tension or living problem in the spread.
+
+DIRECTION: ${spreadPromptConfig.directionInstruction.replace(/^DIRECTION:\s*/, '')}
+
+HIDDEN_INFLUENCE: ${spreadPromptConfig.hiddenInstruction.replace(/^HIDDEN_INFLUENCE:\s*/, '')}
+
+ADVICE: ${spreadPromptConfig.adviceInstruction.replace(/^ADVICE:\s*/, '')}
+
+PSYCHOLOGICAL_PATTERN: ${spreadPromptConfig.psychologicalInstruction.replace(/^PSYCHOLOGICAL_PATTERN:\s*/, '')}
+
+ASTROLOGY_SYNTHESIS: One short paragraph that keeps the three-card constellation central while connecting it to the natal chart, Daily Transit Context, and Weekly Transit Context. Do not drift into a standalone astrology reading. Explain how the current sky activates this exact spread, and explicitly connect at least one daily transit feature and one weekly transit feature back to the cards.
+
+TIMING: ${spreadPromptConfig.timingInstruction.replace(/^TIMING:\s*/, '')}
+
+REFLECTION_PROMPTS:
+- First reflection question
+- Second reflection question
+- Third reflection question
+
+Tone: mystical but grounded, symbolic not deterministic, emotionally intelligent, never fear-inducing. Speak in second person. Do not predict outcomes. Every section must stay centered on the three-card constellation rather than becoming a generic transit reading. You must fully respect the spread logic above; do not reinterpret this spread as past-present-future unless that is explicitly the spread.`
 
   const result = await retryWithBackoff(() =>
     callOpenAI(
       [
         {
           role: 'system',
-          content: `You are a symbolic interpreter and reflective guide reading a ${spreadMode} Tarot spread as a single constellation — not three independent readings placed side by side. The three cards form a sentence the psyche is speaking to this person right now. Your task is to hear that sentence and speak it back with depth, specificity, and emotional intelligence. You speak in second person. You are mystical but grounded, poetic but never vague. You do not predict events. You illuminate patterns. You never evoke fear, never claim certainty about outcomes. Every constellation has a through-line — your job is to find it and name it.`,
+          content: `You are a symbolic interpreter and reflective guide reading a ${spreadMode} Tarot spread as a single constellation — not three independent readings placed side by side. The three cards form a sentence the psyche is speaking to this person right now. Your task is to hear that sentence and speak it back with depth, specificity, and emotional intelligence. You speak in second person. You are mystical but grounded, poetic but never vague. You do not predict events. You illuminate patterns. You never evoke fear, never claim certainty about outcomes. Every constellation has a through-line — your job is to find it and name it. The astrology must deepen the Tarot reading, not replace it: natal chart, daily transits, and weekly transits must always be interpreted through the meaning of these exact three cards. Return the response using exactly the requested labels and no additional headings.`,
         },
         { role: 'user', content: prompt },
       ],
-      { temperature: 0.85, max_tokens: 800 },
+      { temperature: 0.85, max_tokens: 1100 },
     ),
   )
   return result || 'Unable to generate synthesis.'

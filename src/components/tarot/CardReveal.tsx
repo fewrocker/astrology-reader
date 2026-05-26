@@ -9,7 +9,7 @@ export interface CardRevealProps {
   reversed?: boolean;
   revealed: boolean;
   imageUrl?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | 'hero';
   onRevealComplete?: () => void;
   delayMs?: number;
   'aria-label'?: string;
@@ -65,24 +65,24 @@ export function CardReveal({
         data-revealed={revealedAttr}
         style={flipperStyle}
       >
-        {/* Front face (card face — rotated 180deg, visible after flip) */}
-        <div className="card-reveal-front">
-          <TarotCardComponent
-            card={card}
-            face="up"
-            reversed={reversed}
-            imageUrl={imageUrl}
-            size={size}
-            glowOnReveal={isFirstReveal}
-          />
-        </div>
-
-        {/* Back face (face-down card — visible before flip) */}
-        <div className="card-reveal-back">
-          <CardBack
-            aria-label="Face-down tarot card"
-          />
-        </div>
+        {revealed ? (
+          <div className="card-reveal-front is-visible">
+            <TarotCardComponent
+              card={card}
+              face="up"
+              reversed={reversed}
+              imageUrl={imageUrl}
+              size={size}
+              glowOnReveal={isFirstReveal}
+            />
+          </div>
+        ) : (
+          <div className="card-reveal-back is-visible">
+            <CardBack
+              aria-label="Face-down tarot card"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

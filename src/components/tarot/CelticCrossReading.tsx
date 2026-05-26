@@ -1,5 +1,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
+import type { TarotCard as DataTarotCard } from '../../data/tarot/types'
 import type {
   TarotAstroContext,
   DrawnCard,
@@ -14,6 +16,7 @@ import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInter
 import CelticCrossCard from './CelticCrossCard'
 import TarotSynthesisPanel from './TarotSynthesisPanel'
 import TarotDiscussPanel from './TarotDiscussPanel'
+import TarotDeckSelection from './TarotDeckSelection'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -28,6 +31,7 @@ interface CelticCrossReadingProps {
 // Phases progress linearly; synthesis fires concurrently during staff reveal.
 type Phase =
   | 'dealing'            // dealing animation (1.2 s), all face-down
+  | 'drawing'            // user picks all 10 cards from the deck into positions
   | 'awaiting-12'        // waiting for user to flip positions 1+2 together
   | 'holding'            // mandatory 3-second contemplation hold
   | 'continuing'         // hold complete — faint Continue affordance shown
@@ -40,23 +44,33 @@ type Phase =
 type SynthesisStatus = 'idle' | 'loading' | 'ready' | 'error'
 type SynthesisErrorKind = 'unavailable' | 'rate-limited' | 'timeout' | 'session-expired'
 
-// ─── Stub: mock card draw ─────────────────────────────────────────────────────
-// Engine (task-0006) will replace this with a proper 78-card deck shuffle/deal.
-const CARD_POOL: Omit<DrawnCard, 'reversed'>[] = [
-  { cardId: 'high-priestess', cardName: 'The High Priestess', arcana: 'major', element: 'Water', number: 2, coreMeaning: 'Inner knowing and mystery', symbolicTheme: 'The veil between worlds', emotionalMeaning: 'Deep trust in what is felt but not yet seen', astroConnection: 'Moon — the tides of intuition' },
-  { cardId: 'the-tower', cardName: 'The Tower', arcana: 'major', element: 'Fire', number: 16, coreMeaning: 'Sudden revelation, the fall of false structures', symbolicTheme: 'Lightning clearing the way', emotionalMeaning: 'The shock that precedes clarity', astroConnection: 'Mars — force cutting through obstruction' },
-  { cardId: 'eight-of-cups', cardName: 'Eight of Cups', arcana: 'minor', suit: 'cups', element: 'Water', number: 8, coreMeaning: 'Turning away from what no longer satisfies', symbolicTheme: 'The pilgrim walking upstream', emotionalMeaning: 'A sadness that is also a liberation', astroConnection: 'Saturn in Pisces — the discipline of departure' },
-  { cardId: 'three-of-pentacles', cardName: 'Three of Pentacles', arcana: 'minor', suit: 'pentacles', element: 'Earth', number: 3, coreMeaning: 'Mastery emerging through collaboration', symbolicTheme: 'The cathedral being built', emotionalMeaning: 'Satisfaction in skilled, witnessed effort', astroConnection: 'Mars in Capricorn — building with purpose' },
-  { cardId: 'the-star', cardName: 'The Star', arcana: 'major', element: 'Air', number: 17, coreMeaning: 'Hope renewed, guidance from the deep sky', symbolicTheme: 'The naked figure pouring water under stars', emotionalMeaning: 'Quiet faith returning after upheaval', astroConnection: 'Aquarius — the waters of consciousness poured freely' },
-  { cardId: 'the-world', cardName: 'The World', arcana: 'major', element: 'Earth', number: 21, coreMeaning: 'Completion, wholeness, full integration', symbolicTheme: 'The dancer in the wreath', emotionalMeaning: 'The deep satisfaction of a cycle fulfilled', astroConnection: 'Saturn — the teacher who grants mastery' },
-  { cardId: 'knight-of-swords', cardName: 'Knight of Swords', arcana: 'minor', suit: 'swords', element: 'Air', coreMeaning: 'Swift decisive action, clarity cutting through', symbolicTheme: 'The mind charging into its conclusion', emotionalMeaning: 'The thrill and risk of moving fast', astroConnection: 'Gemini energy — thought in motion' },
-  { cardId: 'the-moon', cardName: 'The Moon', arcana: 'major', element: 'Water', number: 18, coreMeaning: 'Illusion, the unconscious, what cannot be seen clearly', symbolicTheme: 'The path between the twin towers at night', emotionalMeaning: 'Anxiety, mystery, and the longing to see clearly', astroConnection: 'Pisces — the dissolving of boundaries' },
-  { cardId: 'five-of-wands', cardName: 'Five of Wands', arcana: 'minor', suit: 'wands', element: 'Fire', number: 5, coreMeaning: 'Competing forces, creative friction, striving', symbolicTheme: 'Five figures clashing with their own instruments', emotionalMeaning: 'The frustration that sharpens clarity', astroConnection: 'Saturn in Leo — the test of identity' },
-  { cardId: 'judgement', cardName: 'Judgement', arcana: 'major', element: 'Fire', number: 20, coreMeaning: 'The call to rise, a summoning toward new life', symbolicTheme: 'The trumpet sounding the resurrection', emotionalMeaning: 'A readiness to answer a long-awaited call', astroConnection: 'Pluto — deep transformation answering its own necessity' },
-]
+function shuffleTarotDeck(): DataTarotCard[] {
+  const deck = [...ALL_TAROT_CARDS]
+  for (let index = deck.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    ;[deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]]
+  }
+  return deck
+}
 
-function generateMockDraw(): DrawnCard[] {
-  return CARD_POOL.map((card, i) => ({ ...card, reversed: (i * 7 + 3) % 5 === 0 }))
+function computeCardReversal(): boolean {
+  return Math.random() < 0.3
+}
+
+function toDrawnCard(card: DataTarotCard, reversed: boolean): DrawnCard {
+  return {
+    cardId: card.id,
+    cardName: card.name,
+    arcana: card.arcana,
+    suit: card.suit,
+    element: card.element,
+    number: card.number,
+    reversed,
+    coreMeaning: reversed ? card.reversedMeaning : card.uprightMeaning,
+    symbolicTheme: card.symbolicTheme,
+    emotionalMeaning: card.emotionalMeaning,
+    astroConnection: [card.rulingPlanet, card.rulingSign].filter(Boolean).join(' — ') || 'Astrological resonance present in the symbolic field.',
+  }
 }
 
 // ─── Stub: instant interpretation ────────────────────────────────────────────
@@ -365,16 +379,18 @@ export default function CelticCrossReading({
   onSave,
   onDiscard,
 }: CelticCrossReadingProps) {
+  const [deck] = useState<DataTarotCard[]>(() => shuffleTarotDeck())
+
   // ── Card data (determined at mount, revealed progressively) ───────────────
-  const [drawnCards] = useState<DrawnCard[]>(() => generateMockDraw())
-  const [interpretations] = useState<InstantInterpretation[]>(
-    () => drawnCards.map((card, i) => computeInstantInterpretation(card, CELTIC_CROSS_POSITIONS[i]))
-  )
+  const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
+  const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([])
+  const [interpretations, setInterpretations] = useState<InstantInterpretation[]>([])
 
   // ── State machine ─────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('dealing')
   const [activePosition, setActivePosition] = useState<number>(2)  // 1-indexed, current position in hold/continue cycle
   const [revealedPositions, setRevealedPositions] = useState<Set<number>>(new Set())
+  const [selectedCount, setSelectedCount] = useState(0)
   const holdStartRef = useRef<number>(0)
 
   // ── Synthesis ─────────────────────────────────────────────────────────────
@@ -413,10 +429,10 @@ export default function CelticCrossReading({
 
   // ─── Phase transitions ──────────────────────────────────────────────────
 
-  // dealing → awaiting-12 after dealing animation
+  // dealing → drawing after dealing animation
   useEffect(() => {
     if (phase !== 'dealing') return
-    const t = setTimeout(() => setPhase('awaiting-12'), 1200)
+    const t = setTimeout(() => setPhase('drawing'), 1200)
     return () => clearTimeout(t)
   }, [phase])
 
@@ -459,6 +475,13 @@ export default function CelticCrossReading({
     }, 2000)
     return () => clearTimeout(t)
   }, [phase])
+
+  // Auto-advance to final-pause after card 10 is revealed (no card to tap as next).
+  useEffect(() => {
+    if (phase !== 'continuing' || activePosition !== 10) return
+    const t = setTimeout(() => setPhase('final-pause'), 4000)
+    return () => clearTimeout(t)
+  }, [phase, activePosition])
 
   // constellation-text: show for 2800ms, fade 800ms, then show synthesis
   useEffect(() => {
@@ -537,17 +560,21 @@ export default function CelticCrossReading({
     }
   }
 
+  const revealInitialCross = useCallback(() => {
+    reveal(1)
+    reveal(2)
+    setActivePosition(2)
+    window.setTimeout(() => setPhase('holding'), 600)
+  }, [drawnCards]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── User gesture handlers ────────────────────────────────────────────────
 
   // Tap on the face-down 1/2 pair — reveals both simultaneously
   const handleReveal12 = useCallback(() => {
     if (phase !== 'awaiting-12') return
-    reveal(1)
-    reveal(2)
-    setActivePosition(2)
-    // 600ms flip animation then enter hold
-    setTimeout(() => setPhase('holding'), 600)
-  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (selectedCount < 2) return
+    revealInitialCross()
+  }, [phase, revealInitialCross, selectedCount])
 
   // Continue gesture — advance to next card or transition
   const handleContinue = useCallback(() => {
@@ -559,12 +586,39 @@ export default function CelticCrossReading({
     } else if (activePosition === 10) {
       setPhase('final-pause')
     } else {
-      // Reveal next card and enter hold
+      // Reveal next card and enter hold.
+      // IMPORTANT: switch to 'holding' synchronously so the next slot does not
+      // briefly satisfy `isContinuingTarget` (which would cause a quick glow
+      // flash before the hold settles in).
+      if (selectedCount < next) return
+      setPhase('holding')
       reveal(next)
       setActivePosition(next)
-      setTimeout(() => setPhase('holding'), 600)
     }
-  }, [phase, activePosition]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, activePosition, selectedCount]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleActualDeckSelect = useCallback((selectionIndex: number, deckIndex: number) => {
+    if (phase !== 'drawing') return
+    if (selectedDeckIndices.includes(deckIndex)) return
+
+    const sourceCard = deck[deckIndex]
+    if (!sourceCard) return
+
+    const reversed = computeCardReversal()
+    const nextDrawn = toDrawnCard(sourceCard, reversed)
+    const nextInterpretation = computeInstantInterpretation(nextDrawn, CELTIC_CROSS_POSITIONS[selectionIndex])
+
+    setSelectedDeckIndices(prev => [...prev, deckIndex])
+    setDrawnCards(prev => [...prev, nextDrawn])
+    setInterpretations(prev => [...prev, nextInterpretation])
+
+    const nextCount = selectionIndex + 1
+    setSelectedCount(nextCount)
+
+    if (nextCount === 10) {
+      window.setTimeout(() => setPhase('awaiting-12'), 600)
+    }
+  }, [deck, phase, selectedDeckIndices])
 
   // Global keyboard handler for Space/Enter continue
   useEffect(() => {
@@ -622,8 +676,14 @@ export default function CelticCrossReading({
       {/* Global keyframe styles injected once */}
       <style>{`
         @keyframes tarot-pulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.0); border-color: rgba(201,168,76,0.35); }
-          50% { box-shadow: 0 0 16px 4px rgba(201,168,76,0.15); border-color: rgba(201,168,76,0.65); }
+          0%, 100% {
+            box-shadow: 0 0 14px 2px rgba(201,168,76,0.35), 0 0 0 1px rgba(201,168,76,0.45);
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 28px 8px rgba(201,168,76,0.75), 0 0 0 2px rgba(255,210,120,0.85);
+            transform: scale(1.04);
+          }
         }
         @keyframes tarot-fade-in {
           from { opacity: 0; transform: translateY(6px); }
@@ -673,14 +733,30 @@ export default function CelticCrossReading({
               The cards are being placed…
             </p>
           )}
+          {phase === 'drawing' && (
+            <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.875rem', marginTop: '0.5rem', animation: 'tarot-fade-in 0.5s ease-in', fontStyle: 'italic' }}>
+              Draw a card from the deck for each of the ten positions ({selectedCount}/10).
+            </p>
+          )}
           {phase === 'awaiting-12' && (
             <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.875rem', marginTop: '0.5rem', animation: 'tarot-fade-in 0.5s ease-in', fontStyle: 'italic' }}>
-              The heart of the matter awaits — reveal when you are ready.
+              All ten cards are placed. Tap the heart of the cross to begin the reading.
             </p>
           )}
         </div>
 
-        {/* Reading layout: Cross + Staff */}
+        {/* Deck — visible only while user is placing the 10 cards */}
+        {phase === 'drawing' && (
+          <TarotDeckSelection
+            deckCardIds={deck.map(card => card.id)}
+            selectedDeckIndices={selectedDeckIndices}
+            completedSelections={selectedCount}
+            labels={CELTIC_CROSS_POSITIONS.map(position => position.name)}
+            onSelect={handleActualDeckSelect}
+            disabled={false}
+          />
+        )}
+
         {isMobile ? (
           <MobileLayout
             drawnCards={drawnCards}
@@ -689,6 +765,8 @@ export default function CelticCrossReading({
             phase={phase}
             cardWidth={cardWidth}
             onReveal12={handleReveal12}
+            onAdvance={handleContinue}
+            selectedCount={selectedCount}
           />
         ) : (
           <DesktopLayout
@@ -698,6 +776,8 @@ export default function CelticCrossReading({
             phase={phase}
             cardWidth={cardWidth}
             onReveal12={handleReveal12}
+            onAdvance={handleContinue}
+            selectedCount={selectedCount}
           />
         )}
 
@@ -838,28 +918,11 @@ function InterpretationPanel({
         </p>
       </div>
 
-      {/* Continue affordance — shown only when phase is 'continuing' */}
+      {/* Continue affordance — hint to tap the next face-down card */}
       {phase === 'continuing' && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '0.25rem' }}>
-          <button
-            type="button"
-            onClick={onContinue}
-            aria-label="Continue to next card when you are ready"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'rgba(201,168,76,0.3)',
-              fontSize: '1.25rem',
-              animation: 'tarot-pulse 3s ease-in-out infinite',
-              padding: '0.5rem 1rem',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.65)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(201,168,76,0.3)')}
-          >
-            ↑
-          </button>
-        </div>
+        <p style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.8rem', textAlign: 'center', marginTop: '0.5rem', fontStyle: 'italic', animation: 'tarot-fade-in 0.5s ease-in' }}>
+          Tap the next glowing card when you are ready.
+        </p>
       )}
     </div>
   )
@@ -873,9 +936,11 @@ interface LayoutProps {
   phase: Phase
   cardWidth: string
   onReveal12: () => void
+  onAdvance: () => void
+  selectedCount: number
 }
 
-function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12 }: LayoutProps) {
+function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12, onAdvance, selectedCount }: LayoutProps) {
   return (
     <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start', justifyContent: 'center', width: '100%', maxWidth: '860px' }}>
       {/* Cross: 3×3 grid, ~60% width */}
@@ -891,34 +956,38 @@ function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, c
         }}
       >
         <div style={{ gridArea: 'p5' }}>
-          <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         </div>
         <div style={{ gridArea: 'p4' }}>
-          <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         </div>
         {/* Positions 1+2 share a cell with 2 rotating over 1 */}
         <div style={{ gridArea: 'p12', position: 'relative', width: cardWidth, aspectRatio: '2/3' }}>
           {/* Card 1 (below) */}
           <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} />
+            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} selectedCount={selectedCount} />
           </div>
           {/* Card 2 (crossing, rotated 90°, on top) */}
           <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing />
+            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} selectedCount={selectedCount} />
           </div>
         </div>
         <div style={{ gridArea: 'p6' }}>
-          <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         </div>
         <div style={{ gridArea: 'p3' }}>
-          <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         </div>
       </div>
 
-      {/* Staff: vertical column, 10 at top → 7 at bottom */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: '0 0 auto' }}>
+      {/* Staff: vertical column, 10 at top → 7 at bottom.
+          Sized ~30% larger than cross cards so users immediately recognize
+          them as additional cards to be dealt. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: '0 0 auto' }}>
         {[10, 9, 8, 7].map(pos => (
-          <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <div key={pos} style={{ width: `calc(${cardWidth} * 1.3)` }}>
+            <PositionSlot position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
+          </div>
         ))}
       </div>
     </div>
@@ -926,29 +995,29 @@ function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, c
 }
 
 // ─── Mobile layout (stacked) ──────────────────────────────────────────────────
-function MobileLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12 }: LayoutProps) {
+function MobileLayout({ drawnCards, revealedPositions, activePosition, phase, cardWidth, onReveal12, onAdvance, selectedCount }: LayoutProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
       {/* Cross positions 1-6 stacked */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${cardWidth})`, gap: '10px', justifyContent: 'center' }}>
         {/* Row 1: 5 */}
         <div />
-        <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <PositionSlot position={5} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         <div />
         {/* Row 2: 4, 1/2, 6 */}
-        <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <PositionSlot position={4} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         <div style={{ position: 'relative', width: cardWidth, aspectRatio: '2/3' }}>
           <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} />
+            <PositionSlot position={1} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} selectedCount={selectedCount} />
           </div>
           <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing />
+            <PositionSlot position={2} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} isCrossing onReveal12={phase === 'awaiting-12' ? onReveal12 : undefined} selectedCount={selectedCount} />
           </div>
         </div>
-        <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <PositionSlot position={6} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         {/* Row 3: 3 */}
         <div />
-        <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+        <PositionSlot position={3} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         <div />
       </div>
 
@@ -959,10 +1028,10 @@ function MobileLayout({ drawnCards, revealedPositions, activePosition, phase, ca
         <div style={{ flex: 1, height: '1px', background: 'rgba(201,168,76,0.15)' }} />
       </div>
 
-      {/* Staff positions 7-10 */}
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(2, ${cardWidth})`, gap: '10px', justifyContent: 'center' }}>
+      {/* Staff positions 7-10 — sized ~30% larger so they read as cards to be dealt */}
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(2, calc(${cardWidth} * 1.3))`, gap: '12px', justifyContent: 'center' }}>
         {[7, 8, 9, 10].map(pos => (
-          <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} />
+          <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
         ))}
       </div>
     </div>
@@ -978,19 +1047,33 @@ interface PositionSlotProps {
   phase: Phase
   isCrossing?: boolean
   onReveal12?: () => void
+  onAdvance?: () => void
+  selectedCount: number
 }
 
-function PositionSlot({ position, drawnCards, revealedPositions, activePosition, phase, isCrossing, onReveal12 }: PositionSlotProps) {
+function PositionSlot({ position, drawnCards, revealedPositions, activePosition, phase, isCrossing, onReveal12, onAdvance, selectedCount: _selectedCount }: PositionSlotProps) {
+  void _selectedCount
   const pos = CELTIC_CROSS_POSITIONS[position - 1]
   const card = drawnCards[position - 1] ?? null
   const isRevealed = revealedPositions.has(position)
 
   // A card is "active" (pulsing) when it's the next to be tapped
+  const isContinuingTarget =
+    phase === 'continuing' &&
+    position === activePosition + 1 &&
+    activePosition >= 2 &&
+    activePosition < 10
+
   const isNextToReveal = !isRevealed && (
     (phase === 'awaiting-12' && (position === 1 || position === 2)) ||
-    (phase === 'continuing' && position === activePosition + 1 && activePosition < 6) ||
+    isContinuingTarget ||
     (phase === 'cross-staff-transition' && position === 7)
   )
+
+  // Pick the right click handler for this slot.
+  const clickHandler = isNextToReveal
+    ? (phase === 'awaiting-12' ? onReveal12 : isContinuingTarget ? onAdvance : undefined)
+    : undefined
 
   return (
     <CelticCrossCard
@@ -999,9 +1082,10 @@ function PositionSlot({ position, drawnCards, revealedPositions, activePosition,
       cardState={isRevealed ? 'face-up' : 'face-down'}
       isActive={isNextToReveal}
       isCrossing={isCrossing}
-      onReveal={position === 1 && onReveal12 ? onReveal12 : undefined}
+      onReveal={clickHandler}
       tabIndex={isNextToReveal ? 0 : -1}
       id={`tarot-pos-${position}`}
+      hidden={false}
     />
   )
 }

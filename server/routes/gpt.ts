@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import OpenAI from 'openai'
 import { gptRateLimit } from '../middleware/gptRateLimit.js'
-import { handleGptRequest } from '../services/gpt.js'
+import { GptServiceError, handleGptRequest } from '../services/gpt.js'
 import { getDb } from '../db.js'
 
 const router = Router()
@@ -50,6 +50,15 @@ router.post('/interpret', gptRateLimit, async (req: Request, res: Response) => {
       res.locals.releaseSlot?.()
       res.status(503).json({ error: 'gpt_unavailable' })
       return
+    }
+    if (err instanceof GptServiceError) {
+      // Upstream OpenAI auth/quota errors are an infrastructure availability issue
+      // from the app user's perspective, not a malformed tarot request.
+      if (err.status === 401 || err.status === 403 || err.status === 429 || err.status >= 500) {
+        res.locals.releaseSlot?.()
+        res.status(503).json({ error: 'gpt_unavailable' })
+        return
+      }
     }
     // 4xx errors (malformed request, unknown type) — do NOT release slot;
     // the user consumed a legitimate call attempt (spec §17)

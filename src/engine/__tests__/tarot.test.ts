@@ -344,6 +344,20 @@ describe('computeInstantInterpretation', () => {
     expect(result.positionLabel).toBeNull()
     expect(result.positionMeaning).toBeNull()
   })
+
+  it('adapts the instant interpretation text to the actual spread position', () => {
+    const card = TAROT_CARDS.find(c => c.id === 'the-fool')!
+    const situation = SPREAD_POSITIONS.find(position => position.id === 'situation')!
+    const advice = SPREAD_POSITIONS.find(position => position.id === 'advice')!
+
+    const situationResult = computeInstantInterpretation(card, false, situation, mockAstroContext)
+    const adviceResult = computeInstantInterpretation(card, false, advice, mockAstroContext)
+
+    expect(situationResult.coreMeaning).toContain('In the situation position')
+    expect(adviceResult.coreMeaning).toContain('In the advice position')
+    expect(situationResult.practicalGuidance).not.toBe(adviceResult.practicalGuidance)
+    expect(situationResult.reflectionQuestion).not.toBe(adviceResult.reflectionQuestion)
+  })
 })
 
 // ─── computeThreeCardSynthesis ────────────────────────────────────────────────

@@ -1,8 +1,42 @@
 import { useState } from 'react'
 import { useTarot } from '../../context/TarotContext'
 import type { RateLimitInfo } from '../../services/gptInterpretation'
+import type { SpreadMode } from '../../types/tarot'
 
 const FOCUS_CHIPS = ['Love', 'Career', 'Growth', 'Decision', "Today's Energy", 'General']
+
+const THREE_CARD_SPREAD_OPTIONS: Array<{ mode: SpreadMode; label: string; description: string; positions: string[] }> = [
+  {
+    mode: 'past-present-future',
+    label: 'Past, Present, Future',
+    description: 'Trace the arc from what shaped this moment to where the energy is moving next.',
+    positions: ['Past', 'Present', 'Future'],
+  },
+  {
+    mode: 'situation-challenge-advice',
+    label: 'Situation, Challenge, Advice',
+    description: 'Name the circumstance, the friction within it, and the symbolic direction forward.',
+    positions: ['Situation', 'Challenge', 'Advice'],
+  },
+  {
+    mode: 'mind-heart-action',
+    label: 'Mind, Heart, Action',
+    description: 'See how thought, feeling, and movement are aligned or divided right now.',
+    positions: ['Mind', 'Heart', 'Action'],
+  },
+  {
+    mode: 'self-other-bridge',
+    label: 'Self, Other, Bridge',
+    description: 'Read the living dynamic between you, the other side, and what could connect you.',
+    positions: ['Self', 'Other', 'Bridge'],
+  },
+  {
+    mode: 'theme-shadow-gift',
+    label: 'Theme, Shadow, Gift',
+    description: 'Reveal the central lesson, what is hidden underneath it, and what becomes available through it.',
+    positions: ['Theme', 'Shadow', 'Gift'],
+  },
+]
 
 interface TarotHomeViewProps {
   onExit: () => void
@@ -12,6 +46,7 @@ interface TarotHomeViewProps {
 export default function TarotHomeView({ onExit }: TarotHomeViewProps) {
   const { state, dispatch } = useTarot()
   const [intentionSet, setIntentionSet] = useState(false)
+  const [showThreeSpreadOptions, setShowThreeSpreadOptions] = useState(false)
   const isFirstVisit = state.savedReadingIds.length === 0
 
   const handleChip = (chip: string) => {
@@ -26,7 +61,18 @@ export default function TarotHomeView({ onExit }: TarotHomeViewProps) {
 
   const handleSelectMode = (mode: 'single' | 'three') => {
     dispatch({ type: 'SET_READING_MODE', mode })
-    dispatch({ type: 'NAVIGATE_TAROT', subView: mode === 'single' ? 'single-reading' : 'three-reading' })
+    if (mode === 'single') {
+      setShowThreeSpreadOptions(false)
+      dispatch({ type: 'NAVIGATE_TAROT', subView: 'single-reading' })
+      return
+    }
+    setShowThreeSpreadOptions(true)
+  }
+
+  const handleSelectThreeSpread = (mode: SpreadMode, label: string, positions: string[]) => {
+    dispatch({ type: 'SET_READING_MODE', mode: 'three' })
+    dispatch({ type: 'SET_SPREAD_MODE', spreadMode: { id: mode, label, positions } })
+    dispatch({ type: 'NAVIGATE_TAROT', subView: 'three-reading' })
   }
 
   return (
@@ -164,17 +210,56 @@ export default function TarotHomeView({ onExit }: TarotHomeViewProps) {
             <span className="text-xs text-mystic-muted">Past, present, future — or any of five spread modes.</span>
           </button>
 
+          {showThreeSpreadOptions && (
+            <div className="mt-4 space-y-3 rounded-2xl border border-mystic-gold/15 p-4" style={{ background: 'rgba(12,12,18,0.86)' }}>
+              <p className="text-xs text-mystic-muted uppercase tracking-widest">Choose the three-card structure</p>
+              {THREE_CARD_SPREAD_OPTIONS.map(option => (
+                <button
+                  key={option.mode}
+                  type="button"
+                  onClick={() => handleSelectThreeSpread(option.mode, option.label, option.positions)}
+                  className="w-full rounded-xl border px-4 py-3 text-left transition-all duration-150"
+                  style={{
+                    background: 'rgba(18,18,26,0.88)',
+                    borderColor: 'rgba(201,168,76,0.14)',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(28,22,18,0.96)'
+                    e.currentTarget.style.borderColor = 'rgba(201,168,76,0.34)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(18,18,26,0.88)'
+                    e.currentTarget.style.borderColor = 'rgba(201,168,76,0.14)'
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-heading text-mystic-gold text-base">{option.label}</span>
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-mystic-muted">{option.positions.join(' · ')}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-mystic-muted leading-relaxed">{option.description}</p>
+                </button>
+              ))}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => dispatch({ type: 'NAVIGATE_TAROT', subView: 'celtic-reading' })}
             className="w-full flex flex-col gap-1 p-4 rounded-xl text-left transition-all duration-150"
             style={{
               background: 'rgba(18,18,26,0.8)',
-              borderTop: '2px solid rgba(124,58,237,0.4)',
+              borderTop: '2px solid #7c3aed',
               borderLeft: '1px solid rgba(255,255,255,0.04)',
               borderRight: '1px solid rgba(255,255,255,0.04)',
               borderBottom: '1px solid rgba(255,255,255,0.04)',
-              opacity: 0.7,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'color-mix(in srgb, #7c3aed 8%, rgba(18,18,26,0.9))'
+              e.currentTarget.style.boxShadow = '0 0 16px color-mix(in srgb, #7c3aed 12%, transparent)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(18,18,26,0.8)'
+              e.currentTarget.style.boxShadow = ''
             }}
           >
             <div className="flex items-center gap-2">

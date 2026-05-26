@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { TAROT_CARD_BY_ID } from '../../data/tarot/cards'
 import type { DrawnCard, InstantInterpretation, TarotAstroContext, SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
 import { SPREAD_DEFINITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/types'
 import GptSkeleton from '../ui/GptSkeleton'
 import { getTarotThreeSynthesis, RateLimitError } from '../../services/gptInterpretation'
 import type { TarotThreeSynthesisPayload, TarotCardPayload, SpreadPositionPayload } from '../../services/gptInterpretation'
+import TarotDiscussPanel from './TarotDiscussPanel'
+import TarotDeckSelection from './TarotDeckSelection'
+import { CardBack } from './CardBack'
+import { TarotCard as TarotCardComponent } from './TarotCard'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface ThreeCardReadingProps {
   spreadMode: SpreadMode
+  deckCardIds: string[]
+  selectedDeckIndices: number[]
   drawnCards: DrawnCard[]
   instantInterpretations: InstantInterpretation[]
   astroContext: TarotAstroContext
@@ -17,6 +24,7 @@ export interface ThreeCardReadingProps {
   onSave: () => void
   onDiscard: () => void
   onOpenDiscuss: () => void
+  onPickCard: (deckIndex: number) => void
 }
 
 // ─── Synthesis types ──────────────────────────────────────────────────────────
@@ -32,6 +40,24 @@ interface ParsedSynthesis {
   astrologySynthesis: string
   timing: string
   reflectionPrompts: string[]
+}
+
+function splitReadableParagraphs(text: string): string[] {
+  const normalized = text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  if (normalized.length > 1) return normalized
+
+  const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.map(sentence => sentence.trim()).filter(Boolean) ?? []
+  if (sentences.length <= 3) return [text.trim()]
+
+  const chunks: string[] = []
+  for (let index = 0; index < sentences.length; index += 2) {
+    chunks.push(sentences.slice(index, index + 2).join(' '))
+  }
+  return chunks
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -166,10 +192,55 @@ function getElementGradient(element: string | null): string {
   }
 }
 
+function CardSlotPill({ label, active = false }: { label: string; active?: boolean }) {
+  return (
+    <div
+      className="rounded-full border px-4 py-2 text-center"
+      style={{
+        minWidth: '132px',
+        maxWidth: '100%',
+        background: active
+          ? 'linear-gradient(180deg, rgba(28,20,12,0.98) 0%, rgba(14,10,8,0.94) 100%)'
+          : 'linear-gradient(180deg, rgba(18,18,26,0.94) 0%, rgba(11,11,18,0.92) 100%)',
+        borderColor: active ? 'rgba(201,168,76,0.42)' : 'rgba(201,168,76,0.2)',
+        boxShadow: active
+          ? '0 12px 30px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,240,200,0.08)'
+          : '0 8px 18px rgba(0,0,0,0.2)',
+      }}
+    >
+      <p
+        className="font-heading leading-none whitespace-nowrap"
+        style={{
+          fontSize: '1.1rem',
+          color: active ? '#d4af58' : 'rgba(220,194,114,0.88)',
+          textShadow: '0 1px 10px rgba(0,0,0,0.28)',
+        }}
+      >
+        {label}
+      </p>
+    </div>
+  )
+}
+
+function CardPositionCaption({ label }: { label: string }) {
+  return (
+    <p
+      className="text-center font-heading uppercase"
+      style={{
+        fontSize: '0.7rem',
+        letterSpacing: '0.22em',
+        color: 'rgba(201,168,76,0.66)',
+      }}
+    >
+      {label}
+    </p>
+  )
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 interface CardRevealProps {
-  card: DrawnCard
+  card: DrawnCard | null
   revealed: boolean
   flipDone: boolean
   isActive: boolean
@@ -179,7 +250,9 @@ interface CardRevealProps {
 }
 
 function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, onTap }: CardRevealProps) {
-  const tiltStyle = flipDone && card.reversed ? 'rotate(-4deg)' : ''
+  const reversalStyle = flipDone && card?.reversed ? 'rotate(180deg)' : ''
+  const tarotCard = card ? TAROT_CARD_BY_ID[card.id] : null
+  const hasPickedCard = card !== null
 
   return (
     <>
@@ -195,13 +268,13 @@ function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, on
       `}</style>
       <div
         role="button"
-        aria-label={revealed ? card.name : 'Reveal card'}
-        tabIndex={isActive && !revealed ? 0 : -1}
-        onClick={!revealed && isActive ? onTap : undefined}
-        onKeyDown={e => { if (!revealed && isActive && (e.key === 'Enter' || e.key === ' ')) onTap() }}
+        aria-label={revealed && card ? card.name : hasPickedCard ? 'Reveal card' : 'Empty card slot'}
+        tabIndex={hasPickedCard && isActive && !revealed ? 0 : -1}
+        onClick={hasPickedCard && !revealed && isActive ? onTap : undefined}
+        onKeyDown={e => { if (hasPickedCard && !revealed && isActive && (e.key === 'Enter' || e.key === ' ')) onTap() }}
         className="relative select-none"
         style={{
-          cursor: !revealed && isActive ? 'pointer' : 'default',
+          cursor: hasPickedCard && !revealed && isActive ? 'pointer' : 'default',
           perspective: '1200px',
         }}
       >
@@ -225,15 +298,20 @@ function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, on
               backfaceVisibility: 'hidden',
               WebkitBackfaceVisibility: 'hidden',
               borderRadius: '8px',
-              background: '#12121a',
+              background: hasPickedCard ? '#12121a' : 'rgba(255,255,255,0.02)',
               border: `1px solid ${isActive && !revealed ? 'rgba(201,168,76,0.3)' : 'rgba(201,168,76,0.12)'}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               animation: !revealed ? `tarot-breathe 3s ease-in-out infinite${isActive ? ', tarot-ring-pulse 2s ease-in-out infinite' : ''}` : 'none',
+              overflow: 'hidden',
             }}
           >
-            <span style={{ color: 'rgba(201,168,76,0.2)', fontSize: '1.5rem' }}>✦</span>
+            {hasPickedCard ? (
+              <CardBack aria-label="Face-down tarot card" />
+            ) : (
+              <span style={{ color: 'rgba(201,168,76,0.2)', fontSize: '1.5rem' }}>✦</span>
+            )}
           </div>
 
           {/* Card front */}
@@ -244,48 +322,19 @@ function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, on
               backfaceVisibility: 'hidden',
               WebkitBackfaceVisibility: 'hidden',
               borderRadius: '8px',
-              background: '#12121a',
-              border: '1px solid rgba(201,168,76,0.25)',
-              transform: `rotateY(180deg) ${tiltStyle}`,
+              transform: `rotateY(180deg) ${reversalStyle}`,
               transition: 'transform 600ms ease-in-out',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '8px',
-              gap: '4px',
+              overflow: 'hidden',
             }}
           >
-            {card.arcana === 'major' && card.number !== null && (
-              <span
-                style={{
-                  color: '#c9a84c',
-                  fontFamily: 'Playfair Display, serif',
-                  fontSize: 'clamp(1.2rem, 3vw, 1.8rem)',
-                  lineHeight: 1,
-                  opacity: 0.9,
-                }}
-              >
-                {card.number === 0 ? '0' : card.number}
-              </span>
-            )}
-            {card.suit && (
-              <span style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.6rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {card.suit}
-              </span>
-            )}
-            <p
-              style={{
-                color: '#e8e6e3',
-                fontFamily: 'Playfair Display, serif',
-                fontSize: 'clamp(0.55rem, 1.5vw, 0.7rem)',
-                textAlign: 'center',
-                lineHeight: 1.2,
-                margin: 0,
-              }}
-            >
-              {card.name}
-            </p>
+            {tarotCard && card ? (
+              <TarotCardComponent
+                card={tarotCard}
+                face="up"
+                reversed={card.reversed}
+                size="lg"
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -303,12 +352,36 @@ interface InterpretationPanelProps {
 
 function TarotInterpretationPanel({ card, interpretation, positionLabel, positionMeaning, personalDay }: InterpretationPanelProps) {
   const elementGrad = getElementGradient(card.element)
+  const tarotCard = TAROT_CARD_BY_ID[card.id]
 
   return (
     <div
       className="rounded-xl border border-mystic-border p-6 md:p-8 space-y-5"
       style={{ background: `#12121a`, backgroundImage: elementGrad }}
     >
+      <div className="flex flex-col items-center gap-3 pb-2">
+        <div
+          className="rounded-[28px] p-2"
+          style={{
+            width: 'fit-content',
+            background: 'rgba(255,255,255,0.01)',
+            boxShadow: '0 0 0 1px rgba(201,168,76,0.1)',
+          }}
+        >
+          {tarotCard ? (
+            <div style={{ width: '160px' }}>
+              <TarotCardComponent
+                card={tarotCard}
+                face="up"
+                reversed={card.reversed}
+                size="lg"
+              />
+            </div>
+          ) : null}
+        </div>
+        <CardSlotPill label={card.name} />
+      </div>
+
       {/* 1. Position header */}
       <div>
         <p
@@ -343,7 +416,6 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
         <div>
           <h3
             className="font-heading text-xl text-mystic-text"
-            style={card.reversed ? { display: 'inline-block', transform: 'rotate(-4deg)', transformOrigin: 'left center' } : {}}
           >
             {card.name}
           </h3>
@@ -459,7 +531,11 @@ function SynthesisSection({ label, text }: SynthesisSectionProps) {
   return (
     <div className="space-y-2">
       <p className="text-mystic-muted text-xs uppercase tracking-[0.2em]">{label}</p>
-      <p className="font-heading text-mystic-text/90 leading-relaxed text-sm md:text-base">{text}</p>
+      <div className="space-y-3">
+        {splitReadableParagraphs(text).map((paragraph, index) => (
+          <p key={`${label}-${index}`} className="font-heading text-mystic-text/90 leading-relaxed text-sm md:text-base">{paragraph}</p>
+        ))}
+      </div>
     </div>
   )
 }
@@ -508,6 +584,8 @@ function BackConfirmModal({ onBack, onStay, onSaveAndBack }: BackConfirmModalPro
 
 export default function ThreeCardReading({
   spreadMode,
+  deckCardIds,
+  selectedDeckIndices,
   drawnCards,
   instantInterpretations,
   astroContext,
@@ -515,9 +593,12 @@ export default function ThreeCardReading({
   onSave,
   onDiscard,
   onOpenDiscuss,
+  onPickCard,
 }: ThreeCardReadingProps) {
   const spreadDef = SPREAD_DEFINITIONS[spreadMode]
   const spreadPositions = spreadDef.positions
+  const [selectedCount, setSelectedCount] = useState(0)
+  const [discussOpen, setDiscussOpen] = useState(false)
 
   // Per-card reveal state: which cards are flipping / have finished flipping
   const [revealedMask, setRevealedMask] = useState([false, false, false])
@@ -530,12 +611,11 @@ export default function ThreeCardReading({
     | 'card-revealed-1'
     | 'card-revealed-2'
     | 'all-revealed'
-    | 'synthesis-loading'
-    | 'synthesis-ready'
-    | 'synthesis-error-retryable'
-    | 'synthesis-error-permanent'
 
   const [phase, setPhase] = useState<RevealPhase>('idle')
+
+  type SynthesisState = 'idle' | 'loading' | 'ready' | 'error-retryable' | 'error-permanent'
+  const [synthesisState, setSynthesisState] = useState<SynthesisState>('idle')
 
   // Synthesis data
   const [synthesisData, setSynthesisData] = useState<ParsedSynthesis | null>(null)
@@ -557,11 +637,14 @@ export default function ThreeCardReading({
   // Synthesis already started guard (prevents double-fire in StrictMode)
   const synthesisStartedRef = useRef(false)
 
+  const placementComplete = selectedCount === 3 && drawnCards.length === 3
+
   // Helper: how many cards are currently revealed
   const revealedCount = revealedMask.filter(Boolean).length
 
-  // Determine which card index is the active tap target
-  const activeCardIndex = revealedCount < 3 ? revealedCount : null
+  const activePlacementIndex = selectedCount < 3 ? selectedCount : null
+  const activeRevealIndex = placementComplete && revealedCount < 3 ? revealedCount : null
+  const activeCardIndex = activeRevealIndex
 
   const triggerRevealOverlay = useCallback(() => {
     setOverlayOpacity(0.25)
@@ -600,16 +683,25 @@ export default function ThreeCardReading({
     return () => clearTimeout(flipTimer)
   }, [activeCardIndex, triggerRevealOverlay])
 
-  // Fire synthesis when entering all-revealed
+  const handleDeckSelect = useCallback((selectionIndex: number) => {
+    setSelectedCount(selectionIndex + 1)
+  }, [])
+
+  const handleActualDeckSelect = useCallback((selectionIndex: number, deckIndex: number) => {
+    onPickCard(deckIndex)
+    handleDeckSelect(selectionIndex)
+  }, [handleDeckSelect, onPickCard])
+
+  // Fire synthesis as soon as all three cards are placed.
   useEffect(() => {
-    if (phase !== 'all-revealed' || synthesisStartedRef.current) return
+    if (!placementComplete || synthesisStartedRef.current) return
     synthesisStartedRef.current = true
 
     const signals = computeSynthesisSignals(drawnCards)
     const fallback = computeAIFreeSynthesis(drawnCards, spreadMode, signals)
     setAiFallback(fallback)
 
-    setPhase('synthesis-loading')
+    setSynthesisState('loading')
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -660,9 +752,13 @@ export default function ThreeCardReading({
       natalMoonSign: astroContext.moonSignNatal,
       natalAscSign: astroContext.ascendant,
       personalDay: astroContext.personalDay,
+      personalYear: astroContext.personalYear,
       advanceCategory: astroContext.advanceCategory,
+      advanceReason: astroContext.advanceReason,
       moonPhaseName: astroContext.moonPhase,
       moonSign: astroContext.moonSign,
+      dailyTransitSummary: astroContext.dailyTransitSummary,
+      weeklyTransitSummary: astroContext.weeklyTransitSummary,
       localDate: new Date().toISOString().split('T')[0],
     }
 
@@ -672,14 +768,14 @@ export default function ThreeCardReading({
       .then(([text]) => {
         if (controller.signal.aborted) return
         setSynthesisData(parseSynthesisText(text as string))
-        setPhase('synthesis-ready')
+        setSynthesisState('ready')
       })
       .catch(err => {
         if (controller.signal.aborted) return
         const retryable = !(err instanceof RateLimitError) && !String(err).includes('400')
-        setPhase(retryable ? 'synthesis-error-retryable' : 'synthesis-error-permanent')
+        setSynthesisState(retryable ? 'error-retryable' : 'error-permanent')
       })
-  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [astroContext, drawnCards, instantInterpretations, placementComplete, spreadMode, spreadPositions, userIntention])
 
   // Cleanup abort on unmount
   useEffect(() => {
@@ -689,7 +785,7 @@ export default function ThreeCardReading({
   const handleRetry = useCallback(() => {
     synthesisStartedRef.current = false
     setSynthesisData(null)
-    setPhase('all-revealed')
+    setSynthesisState('idle')
   }, [])
 
   const handleSave = useCallback(() => {
@@ -713,16 +809,37 @@ export default function ThreeCardReading({
   }, [onSave, onDiscard])
 
   // Determine if synthesis zone should be visible
-  const showSynthesisZone = phase !== 'idle' && phase !== 'card-revealed-0' && phase !== 'card-revealed-1' && phase !== 'card-revealed-2' && phase !== 'all-revealed'
+  const showSynthesisZone = phase === 'all-revealed' && synthesisState !== 'idle'
 
   // Determine if save/discuss buttons should be shown
-  const showActions = phase === 'synthesis-ready' || phase === 'synthesis-error-retryable' || phase === 'synthesis-error-permanent'
+  const showActions = synthesisState === 'ready' || synthesisState === 'error-retryable' || synthesisState === 'error-permanent'
 
   // Active synthesis data: GPT result or AI fallback
   const activeSynthesis = synthesisData ?? aiFallback
+  const discussContext = [
+    `THREE CARD TAROT READING (${spreadPositions.map(position => position.label).join(' / ')})`,
+    userIntention ? `Intention: ${userIntention}` : 'Intention: Open reading',
+    ...drawnCards.map((card, index) => {
+      const interpretation = instantInterpretations[index]
+      const position = spreadPositions[index]
+      return `${index + 1}. ${position.label}: ${card.name} (${card.reversed ? 'Reversed' : 'Upright'})\nCore: ${interpretation?.coreMeaning ?? ''}\nTheme: ${interpretation?.symbolicTheme ?? ''}\nGuidance: ${interpretation?.practicalGuidance ?? ''}`
+    }),
+    activeSynthesis ? `Synthesis: ${activeSynthesis.mainTheme || activeSynthesis.openingSentence}` : 'Synthesis: Not loaded yet',
+  ].join('\n\n')
 
   // Show "save before leaving" only when synthesis is complete
   const canSaveBeforeLeaving = showActions && saveState !== 'saved'
+
+  const activePosition = activePlacementIndex !== null
+    ? spreadPositions[activePlacementIndex]
+    : activeRevealIndex !== null
+      ? spreadPositions[activeRevealIndex]
+      : null
+  const activeInstruction = activePlacementIndex !== null
+    ? `Pick a card for ${activePosition?.label}.`
+    : activeRevealIndex !== null
+      ? `Click ${activePosition?.label} to reveal it.`
+      : 'All three cards are placed. Reveal them one by one.'
 
   return (
     <>
@@ -763,46 +880,89 @@ export default function ThreeCardReading({
           ← Back
         </button>
 
-        {/* ── Sticky card row ─────────────────────────────────────────────── */}
-        <div
-          className="sticky top-0 z-20 pb-4 pt-3 flex flex-col items-center"
-          style={{ background: 'rgba(10,10,15,0.97)', backdropFilter: 'blur(8px)' }}
-        >
-          {/* Spread mode label (shown after reading starts) */}
-          <p className="text-mystic-muted text-xs uppercase tracking-[0.2em] mb-3">
-            {spreadDef.positions.map((p: SpreadPosition) => p.label).join(' · ')}
-          </p>
+        {selectedCount < 3 && (
+          <TarotDeckSelection
+            deckCardIds={deckCardIds}
+            selectedDeckIndices={selectedDeckIndices}
+            completedSelections={selectedCount}
+            labels={spreadPositions.map(position => position.label)}
+            onSelect={handleActualDeckSelect}
+            disabled={activePlacementIndex === null}
+          />
+        )}
+
+        <div className="pb-4 pt-3 flex flex-col items-center">
+          {phase !== 'all-revealed' && (
+            <div className="w-full max-w-xl mb-4 rounded-2xl border border-mystic-gold/20 px-4 py-4 text-center" style={{ background: 'rgba(18,18,26,0.9)' }}>
+              <p className="text-mystic-muted text-xs uppercase tracking-[0.24em] mb-2">
+                {spreadDef.positions.map((p: SpreadPosition) => p.label).join(' · ')}
+              </p>
+              <p className="font-heading text-mystic-gold text-lg mb-2">{activeInstruction}</p>
+              {activePosition && (
+                <p className="text-mystic-text/70 text-sm italic leading-relaxed max-w-prose mx-auto">
+                  {activePosition.meaning}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Cards */}
           <div
             className="flex gap-4 md:gap-6 lg:gap-8"
             style={
               {
-                '--card-w': '80px',
-                '--card-h': '136px',
+                '--card-w': 'clamp(112px, 23vw, 150px)',
+                '--card-h': 'clamp(196px, 40vw, 262px)',
               } as React.CSSProperties
             }
           >
-            {drawnCards.map((card, i) => (
-              <CardReveal
-                key={i}
-                card={card}
-                revealed={revealedMask[i]}
-                flipDone={flipDoneMask[i]}
-                isActive={i === activeCardIndex}
-                isFlashing={allRevealedFlash}
-                dimmed={!revealedMask[i] && i !== activeCardIndex}
-                onTap={() => handleCardTap(i)}
-              />
+            {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((card, i) => (
+              <div key={i} className="flex flex-col items-center gap-2">
+                <div
+                  className="rounded-2xl p-2 transition-all duration-300"
+                  style={{
+                    boxShadow: i === activePlacementIndex || i === activeRevealIndex
+                      ? '0 0 0 1px rgba(201,168,76,0.42), 0 0 28px rgba(201,168,76,0.16)'
+                      : '0 0 0 1px rgba(201,168,76,0.08)',
+                    background: i === activePlacementIndex || i === activeRevealIndex
+                      ? 'rgba(201,168,76,0.08)'
+                      : 'rgba(255,255,255,0.01)',
+                  }}
+                >
+                  <CardReveal
+                    card={card}
+                    revealed={revealedMask[i] && card !== null}
+                    flipDone={flipDoneMask[i] && card !== null}
+                    isActive={i === activeCardIndex}
+                    isFlashing={allRevealedFlash}
+                    dimmed={!revealedMask[i] && (selectedCount === 0 || i !== activeCardIndex)}
+                    onTap={() => handleCardTap(i)}
+                  />
+                </div>
+                {revealedMask[i] && card ? (
+                  <div className="flex flex-col items-center gap-1">
+                    <CardSlotPill
+                      label={card.name}
+                      active={i === activePlacementIndex || i === activeRevealIndex}
+                    />
+                    <CardPositionCaption label={spreadPositions[i].label} />
+                  </div>
+                ) : (
+                  <CardSlotPill
+                    label={spreadPositions[i].label}
+                    active={i === activePlacementIndex || i === activeRevealIndex}
+                  />
+                )}
+              </div>
             ))}
           </div>
         </div>
 
         {/* ── Interpretation panels ────────────────────────────────────────── */}
         <div className="mt-8 space-y-6">
-          {drawnCards.map((card, i) => {
+          {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((card, i) => {
             const interp = instantInterpretations[i]
-            if (!flipDoneMask[i]) return null
+            if (!flipDoneMask[i] || card === null) return null
 
             if (!interp?.coreMeaning) {
               return (
@@ -834,7 +994,7 @@ export default function ThreeCardReading({
             <ThresholdDivider />
 
             {/* Loading state */}
-            {phase === 'synthesis-loading' && (
+            {synthesisState === 'loading' && (
               <div className="space-y-6">
                 <p
                   className="font-heading italic text-center text-lg text-mystic-text/80"
@@ -847,7 +1007,7 @@ export default function ThreeCardReading({
             )}
 
             {/* Error — retryable */}
-            {phase === 'synthesis-error-retryable' && (
+            {synthesisState === 'error-retryable' && (
               <div className="text-center space-y-3 py-6">
                 {aiFallback && <SynthesisContent synthesis={aiFallback} />}
                 <div className="border-t border-mystic-border pt-6 space-y-2">
@@ -866,12 +1026,12 @@ export default function ThreeCardReading({
             )}
 
             {/* Error — permanent */}
-            {phase === 'synthesis-error-permanent' && aiFallback && (
+            {synthesisState === 'error-permanent' && aiFallback && (
               <SynthesisContent synthesis={aiFallback} />
             )}
 
             {/* Ready */}
-            {phase === 'synthesis-ready' && activeSynthesis && (
+            {synthesisState === 'ready' && activeSynthesis && (
               <SynthesisContent synthesis={activeSynthesis} />
             )}
 
@@ -880,7 +1040,10 @@ export default function ThreeCardReading({
               <div className="mt-10 flex flex-col items-center gap-4">
                 <button
                   type="button"
-                  onClick={onOpenDiscuss}
+                  onClick={() => {
+                    onOpenDiscuss()
+                    setDiscussOpen(true)
+                  }}
                   className="px-8 py-3 border border-mystic-gold/40 rounded-xl font-heading text-mystic-gold hover:bg-mystic-gold/10 transition-colors text-sm"
                 >
                   Discuss ✦
@@ -915,6 +1078,12 @@ export default function ThreeCardReading({
           </div>
         )}
       </div>
+
+      <TarotDiscussPanel
+        isOpen={discussOpen}
+        onClose={() => setDiscussOpen(false)}
+        contextString={discussContext}
+      />
     </>
   )
 }
