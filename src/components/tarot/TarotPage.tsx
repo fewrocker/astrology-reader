@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ChartData } from '../../engine/types'
 import type { RateLimitInfo, TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import { TarotProvider, useTarot } from '../../context/TarotContext'
 import { useApp } from '../../context/AppContext'
+import { useAuth } from '../../context/AuthContext'
+import { saveReading } from '../../services/readingsService'
+import type { SaveReadingRequest } from '../../services/readingsService'
 import { calculateTransits } from '../../engine/transits'
 import { computeInstantInterpretation, buildTarotAstroContext } from '../../engine/tarot'
 import type {
@@ -138,6 +141,8 @@ function SingleReadingFlow({
   ritualCardIndices: number[]
   onBack: () => void
 }) {
+  const { dispatch } = useTarot()
+  const { token } = useAuth()
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
@@ -203,6 +208,27 @@ function SingleReadingFlow({
       }
     : null
 
+  const handleSave = useCallback(async (): Promise<void> => {
+    if (!drawn || !token) throw new Error('not_ready')
+    const payload: SaveReadingRequest = {
+      readingType: 'single',
+      spreadMode: null,
+      firstCardName: drawn.card.name,
+      intentPreview: userIntention || null,
+      cards: [{
+        cardId: drawn.card.id,
+        cardName: drawn.card.name,
+        reversed: drawn.reversed,
+        coreMeaning: drawn.interp.coreMeaning,
+      }],
+      synthesis: synthesisPayload
+        ? { cardName: drawn.card.name, reversed: drawn.reversed, coreMeaning: drawn.interp.coreMeaning }
+        : undefined,
+    }
+    const result = await saveReading(payload, token)
+    dispatch({ type: 'SAVE_READING', readingId: result.id })
+  }, [drawn, token, userIntention, synthesisPayload, dispatch])
+
   return (
     <SingleCardReading
       deckCardIds={deck.map(card => card.id)}
@@ -214,7 +240,7 @@ function SingleReadingFlow({
       personalDay={computePersonalDay(birthDate)}
       userIntention={userIntention || null}
       onBack={onBack}
-      onSave={() => {}}
+      onSave={handleSave}
       onDiscuss={() => {}}
       onPickCard={handlePickCard}
     />
@@ -236,6 +262,8 @@ function ThreeReadingFlow({
   ritualCardIndices: number[]
   onBack: () => void
 }) {
+  const { dispatch } = useTarot()
+  const { token } = useAuth()
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
@@ -269,6 +297,26 @@ function ThreeReadingFlow({
   const dailyTransitSummary = useMemo(() => formatTransitSummary(dailyTransitData, 'Daily'), [dailyTransitData])
   const weeklyTransitSummary = useMemo(() => formatTransitSummary(weeklyTransitData, 'Weekly'), [weeklyTransitData])
 
+  const handleSave = useCallback(async (): Promise<void> => {
+    if (!token) throw new Error('not_authenticated')
+    if (drawnCards.length === 0) throw new Error('no_cards')
+    const payload: SaveReadingRequest = {
+      readingType: 'three-card',
+      spreadMode: spreadMode ?? null,
+      firstCardName: drawnCards[0]?.card.name ?? '',
+      intentPreview: userIntention || null,
+      cards: drawnCards.map((dc, i) => ({
+        position: i + 1,
+        cardId: dc.card.id,
+        cardName: dc.card.name,
+        reversed: dc.reversed,
+        coreMeaning: dc.interpretation.coreMeaning,
+      })),
+    }
+    const result = await saveReading(payload, token)
+    dispatch({ type: 'SAVE_READING', readingId: result.id })
+  }, [token, drawnCards, spreadMode, userIntention, dispatch])
+
   return (
     <ThreeCardReading
       spreadMode={spreadMode}
@@ -281,7 +329,7 @@ function ThreeReadingFlow({
       transitMoonSign={transitMoonSign}
       personalYear={computePersonalYear(birthDate)}
       userIntention={userIntention || null}
-      onSave={() => {}}
+      onSave={handleSave}
       onDiscard={onBack}
       onOpenDiscuss={() => {}}
       onPickCard={handlePickCard}
@@ -300,6 +348,8 @@ function CelticReadingFlow({
   userIntention: string | null
   onBack: () => void
 }) {
+  const { dispatch } = useTarot()
+  const { token } = useAuth()
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
@@ -319,6 +369,12 @@ function CelticReadingFlow({
     [weeklyTransitData],
   )
 
+  const handleSave = useCallback(async (payload: SaveReadingRequest): Promise<void> => {
+    if (!token) throw new Error('not_authenticated')
+    const result = await saveReading(payload, token)
+    dispatch({ type: 'SAVE_READING', readingId: result.id })
+  }, [token, dispatch])
+
   return (
     <CelticCrossReading
       userIntention={userIntention || null}
@@ -326,7 +382,7 @@ function CelticReadingFlow({
       dailyTransitSummary={dailyTransitSummary}
       weeklyTransitSummary={weeklyTransitSummary}
       moonSign={currentMoonSign}
-      onSave={() => {}}
+      onSave={handleSave}
       onDiscard={onBack}
     />
   )

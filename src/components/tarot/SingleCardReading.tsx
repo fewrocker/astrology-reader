@@ -19,7 +19,7 @@ interface SingleCardReadingProps {
   personalDay: number
   userIntention?: string | null
   onBack: () => void
-  onSave: () => void
+  onSave: () => Promise<void>
   onDiscuss: () => void
   onPickCard: (deckIndex: number) => void
 }
@@ -53,7 +53,7 @@ export default function SingleCardReading({
   onDiscuss,
   onPickCard,
 }: SingleCardReadingProps) {
-  const [saveLabel, setSaveLabel] = useState('Save')
+  const [saveLabel, setSaveLabel] = useState<'Save' | 'Saving…' | 'Saved' | 'Error'>('Save')
   const [selectedCount, setSelectedCount] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [discussOpen, setDiscussOpen] = useState(false)
@@ -82,10 +82,16 @@ export default function SingleCardReading({
       ? 'rgba(0,80,180,0.03)'
       : 'transparent'
 
-  function handleSave() {
-    onSave()
-    setSaveLabel('Saved')
-    setTimeout(() => setSaveLabel('Save'), 2000)
+  async function handleSave() {
+    if (saveLabel === 'Saving…' || saveLabel === 'Saved') return
+    setSaveLabel('Saving…')
+    try {
+      await onSave()
+      setSaveLabel('Saved')
+    } catch {
+      setSaveLabel('Error')
+      setTimeout(() => setSaveLabel('Save'), 3000)
+    }
   }
 
   function handleSelect(_: number, deckIndex: number) {
@@ -119,7 +125,8 @@ export default function SingleCardReading({
           <button
             type="button"
             onClick={handleSave}
-            className="text-xs text-mystic-muted hover:text-mystic-gold transition-colors font-heading uppercase tracking-widest min-h-[44px] px-2"
+            disabled={saveLabel === 'Saving…' || saveLabel === 'Saved'}
+            className={`text-xs transition-colors font-heading uppercase tracking-widest min-h-[44px] px-2 ${saveLabel === 'Error' ? 'text-red-400/80' : saveLabel === 'Saved' ? 'text-mystic-gold/70' : 'text-mystic-muted hover:text-mystic-gold'}`}
           >
             {saveLabel}
           </button>
