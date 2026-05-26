@@ -1,3 +1,12 @@
+// Re-export canonical types from the engine. All consumers should import from here or directly
+// from src/engine/tarot.ts. No parallel definitions — engine types are authoritative.
+export type {
+  DrawnCard,
+  InstantInterpretation,
+  AstroConnection,
+  TarotAstroContext,
+} from '../engine/tarot'
+
 export type SpreadMode =
   | 'past-present-future'
   | 'situation-challenge-advice'
@@ -5,59 +14,9 @@ export type SpreadMode =
   | 'self-other-bridge'
   | 'theme-shadow-gift'
 
-export interface SpreadPosition {
-  label: string
-  meaning: string
-}
-
 export type TarotElement = 'Fire' | 'Water' | 'Air' | 'Earth'
 export type TarotSuit = 'Wands' | 'Cups' | 'Swords' | 'Pentacles'
 export type TarotArcana = 'major' | 'minor'
-
-export interface DrawnCard {
-  id: string
-  name: string
-  arcana: TarotArcana
-  number: number | null
-  suit: TarotSuit | null
-  element: TarotElement | null
-  reversed: boolean
-}
-
-export interface AstroConnection {
-  headline: string
-  transitInfluence: string
-  lunarPhaseNote: string | null
-  advanceCategoryNote: string | null
-}
-
-export interface InstantInterpretation {
-  coreMeaning: string
-  symbolicTheme: string
-  emotionalMeaning: string
-  practicalGuidance: string
-  reflectionQuestion: string
-  astroConnection: AstroConnection
-  numerologyNote: string
-  cardNumber: number | null
-}
-
-export interface TarotAstroContext {
-  moonPhase: string
-  moonSign: string
-  personalDay: number
-  personalYear: number
-  sunSign: string
-  moonSignNatal: string
-  ascendant: string
-  dominantElement: string
-  dominantModality: string
-  topTransits: string[]
-  advanceCategory: string | null
-  advanceReason: string | null
-  dailyTransitSummary: string | null
-  weeklyTransitSummary: string | null
-}
 
 export interface ThreeCardSynthesisSkeleton {
   dominantArcana: 'major-heavy' | 'minor-heavy' | 'mixed'

@@ -1,5 +1,15 @@
 # Done Proposals
 
+## Sprint 0024 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-celtic-live-interpretation](issue-celtic-live-interpretation.md) | Issue Fix | merged sprint-0024 |
+| [issue-deck-fan-card-backs](issue-deck-fan-card-backs.md) | Issue Fix | merged sprint-0024 |
+| [code-tarot-type-unification](code-tarot-type-unification.md) | Code Enhancement | merged sprint-0024 |
+| [feat-gpt-synthesis-depth](feat-gpt-synthesis-depth.md) | Feature | merged sprint-0024 |
+| [feat-shuffle-ritual-wiring](feat-shuffle-ritual-wiring.md) | Feature | merged sprint-0024 |
+
 ## Sprint 0021 — Completed
 
 | Proposal | Type | Delivered |

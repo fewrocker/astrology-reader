@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { CardBack } from './CardBack'
 
 interface TarotDeckSelectionProps {
   deckCardIds: string[]
@@ -13,14 +14,10 @@ const BASE_CARD_STYLE: React.CSSProperties = {
   width: '72px',
   height: '116px',
   borderRadius: '10px',
-  background: 'linear-gradient(160deg, rgba(28,20,40,0.98) 0%, rgba(13,10,26,0.98) 100%)',
-  border: '1px solid rgba(201,168,76,0.18)',
+  border: 'none',
+  background: 'transparent',
   boxShadow: '0 12px 32px rgba(0,0,0,0.28)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: 'rgba(201,168,76,0.28)',
-  fontSize: '1.1rem',
+  padding: 0,
 }
 
 function buildDeckCards(
@@ -157,7 +154,7 @@ export default function TarotDeckSelection({
                 animation: active ? 'tarot-deck-breathe 2.8s ease-in-out infinite' : 'none',
               }}
             >
-              ✦
+              <CardBack interactive={false} />
             </button>
           )
         })}
@@ -181,7 +178,7 @@ export default function TarotDeckSelection({
               pointerEvents: 'none',
             }}
           >
-            ✦
+            <CardBack interactive={false} />
           </button>
         )}
       </div>
