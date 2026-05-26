@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, type RefObject } from 'react'
 import type { TarotCard as DataTarotCard } from '../../data/tarot/types'
 import type {
   SynthesisChapter,
@@ -374,6 +374,7 @@ export default function CelticCrossReading({
   const [revealedPositions, setRevealedPositions] = useState<Set<number>>(new Set())
   const [selectedCount, setSelectedCount] = useState(0)
   const holdStartRef = useRef<number>(0)
+  const interpretationPanelRef = useRef<HTMLDivElement>(null)
 
   // ── Synthesis ─────────────────────────────────────────────────────────────
   const [synthesisStatus, setSynthesisStatus] = useState<SynthesisStatus>('idle')
@@ -432,6 +433,15 @@ export default function CelticCrossReading({
       }
     }, 100)
     return () => clearInterval(interval)
+  }, [phase, activePosition])
+
+  // Scroll interpretation panel into view on each card reveal (positions 3–10)
+  useEffect(() => {
+    if (phase !== 'holding') return
+    if (activePosition <= 2) return
+    if (!interpretationPanelRef.current) return
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+    interpretationPanelRef.current.scrollIntoView({ behavior, block: 'start' })
   }, [phase, activePosition])
 
   // cross-staff-transition timing + GPT fire
@@ -780,6 +790,7 @@ export default function CelticCrossReading({
         {/* Interpretation panel for current card */}
         {currentInterp && currentDc && (phase === 'holding' || phase === 'continuing') && (
           <InterpretationPanel
+            panelRef={interpretationPanelRef}
             interp={currentInterp}
             dc={currentDc}
             phase={phase}
@@ -881,12 +892,14 @@ export default function CelticCrossReading({
 
 // ─── Interpretation panel ─────────────────────────────────────────────────────
 function InterpretationPanel({
+  panelRef,
   interp,
   dc,
   phase,
   onContinue,
   isMobile,
 }: {
+  panelRef: RefObject<HTMLDivElement>
   interp: InstantInterpretation
   dc: DrawnCard
   phase: Phase
@@ -895,6 +908,7 @@ function InterpretationPanel({
 }) {
   return (
     <div
+      ref={panelRef}
       style={{
         width: '100%',
         maxWidth: '580px',
