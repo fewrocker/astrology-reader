@@ -14,6 +14,24 @@ export type { TarotArcana } from '../data/tarot/cards'
 export type { SpreadType, SpreadPosition } from '../data/tarot/spreadPositions'
 export { SPREAD_POSITIONS, TAROT_CARDS }
 
+// ─── Chart rulership lookup (modern rulerships) ───────────────────────────────
+// Single authoritative source for client-side derivation.
+// Server-side mirror lives in server/services/gptTarot.ts — kept in lockstep.
+export const SIGN_RULERSHIPS: Record<string, string> = {
+  Aries: 'Mars',
+  Taurus: 'Venus',
+  Gemini: 'Mercury',
+  Cancer: 'Moon',
+  Leo: 'Sun',
+  Virgo: 'Mercury',
+  Libra: 'Venus',
+  Scorpio: 'Pluto',
+  Sagittarius: 'Jupiter',
+  Capricorn: 'Saturn',
+  Aquarius: 'Uranus',
+  Pisces: 'Neptune',
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TarotAstroContext {
@@ -22,6 +40,8 @@ export interface TarotAstroContext {
   natalAscendantSign: ZodiacSign | null
   natalDominantElement: Element | null
   natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
+  /** Chart ruler = ruling planet of the Ascendant sign (modern rulerships). Null when ascendant is unavailable. */
+  chartRulerPlanet: string | null
 
   // Natal house placements (1–12 when available, null when chart lacks house data)
   natalMoonHouse: number | null
@@ -468,6 +488,7 @@ export function buildTarotAstroContext(
   let natalAscendantSign: ZodiacSign | null = null
   let natalDominantElement: Element | null = null
   let natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null = null
+  let chartRulerPlanet: string | null = null
 
   // Natal house placements — null when chart lacks house data (e.g. unknown birth time)
   let natalMoonHouse: number | null = null
@@ -481,6 +502,8 @@ export function buildTarotAstroContext(
     natalAscendantSign = natalChart.angles?.ascendant?.sign ?? null
     natalDominantElement = computeDominantElement(natalChart)
     natalDominantModality = computeDominantModality(natalChart)
+    // Chart ruler: ruling planet of the Ascendant sign (null when no ascendant)
+    chartRulerPlanet = natalAscendantSign ? (SIGN_RULERSHIPS[natalAscendantSign] ?? null) : null
 
     // Extract house placements from the same planet objects — house is 0 for unknown-time charts
     const moonPlanet = natalChart.planets.find(p => p.name === 'Moon')
@@ -539,6 +562,7 @@ export function buildTarotAstroContext(
     natalSunSign,
     natalMoonSign,
     natalAscendantSign,
+    chartRulerPlanet,
     natalDominantElement,
     natalDominantModality,
     natalMoonHouse,

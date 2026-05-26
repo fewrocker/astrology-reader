@@ -12,7 +12,7 @@
 | task-0002 | sprint-0026-task-0002-code-court-card-transit-adaptations | completed |
 | task-0003 | sprint-0026-task-0003-code-reversed-meanings-depth | completed |
 | task-0004 | sprint-0026-task-0004-code-synthesis-prompt-specificity | completed |
-| task-0005 | sprint-0026-task-0005-feat-chart-ruler-natal-personalization | pending |
+| task-0005 | sprint-0026-task-0005-feat-chart-ruler-natal-personalization | completed |
 | task-0006 | sprint-0026-task-0006-feat-position-aware-instant-interpretation | completed |
 
 ## Conflict Resolutions
