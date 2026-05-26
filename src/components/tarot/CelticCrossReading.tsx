@@ -120,6 +120,7 @@ function buildCelticSynthesisPayload(
     natalSunSign: astroContext.natalSunSign ?? '',
     natalMoonSign: astroContext.natalMoonSign ?? '',
     natalAscSign: astroContext.natalAscendantSign ?? '',
+    natalDominantModality: astroContext.natalDominantModality,
     natalMoonPhase: astroContext.lunarPhaseName,
     natalMoonHouse: astroContext.natalMoonHouse,
     natalVenusHouse: astroContext.natalVenusHouse,
