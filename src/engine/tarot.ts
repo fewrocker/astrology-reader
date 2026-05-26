@@ -50,7 +50,7 @@ export interface TarotAstroContext {
   natalMarsHouse: number | null
 
   currentTransits: TransitAspect[]
-  retrogradeplanets: string[]
+  retrogradePlanets: string[]
   dominantTransitPlanet: string | null
 
   lunarPhaseName: string | null
@@ -521,7 +521,7 @@ export function buildTarotAstroContext(
   }
 
   let currentTransits: TransitAspect[] = []
-  let retrogradeplanets: string[] = []
+  let retrogradePlanets: string[] = []
   let dominantTransitPlanet: string | null = null
   let lunarPhaseName: string | null = null
   let lunarPhaseSymbol: string | null = null
@@ -530,7 +530,7 @@ export function buildTarotAstroContext(
     try {
       currentTransits = transits.transitAspects ?? []
 
-      retrogradeplanets = (transits.retrogrades ?? [])
+      retrogradePlanets = (transits.retrogrades ?? [])
         .filter(r => r.isRetro)
         .map(r => r.planet)
 
@@ -570,7 +570,7 @@ export function buildTarotAstroContext(
     natalNorthNodeHouse,
     natalMarsHouse,
     currentTransits,
-    retrogradeplanets,
+    retrogradePlanets,
     dominantTransitPlanet,
     lunarPhaseName,
     lunarPhaseSymbol,
@@ -687,13 +687,13 @@ function buildTransitInfluence(
   if (adaptations && adaptations.length > 0) {
     for (const entry of adaptations) {
       if (entry.condition === 'retrograde') {
-        if (astroContext.retrogradeplanets.includes(entry.planet)) {
+        if (astroContext.retrogradePlanets.includes(entry.planet)) {
           return entry.emphasis
         }
       } else if (entry.condition === 'direct') {
         if (
           astroContext.dominantTransitPlanet === entry.planet &&
-          !astroContext.retrogradeplanets.includes(entry.planet)
+          !astroContext.retrogradePlanets.includes(entry.planet)
         ) {
           return entry.emphasis
         }
@@ -701,7 +701,7 @@ function buildTransitInfluence(
         // 'any' — match if dominant or retrograde
         if (
           astroContext.dominantTransitPlanet === entry.planet ||
-          astroContext.retrogradeplanets.includes(entry.planet)
+          astroContext.retrogradePlanets.includes(entry.planet)
         ) {
           return entry.emphasis
         }
@@ -761,7 +761,7 @@ function buildAstroHeadline(
   const planet = astroContext.dominantTransitPlanet
   const kw = card.keywords[0] ?? 'its essence'
 
-  if (planet && astroContext.retrogradeplanets.includes(planet)) {
+  if (planet && astroContext.retrogradePlanets.includes(planet)) {
     return `${planet} retrograde turns ${card.name}'s ${kw} inward — review before moving forward.`
   }
 

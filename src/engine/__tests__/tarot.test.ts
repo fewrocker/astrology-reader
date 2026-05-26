@@ -99,7 +99,7 @@ const mockAstroContext: TarotAstroContext = {
   natalDominantElement: 'Fire',
   natalDominantModality: 'Cardinal',
   currentTransits: mockTransitData.transitAspects,
-  retrogradeplanets: ['Mercury'],
+  retrogradePlanets: ['Mercury'],
   dominantTransitPlanet: 'Saturn',
   lunarPhaseName: 'Waning Gibbous',
   lunarPhaseSymbol: '🌖',
@@ -233,14 +233,14 @@ describe('buildTarotAstroContext', () => {
   it('handles null transits gracefully', () => {
     const ctx = buildTarotAstroContext(mockChartData, null, 5, null)
     expect(ctx.currentTransits).toEqual([])
-    expect(ctx.retrogradeplanets).toEqual([])
+    expect(ctx.retrogradePlanets).toEqual([])
     expect(ctx.dominantTransitPlanet).toBeNull()
     expect(ctx.lunarPhaseName).toBeNull()
   })
 
   it('detects mercury as retrograde', () => {
     const ctx = buildTarotAstroContext(mockChartData, mockTransitWithMercuryRetro, 5, null)
-    expect(ctx.retrogradeplanets).toContain('Mercury')
+    expect(ctx.retrogradePlanets).toContain('Mercury')
   })
 
   it('computes lunar phase when Moon and Sun positions are available', () => {
