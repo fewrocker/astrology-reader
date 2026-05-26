@@ -875,8 +875,9 @@ export function computeInstantInterpretation(
     arcana: card.arcana,
     suit: card.suit ?? null,
     reversed,
-    positionLabel: position?.label ?? null,
-    positionMeaning: position?.meaning ?? null,
+    // Only expose position label/meaning for named spread positions — not single draws.
+    positionLabel: position?.id !== 'single' ? (position?.label ?? null) : null,
+    positionMeaning: position?.id !== 'single' ? (position?.meaning ?? null) : null,
     coreMeaning: positionAwareInterpretation.coreMeaning,
     symbolicTheme: positionAwareInterpretation.symbolicTheme,
     emotionalMeaning: positionAwareInterpretation.emotionalMeaning,
