@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TAROT_CARD_BY_ID } from '../../data/tarot/cards'
-import type { DrawnCard, InstantInterpretation, TarotAstroContext, SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
+import type { DrawnCard, TarotAstroContext } from '../../engine/tarot'
+import type { SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
 import { SPREAD_DEFINITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/types'
 import GptSkeleton from '../ui/GptSkeleton'
@@ -18,8 +19,15 @@ export interface ThreeCardReadingProps {
   deckCardIds: string[]
   selectedDeckIndices: number[]
   drawnCards: DrawnCard[]
-  instantInterpretations: InstantInterpretation[]
   astroContext: TarotAstroContext
+  /** Formatted daily transit summary for GPT synthesis */
+  dailyTransitSummary: string | null
+  /** Formatted weekly transit summary for GPT synthesis */
+  weeklyTransitSummary: string | null
+  /** Transiting moon sign for GPT synthesis */
+  transitMoonSign: string
+  /** Personal year for GPT synthesis */
+  personalYear: number
   userIntention: string | null
   onSave: () => void
   onDiscard: () => void
@@ -116,20 +124,20 @@ function computeSynthesisSignals(cards: DrawnCard[]): ThreeCardSynthesisSkeleton
   const elementDist: Record<string, number> = {}
   const suitSpread: string[] = []
 
-  for (const card of cards) {
-    if (card.element) elementDist[card.element] = (elementDist[card.element] ?? 0) + 1
-    if (card.suit) suitSpread.push(card.suit)
+  for (const dc of cards) {
+    if (dc.card.element) elementDist[dc.card.element] = (elementDist[dc.card.element] ?? 0) + 1
+    if (dc.card.suit) suitSpread.push(dc.card.suit)
   }
 
-  const majorCount = cards.filter(c => c.arcana === 'major').length
-  const upright = cards.filter(c => !c.reversed).length
-  const hasFoolOrWorld = cards.some(c => c.arcana === 'major' && (c.number === 0 || c.number === 21))
+  const majorCount = cards.filter(dc => dc.card.arcana === 'major').length
+  const upright = cards.filter(dc => !dc.reversed).length
+  const hasFoolOrWorld = cards.some(dc => dc.card.arcana === 'major' && (dc.card.number === 0 || dc.card.number === 21))
 
   const OPPOSING: Record<string, string> = { Fire: 'Water', Water: 'Fire', Air: 'Earth', Earth: 'Air' }
   const elementConflicts: string[] = []
   for (let i = 0; i < cards.length - 1; i++) {
-    const a = cards[i].element
-    const b = cards[i + 1].element
+    const a = cards[i]?.card.element
+    const b = cards[i + 1]?.card.element
     if (a && b && OPPOSING[a] === b) {
       elementConflicts.push(`${a} (card ${i}) vs ${b} (card ${i + 1})`)
     }
@@ -142,7 +150,7 @@ function computeSynthesisSignals(cards: DrawnCard[]): ThreeCardSynthesisSkeleton
     hasFoolOrWorld,
     suitSpread,
     elementConflicts,
-    positionalWeights: cards.map((c, i) => `Position ${i}: ${c.name}${c.reversed ? ' (reversed)' : ''}`),
+    positionalWeights: cards.map((dc, i) => `Position ${i}: ${dc.card.name}${dc.reversed ? ' (reversed)' : ''}`),
   }
 }
 
@@ -153,7 +161,7 @@ function computeAIFreeSynthesis(
 ): ParsedSynthesis {
   const spread = SPREAD_DEFINITIONS[spreadMode]
   const [pos0, pos1, pos2] = spread.positions
-  const names = cards.map(c => c.name)
+  const names = cards.map(dc => dc.card.name)
   const elementEntries = Object.entries(signals.elementDistribution).filter(([, v]) => v > 0)
   const majorHeavy = signals.dominantArcana === 'major-heavy'
 
@@ -251,7 +259,8 @@ interface CardRevealProps {
 
 function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, onTap }: CardRevealProps) {
   const reversalStyle = flipDone && card?.reversed ? 'rotate(180deg)' : ''
-  const tarotCard = card ? TAROT_CARD_BY_ID[card.id] : null
+  // engine DrawnCard has card.card: TarotCard; use it directly or look up by id
+  const tarotCard = card ? (card.card ?? TAROT_CARD_BY_ID[card.card.id]) : null
   const hasPickedCard = card !== null
 
   return (
@@ -268,7 +277,7 @@ function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, on
       `}</style>
       <div
         role="button"
-        aria-label={revealed && card ? card.name : hasPickedCard ? 'Reveal card' : 'Empty card slot'}
+        aria-label={revealed && card ? card.card.name : hasPickedCard ? 'Reveal card' : 'Empty card slot'}
         tabIndex={hasPickedCard && isActive && !revealed ? 0 : -1}
         onClick={hasPickedCard && !revealed && isActive ? onTap : undefined}
         onKeyDown={e => { if (hasPickedCard && !revealed && isActive && (e.key === 'Enter' || e.key === ' ')) onTap() }}
@@ -343,14 +352,15 @@ function CardReveal({ card, revealed, flipDone, isActive, isFlashing, dimmed, on
 }
 
 interface InterpretationPanelProps {
-  card: DrawnCard
-  interpretation: InstantInterpretation
+  dc: DrawnCard
   positionLabel: string
   positionMeaning: string
   personalDay: number
 }
 
-function TarotInterpretationPanel({ card, interpretation, positionLabel, positionMeaning, personalDay }: InterpretationPanelProps) {
+function TarotInterpretationPanel({ dc, positionLabel, positionMeaning, personalDay }: InterpretationPanelProps) {
+  const card = dc.card
+  const interpretation = dc.interpretation
   const elementGrad = getElementGradient(card.element)
   const tarotCard = TAROT_CARD_BY_ID[card.id]
 
@@ -397,7 +407,7 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
 
       {/* 2. Card identity */}
       <div className="flex items-start gap-4">
-        {card.arcana === 'major' && card.number !== null && (
+        {card.arcana === 'major' && (
           <div
             className="font-heading leading-none shrink-0"
             style={{ fontSize: 'clamp(2.5rem, 8vw, 4rem)', color: '#c9a84c', opacity: 0.85 }}
@@ -410,7 +420,7 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
             className="font-heading leading-none shrink-0"
             style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', color: '#c9a84c', opacity: 0.65 }}
           >
-            {card.number !== null ? card.number : ''}
+            {card.number}
           </div>
         )}
         <div>
@@ -419,7 +429,7 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
           >
             {card.name}
           </h3>
-          {card.reversed && (
+          {dc.reversed && (
             <p className="text-mystic-muted text-xs mt-1">This card arrives turned.</p>
           )}
           {card.element && (
@@ -458,9 +468,9 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
       {/* 7. In Your Sky Now */}
       <div className="border-t border-mystic-border pt-4">
         <p className="text-mystic-muted text-xs uppercase tracking-widest mb-3">In Your Sky Now</p>
-        {interpretation.astroConnection.headline && (
+        {interpretation.astroConnection.astroHeadline && (
           <p className="font-heading text-mystic-gold/90 italic leading-snug mb-2">
-            {interpretation.astroConnection.headline}
+            {interpretation.astroConnection.astroHeadline}
           </p>
         )}
         <p className="text-mystic-text/80 text-sm italic leading-relaxed">
@@ -475,24 +485,22 @@ function TarotInterpretationPanel({ card, interpretation, positionLabel, positio
       </div>
 
       {/* 8. Numerology resonance */}
-      {interpretation.cardNumber !== null && (
-        <div className="border-t border-mystic-border pt-4">
-          <div className="flex items-baseline gap-4">
-            <span
-              className="font-heading leading-none"
-              style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', color: '#c9a84c', opacity: 0.7 }}
-            >
-              {interpretation.cardNumber}
-            </span>
-            <div>
-              <p className="text-mystic-text/80 text-sm leading-relaxed">{interpretation.numerologyNote}</p>
-              {personalDay === interpretation.cardNumber && (
-                <p className="text-mystic-gold/70 text-xs mt-1">Your personal day is also a {personalDay}.</p>
-              )}
-            </div>
+      <div className="border-t border-mystic-border pt-4">
+        <div className="flex items-baseline gap-4">
+          <span
+            className="font-heading leading-none"
+            style={{ fontSize: 'clamp(2rem, 6vw, 3rem)', color: '#c9a84c', opacity: 0.7 }}
+          >
+            {card.number}
+          </span>
+          <div>
+            <p className="text-mystic-text/80 text-sm leading-relaxed">{interpretation.numerologyNote}</p>
+            {personalDay === card.number && (
+              <p className="text-mystic-gold/70 text-xs mt-1">Your personal day is also a {personalDay}.</p>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* 9. Reflection question */}
       <div className="border-t border-mystic-border pt-4">
@@ -587,8 +595,11 @@ export default function ThreeCardReading({
   deckCardIds,
   selectedDeckIndices,
   drawnCards,
-  instantInterpretations,
   astroContext,
+  dailyTransitSummary,
+  weeklyTransitSummary,
+  transitMoonSign,
+  personalYear,
   userIntention,
   onSave,
   onDiscard,
@@ -707,29 +718,29 @@ export default function ThreeCardReading({
     abortRef.current = controller
 
     const suitCounts: Record<string, number> = {}
-    for (const c of drawnCards) if (c.suit) suitCounts[c.suit] = (suitCounts[c.suit] ?? 0) + 1
+    for (const dc of drawnCards) if (dc.card.suit) suitCounts[dc.card.suit] = (suitCounts[dc.card.suit] ?? 0) + 1
     const topSuit = Object.entries(suitCounts).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null
 
     const payload: TarotThreeSynthesisPayload = {
-      cards: drawnCards.map((card, i) => {
-        const interp = instantInterpretations[i]
+      cards: drawnCards.map((dc, i) => {
+        const interp = dc.interpretation
         return {
-          id: card.id,
-          name: card.name,
-          arcana: card.arcana,
-          suit: card.suit ?? undefined,
-          number: card.number ?? 0,
-          element: card.element,
-          reversed: card.reversed,
-          coreMeaning: interp?.coreMeaning ?? '',
-          symbolicTheme: interp?.symbolicTheme ?? '',
-          emotionalMeaning: interp?.emotionalMeaning ?? '',
-          practicalGuidance: interp?.practicalGuidance ?? '',
-          reflectionQuestion: interp?.reflectionQuestion ?? '',
-          numerologyResonance: interp?.numerologyNote ?? '',
-          astroHeadline: interp?.astroConnection.headline ?? '',
-          transitInfluence: interp?.astroConnection.transitInfluence ?? '',
-          lunarPhaseNote: interp?.astroConnection.lunarPhaseNote ?? null,
+          id: dc.card.id,
+          name: dc.card.name,
+          arcana: dc.card.arcana,
+          suit: dc.card.suit ?? undefined,
+          number: dc.card.number,
+          element: dc.card.element,
+          reversed: dc.reversed,
+          coreMeaning: interp.coreMeaning,
+          symbolicTheme: interp.symbolicTheme,
+          emotionalMeaning: interp.emotionalMeaning,
+          practicalGuidance: interp.practicalGuidance,
+          reflectionQuestion: interp.reflectionQuestion,
+          numerologyResonance: interp.numerologyNote,
+          astroHeadline: interp.astroConnection.astroHeadline,
+          transitInfluence: interp.astroConnection.transitInfluence,
+          lunarPhaseNote: interp.astroConnection.lunarPhaseNote || null,
         } satisfies TarotCardPayload
       }) as [TarotCardPayload, TarotCardPayload, TarotCardPayload],
       positions: spreadPositions.map((pos, i) => ({
@@ -740,7 +751,7 @@ export default function ThreeCardReading({
       spreadMode,
       signals: {
         dominantArcana: signals.dominantArcana === 'mixed' ? 'balanced' : signals.dominantArcana,
-        majorArcanaCount: drawnCards.filter(c => c.arcana === 'major').length,
+        majorArcanaCount: drawnCards.filter(dc => dc.card.arcana === 'major').length,
         elementDistribution: signals.elementDistribution,
         polarityCount: signals.polarityCount,
         hasFoolOrWorld: signals.hasFoolOrWorld,
@@ -748,17 +759,17 @@ export default function ThreeCardReading({
         numeralProgression: null,
       },
       userIntention,
-      natalSunSign: astroContext.sunSign,
-      natalMoonSign: astroContext.moonSignNatal,
-      natalAscSign: astroContext.ascendant,
+      natalSunSign: astroContext.natalSunSign ?? '',
+      natalMoonSign: astroContext.natalMoonSign ?? '',
+      natalAscSign: astroContext.natalAscendantSign ?? '',
       personalDay: astroContext.personalDay,
-      personalYear: astroContext.personalYear,
+      personalYear,
       advanceCategory: astroContext.advanceCategory,
       advanceReason: astroContext.advanceReason,
-      moonPhaseName: astroContext.moonPhase,
-      moonSign: astroContext.moonSign,
-      dailyTransitSummary: astroContext.dailyTransitSummary,
-      weeklyTransitSummary: astroContext.weeklyTransitSummary,
+      moonPhaseName: astroContext.lunarPhaseName ?? '',
+      moonSign: transitMoonSign,
+      dailyTransitSummary,
+      weeklyTransitSummary,
       localDate: new Date().toISOString().split('T')[0],
     }
 
@@ -819,10 +830,9 @@ export default function ThreeCardReading({
   const discussContext = [
     `THREE CARD TAROT READING (${spreadPositions.map(position => position.label).join(' / ')})`,
     userIntention ? `Intention: ${userIntention}` : 'Intention: Open reading',
-    ...drawnCards.map((card, index) => {
-      const interpretation = instantInterpretations[index]
+    ...drawnCards.map((dc, index) => {
       const position = spreadPositions[index]
-      return `${index + 1}. ${position.label}: ${card.name} (${card.reversed ? 'Reversed' : 'Upright'})\nCore: ${interpretation?.coreMeaning ?? ''}\nTheme: ${interpretation?.symbolicTheme ?? ''}\nGuidance: ${interpretation?.practicalGuidance ?? ''}`
+      return `${index + 1}. ${position.label}: ${dc.card.name} (${dc.reversed ? 'Reversed' : 'Upright'})\nCore: ${dc.interpretation.coreMeaning}\nTheme: ${dc.interpretation.symbolicTheme}\nGuidance: ${dc.interpretation.practicalGuidance}`
     }),
     activeSynthesis ? `Synthesis: ${activeSynthesis.mainTheme || activeSynthesis.openingSentence}` : 'Synthesis: Not loaded yet',
   ].join('\n\n')
@@ -916,7 +926,7 @@ export default function ThreeCardReading({
               } as React.CSSProperties
             }
           >
-            {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((card, i) => (
+            {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((dc, i) => (
               <div key={i} className="flex flex-col items-center gap-2">
                 <div
                   className="rounded-2xl p-2 transition-all duration-300"
@@ -930,19 +940,19 @@ export default function ThreeCardReading({
                   }}
                 >
                   <CardReveal
-                    card={card}
-                    revealed={revealedMask[i] && card !== null}
-                    flipDone={flipDoneMask[i] && card !== null}
+                    card={dc}
+                    revealed={revealedMask[i] && dc !== null}
+                    flipDone={flipDoneMask[i] && dc !== null}
                     isActive={i === activeCardIndex}
                     isFlashing={allRevealedFlash}
                     dimmed={!revealedMask[i] && (selectedCount === 0 || i !== activeCardIndex)}
                     onTap={() => handleCardTap(i)}
                   />
                 </div>
-                {revealedMask[i] && card ? (
+                {revealedMask[i] && dc ? (
                   <div className="flex flex-col items-center gap-1">
                     <CardSlotPill
-                      label={card.name}
+                      label={dc.card.name}
                       active={i === activePlacementIndex || i === activeRevealIndex}
                     />
                     <CardPositionCaption label={spreadPositions[i].label} />
@@ -960,11 +970,10 @@ export default function ThreeCardReading({
 
         {/* ── Interpretation panels ────────────────────────────────────────── */}
         <div className="mt-8 space-y-6">
-          {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((card, i) => {
-            const interp = instantInterpretations[i]
-            if (!flipDoneMask[i] || card === null) return null
+          {Array.from({ length: 3 }, (_, i) => drawnCards[i] ?? null).map((dc, i) => {
+            if (!flipDoneMask[i] || dc === null) return null
 
-            if (!interp?.coreMeaning) {
+            if (!dc.interpretation.coreMeaning) {
               return (
                 <div key={i} className="tarot-fade-in rounded-xl border border-mystic-border p-6">
                   <p className="text-mystic-muted text-sm italic text-center">
@@ -977,8 +986,7 @@ export default function ThreeCardReading({
             return (
               <div key={i} className="tarot-fade-in">
                 <TarotInterpretationPanel
-                  card={card}
-                  interpretation={interp}
+                  dc={dc}
                   positionLabel={spreadPositions[i].label}
                   positionMeaning={spreadPositions[i].meaning}
                   personalDay={astroContext.personalDay}

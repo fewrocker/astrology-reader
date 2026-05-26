@@ -1,35 +1,6 @@
-// Types expected from src/engine/tarot.ts (feat-tarot-engine) and src/data/tarot/cards.ts (feat-tarot-card-data-layer)
+import type { TarotCard, InstantInterpretation } from '../../engine/tarot'
 
-export interface TarotCard {
-  id: string
-  name: string
-  number: number
-  arcana: 'major' | 'minor'
-  suit?: string
-  uprightMeaning: string
-  reversedMeaning: string
-  keywords: string[]
-  element?: string
-  reflectionQuestion?: string
-}
-
-export interface AstroConnection {
-  headline: string
-  transitInfluence: string | null
-  resonanceNote: string
-  lunarNote?: string
-  transitNotes?: string[]
-}
-
-export interface InstantInterpretation {
-  coreMeaning: string
-  symbolicTheme: string
-  emotionalMeaning: string
-  practicalGuidance: string
-  astroConnection: AstroConnection
-  numerologyNote: string
-  reflectionQuestion: string
-}
+export type { TarotCard, InstantInterpretation }
 
 interface TarotInterpretationPanelProps {
   interpretation: InstantInterpretation
@@ -87,26 +58,23 @@ export default function TarotInterpretationPanel({
         <p className={SECTION_HEADER}>In Your Sky Now</p>
         {interpretation.astroConnection.transitInfluence ? (
           <>
-            {interpretation.astroConnection.headline && (
+            {interpretation.astroConnection.astroHeadline && (
               <p
                 className="font-heading italic mb-3"
                 style={{ fontSize: '1.125rem', color: '#c9a84c' }}
               >
-                {interpretation.astroConnection.headline}
+                {interpretation.astroConnection.astroHeadline}
               </p>
             )}
-            {interpretation.astroConnection.transitNotes?.map((note, i) => (
-              <p key={i} className="text-mystic-text/80 text-sm mb-1">{note}</p>
-            ))}
             <p className="text-mystic-text/80 text-sm">{interpretation.astroConnection.transitInfluence}</p>
-            {interpretation.astroConnection.lunarNote && (
+            {interpretation.astroConnection.lunarPhaseNote && (
               <p className="text-mystic-muted/80 text-sm mt-2">
-                ☽ {interpretation.astroConnection.lunarNote}
+                ☽ {interpretation.astroConnection.lunarPhaseNote}
               </p>
             )}
           </>
-        ) : interpretation.astroConnection.resonanceNote ? (
-          <p className="text-mystic-text/80 text-sm">{interpretation.astroConnection.resonanceNote}</p>
+        ) : interpretation.astroConnection.elementResonanceNote ? (
+          <p className="text-mystic-text/80 text-sm">{interpretation.astroConnection.elementResonanceNote}</p>
         ) : (
           <p className="text-mystic-muted text-sm italic">
             Enter your birth data to see your sky connection.

@@ -1,7 +1,7 @@
 import type { ChartData } from '../engine/types'
 import type { JournalEntry, JournalTag } from '../components/journal/types'
 import type { TransitAspect } from '../engine/transits'
-import type { CelticSynthesisPayload, SynthesisChapter } from '../components/tarot/types'
+import type { SynthesisChapter } from '../components/tarot/types'
 import { GPT_SERVER_ERROR, GPT_OFFLINE, GPT_TIMEOUT, GPT_NUDGE } from './gptErrors'
 import { track } from './analytics'
 import { AUTH_TOKEN_KEY } from './authService'
@@ -544,51 +544,9 @@ function parseCelticChapters(raw: unknown): SynthesisChapter[] {
 }
 
 export async function getTarotCelticSynthesis(
-  payload: CelticSynthesisPayload,
+  payload: TarotCelticSynthesisPayload,
 ): Promise<SynthesisChapter[]> {
-  // Adapt client-shaped CelticSynthesisPayload to the server-shaped
-  // TarotCelticSynthesisPayload that handleTarotCelticSynthesis expects.
-  const localDate = new Date().toISOString().slice(0, 10)
-  const serverPayload: TarotCelticSynthesisPayload = {
-    cards: payload.cards.map(c => ({
-      id: c.cardId,
-      name: c.cardName,
-      arcana: c.arcana,
-      suit: c.suit,
-      number: 0,
-      element: c.element,
-      reversed: c.reversed,
-      coreMeaning: c.coreMeaning,
-      symbolicTheme: c.symbolicTheme,
-      emotionalMeaning: c.emotionalMeaning,
-      practicalGuidance: '',
-      reflectionQuestion: '',
-      numerologyResonance: '',
-      astroHeadline: c.astroConnection,
-      transitInfluence: '',
-      lunarPhaseNote: null,
-    })),
-    positions: payload.cards.map((c, i) => ({
-      index: i,
-      label: c.positionName,
-      meaning: c.positionDescription,
-    })),
-    userIntention: payload.userIntention,
-    natalSunSign: payload.astroContext.sunSign,
-    natalMoonSign: payload.astroContext.moonSign,
-    natalAscSign: payload.astroContext.ascendant,
-    natalMoonPhase: null,
-    personalDay: payload.astroContext.personalDay,
-    personalYear: payload.astroContext.numerologyYear,
-    lifePathNumber: 0,
-    advanceCategory: payload.astroContext.advanceCategory,
-    advanceReason: null,
-    moonPhaseName: payload.astroContext.currentMoonPhase,
-    moonSign: payload.astroContext.moonSign,
-    localDate,
-  }
-
-  const result = await callProxy('tarot-celtic-synthesis', serverPayload)
+  const result = await callProxy('tarot-celtic-synthesis', payload)
   const chapters = parseCelticChapters(result)
   if (chapters.length === 0) throw new Error('Empty synthesis response')
   return chapters

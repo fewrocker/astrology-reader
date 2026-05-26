@@ -1,19 +1,8 @@
 import { createContext, useContext, useReducer } from 'react'
 import type { ReactNode } from 'react'
+import type { DrawnCard, InstantInterpretation, TarotAstroContext } from '../engine/tarot'
 
-// Placeholder types — replaced when src/engine/tarot.ts and src/data/tarot/spreadPositions.ts land
-export interface DrawnCard {
-  id: string
-  name: string
-  suit: string | null
-  number: number | null
-}
-
-export interface InstantInterpretation {
-  cardId: string
-  position: string
-  text: string
-}
+export type { DrawnCard, InstantInterpretation, TarotAstroContext }
 
 export interface SpreadMode {
   id: string
@@ -117,15 +106,6 @@ function tarotReducer(state: TarotState, action: TarotAction): TarotState {
     default:
       return state
   }
-}
-
-export interface TarotAstroContext {
-  birthDate: string
-  personalDay: number
-  moonPhase: unknown | null
-  transitAspects: unknown[] | null
-  advanceCategory: string | null
-  dominantElement: 'Fire' | 'Water' | 'Air' | 'Earth' | null
 }
 
 interface TarotContextValue {

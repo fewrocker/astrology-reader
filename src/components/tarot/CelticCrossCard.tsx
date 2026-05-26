@@ -1,8 +1,7 @@
 import React from 'react'
-import { TAROT_CARD_BY_ID } from '../../data/tarot/cards'
 import { CardBack } from './CardBack'
 import { TarotCard as TarotCardComponent } from './TarotCard'
-import type { DrawnCard } from './types'
+import type { DrawnCard } from '../../engine/tarot'
 import type { CelticCrossPosition } from '../../data/tarot/spreadPositions'
 
 interface CelticCrossCardProps {
@@ -39,7 +38,8 @@ export default function CelticCrossCard({
   }
 
   const isRevealed = cardState === 'face-up'
-  const tarotCard = card ? TAROT_CARD_BY_ID[card.cardId] : null
+  // engine DrawnCard has card.card: TarotCard; use it directly (no lookup needed)
+  const tarotCard = card ? card.card : null
 
   const baseStyle: React.CSSProperties = {
     width: '100%',
@@ -102,14 +102,14 @@ export default function CelticCrossCard({
     )
   }
 
-  const arcanaColor = card?.arcana === 'major' ? '#c9a84c' : 'rgba(201,168,76,0.65)'
+  const arcanaColor = card?.card.arcana === 'major' ? '#c9a84c' : 'rgba(201,168,76,0.65)'
   const suitColors: Record<string, string> = {
     wands: '#c4622d',
     cups: '#5ec4c4',
     swords: '#8ab4d4',
     pentacles: '#7faf5e',
   }
-  const accentColor = card?.suit ? (suitColors[card.suit] ?? arcanaColor) : arcanaColor
+  const accentColor = card?.card.suit ? (suitColors[card.card.suit] ?? arcanaColor) : arcanaColor
 
   return (
     <div
@@ -121,7 +121,7 @@ export default function CelticCrossCard({
         border: `1px solid ${accentColor}`,
         boxShadow: `0 4px 20px rgba(0,0,0,0.5), 0 0 12px rgba(201,168,76,0.08)`,
       }}
-      aria-label={`${card?.cardName ?? 'Unknown'}, ${card?.reversed ? 'reversed' : 'upright'}, in the position of ${position.name}`}
+      aria-label={`${card?.card.name ?? 'Unknown'}, ${card?.reversed ? 'reversed' : 'upright'}, in the position of ${position.name}`}
     >
       {tarotCard ? (
         <TarotCardComponent
