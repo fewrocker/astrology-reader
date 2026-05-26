@@ -37,3 +37,8 @@ No component files reference `retrogradeplanets` directly — component files us
 The field is named `retrogradePlanets` everywhere: in the `TarotAstroContext` interface definition, in the local variable inside `buildTarotAstroContext`, at the object construction site, at all four engine access call sites, and in all three test file references. The rename is mechanical and complete — no logic changes, no behavioral changes, no new files. After the rename, every access site is consistent with TypeScript camelCase conventions and consistent with how the rest of the codebase names multi-word variables (e.g., `dominantTransitPlanet`, `natalMoonSign`, `chartRulerPlanet`).
 
 The fix touches 2 files and 11 occurrences. It introduces no functional change.
+
+---
+## Outcome
+Status: done
+Implementation: Global find-replace of retrogradeplanets → retrogradePlanets in src/engine/tarot.ts (8 occurrences) and src/engine/__tests__/tarot.test.ts (3 occurrences). TypeScript confirms zero remaining type errors. No logic changes.
