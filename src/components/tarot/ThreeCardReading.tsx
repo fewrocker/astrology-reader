@@ -5,7 +5,16 @@ import type { SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
 import { SPREAD_DEFINITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/types'
 import GptSkeleton from '../ui/GptSkeleton'
-import { getTarotThreeSynthesis, RateLimitError } from '../../services/gptInterpretation'
+import {
+  getTarotThreeSynthesis,
+  RateLimitError,
+  clientComputeElementalDignity,
+  clientDescribeElementalDignity,
+  clientIsCourtCard,
+  clientDescribeCourtPairDynamic,
+  clientDescribeMajorMinorAsymmetry,
+  clientComputeNumeralProgression,
+} from '../../services/gptInterpretation'
 import type { TarotThreeSynthesisPayload, TarotCardPayload, SpreadPositionPayload } from '../../services/gptInterpretation'
 import TarotDiscussPanel from './TarotDiscussPanel'
 import TarotDeckSelection from './TarotDeckSelection'
@@ -749,15 +758,56 @@ export default function ThreeCardReading({
         meaning: pos.meaning,
       })) as [SpreadPositionPayload, SpreadPositionPayload, SpreadPositionPayload],
       spreadMode,
-      signals: {
-        dominantArcana: signals.dominantArcana === 'mixed' ? 'balanced' : signals.dominantArcana,
-        majorArcanaCount: drawnCards.filter(dc => dc.card.arcana === 'major').length,
-        elementDistribution: signals.elementDistribution,
-        polarityCount: signals.polarityCount,
-        hasFoolOrWorld: signals.hasFoolOrWorld,
-        dominantSuit: topSuit,
-        numeralProgression: null,
-      },
+      signals: (() => {
+        const card0 = drawnCards[0]
+        const card1 = drawnCards[1]
+        const card2 = drawnCards[2]
+
+        // Pair 1+2 dignity (access via .card for unified DrawnCard type)
+        const dignity12 = clientComputeElementalDignity(card0?.card.element, card1?.card.element)
+        const desc12 = clientDescribeElementalDignity(
+          card0?.card.name ?? '', card0?.card.element ?? null,
+          card1?.card.name ?? '', card1?.card.element ?? null,
+          dignity12,
+        )
+        const court12 = card0 && card1 && clientIsCourtCard(card0.card.name, card0.card.arcana) && clientIsCourtCard(card1.card.name, card1.card.arcana)
+          ? clientDescribeCourtPairDynamic(card0.card.name, card0.card.element ?? null, card1.card.name, card1.card.element ?? null)
+          : null
+        const mm12 = card0 && card1 && card0.card.arcana !== card1.card.arcana
+          ? clientDescribeMajorMinorAsymmetry(card0.card.name, card0.card.arcana, card0.card.suit ?? undefined, card1.card.name, card1.card.arcana, card1.card.suit ?? undefined)
+          : null
+
+        // Pair 2+3 dignity
+        const dignity23 = clientComputeElementalDignity(card1?.card.element, card2?.card.element)
+        const desc23 = clientDescribeElementalDignity(
+          card1?.card.name ?? '', card1?.card.element ?? null,
+          card2?.card.name ?? '', card2?.card.element ?? null,
+          dignity23,
+        )
+
+        const allMajorArcana = drawnCards.every(c => c.card.arcana === 'major')
+
+        return {
+          dominantArcana: signals.dominantArcana === 'mixed' ? 'balanced' : signals.dominantArcana,
+          majorArcanaCount: drawnCards.filter(c => c.card.arcana === 'major').length,
+          elementDistribution: signals.elementDistribution,
+          polarityCount: signals.polarityCount,
+          hasFoolOrWorld: signals.hasFoolOrWorld,
+          dominantSuit: topSuit,
+          numeralProgression: clientComputeNumeralProgression(drawnCards.map(c => ({ number: c.card.number }))),
+          pairDignity12: {
+            dignity: dignity12,
+            description: desc12,
+            courtDynamic: court12,
+            majorMinorAsymmetry: mm12,
+          },
+          pairDignity23: {
+            dignity: dignity23,
+            description: desc23,
+          },
+          allMajorArcana,
+        }
+      })(),
       userIntention,
       natalSunSign: astroContext.natalSunSign ?? '',
       natalMoonSign: astroContext.natalMoonSign ?? '',
@@ -889,6 +939,18 @@ export default function ThreeCardReading({
         >
           ← Back
         </button>
+
+        {/* Persistent intention anchor — visible from deck selection through synthesis (spec 15) */}
+        {userIntention && (
+          <div
+            className="w-full max-w-xl mb-3 px-4 py-2 text-center rounded-xl"
+            style={{ background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.15)' }}
+          >
+            <p className="text-mystic-gold/70 text-xs italic leading-relaxed truncate" title={userIntention}>
+              &ldquo;{userIntention}&rdquo;
+            </p>
+          </div>
+        )}
 
         {selectedCount < 3 && (
           <TarotDeckSelection
@@ -1091,6 +1153,7 @@ export default function ThreeCardReading({
         isOpen={discussOpen}
         onClose={() => setDiscussOpen(false)}
         contextString={discussContext}
+        userIntention={userIntention}
       />
     </>
   )

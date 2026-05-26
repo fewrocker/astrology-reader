@@ -416,6 +416,113 @@ export interface SpreadPositionPayload {
   meaning: string
 }
 
+// Elemental dignity types (mirror of server types — kept in sync manually)
+export type ElementalDignity = 'harmonious' | 'opposing' | 'resonant' | 'neutral'
+export type NumeralDirection = 'ascending' | 'descending' | 'non-sequential'
+
+export interface NumeralProgressionSignal {
+  direction: NumeralDirection
+  adjacent: boolean
+  numbers: number[]
+  description: string
+}
+
+// ---------------------------------------------------------------------------
+// Client-side elemental dignity helpers (mirror of server logic)
+// ---------------------------------------------------------------------------
+
+const COURT_RANKS_CLIENT = new Set(['Page', 'Knight', 'Queen', 'King'])
+
+export function clientComputeElementalDignity(
+  elementA: string | null | undefined,
+  elementB: string | null | undefined,
+): ElementalDignity {
+  if (!elementA || !elementB) return 'neutral'
+  if (elementA === elementB) return 'resonant'
+  const pair = [elementA, elementB].sort().join('+')
+  if (pair === 'Air+Fire' || pair === 'Earth+Water') return 'harmonious'
+  if (pair === 'Fire+Water' || pair === 'Air+Earth') return 'opposing'
+  return 'neutral'
+}
+
+export function clientDescribeElementalDignity(
+  cardAName: string, cardAElement: string | null,
+  cardBName: string, cardBElement: string | null,
+  dignity: ElementalDignity,
+): string {
+  const elA = cardAElement ?? 'elementless'
+  const elB = cardBElement ?? 'elementless'
+  switch (dignity) {
+    case 'harmonious':
+      return `${cardAName} (${elA}) and ${cardBName} (${elB}) are elementally harmonious — their energies support and amplify one another.`
+    case 'opposing':
+      return `${cardAName} (${elA}) and ${cardBName} (${elB}) are elementally opposing — a productive friction or creative tension is present between them.`
+    case 'resonant':
+      return `${cardAName} and ${cardBName} share the ${elA} element — elemental resonance: the same field, different expressions.`
+    case 'neutral':
+      return `${cardAName} and ${cardBName} hold an elemental neutrality — no classical tension or harmony; their relationship is symbolic rather than elemental.`
+  }
+}
+
+export function clientIsCourtCard(name: string, arcana: string): boolean {
+  if (arcana !== 'minor') return false
+  return COURT_RANKS_CLIENT.has(name.split(' ')[0] ?? '')
+}
+
+export function clientDescribeCourtPairDynamic(
+  cardAName: string, cardAElement: string | null,
+  cardBName: string, cardBElement: string | null,
+): string {
+  const elA = cardAElement ?? ''
+  const elB = cardBElement ?? ''
+  const rankA = cardAName.split(' ')[0] ?? ''
+  const rankB = cardBName.split(' ')[0] ?? ''
+  if (elA === elB && elA) {
+    return `${cardAName} and ${cardBName} are court cards of the same element (${elA}) — two facets of the same inner archetype face each other.`
+  }
+  if (rankA === rankB) {
+    return `${cardAName} and ${cardBName} are court cards of the same rank (${rankA}) but different elements (${elA} vs. ${elB}) — a mirroring dynamic where equal authority meets different natures.`
+  }
+  return `${cardAName} and ${cardBName} are both court cards — two distinct inner figures meet across the central axis of the spread.`
+}
+
+export function clientDescribeMajorMinorAsymmetry(
+  cardAName: string, cardAArcana: string, cardASuit: string | undefined,
+  cardBName: string, cardBArcana: string, cardBSuit: string | undefined,
+): string {
+  const isMajorA = cardAArcana === 'major'
+  const majorName = isMajorA ? cardAName : cardBName
+  const minorName = isMajorA ? cardBName : cardAName
+  const minorSuit = isMajorA ? cardBSuit : cardASuit
+  return `${majorName} (Major Arcana) sets the archetypal register while ${minorName} (Minor Arcana, ${minorSuit ?? 'suitless'}) grounds it in everyday reality.`
+}
+
+export function clientComputeNumeralProgression(cards: Array<{ number: number | null }>): NumeralProgressionSignal | null {
+  const numbers = cards.map(c => c.number).filter((n): n is number => typeof n === 'number' && n > 0)
+  if (numbers.length < 2) return null
+  const diffs = numbers.slice(1).map((n, i) => n - numbers[i]!)
+  const allPositive = diffs.every(d => d > 0)
+  const allNegative = diffs.every(d => d < 0)
+  const adjacent = diffs.every(d => Math.abs(d) === 1)
+  let direction: NumeralDirection
+  if (allPositive) direction = 'ascending'
+  else if (allNegative) direction = 'descending'
+  else direction = 'non-sequential'
+  let description: string
+  if (direction === 'ascending' && adjacent) {
+    description = `The card numbers step upward (${numbers.join('→')}) in consecutive sequence — an arc of building, progression, or accumulation.`
+  } else if (direction === 'ascending') {
+    description = `The card numbers move upward (${numbers.join('→')}) — an ascending arc suggesting growth, expansion, or forward movement.`
+  } else if (direction === 'descending' && adjacent) {
+    description = `The card numbers step downward (${numbers.join('→')}) in consecutive sequence — an unwinding, resolution, or return arc.`
+  } else if (direction === 'descending') {
+    description = `The card numbers move downward (${numbers.join('→')}) — a descending arc suggesting release, narrowing, or completion.`
+  } else {
+    description = `The card numbers (${numbers.join(', ')}) do not follow a clear sequence — the spread speaks from discontinuity or juxtaposition rather than progression.`
+  }
+  return { direction, adjacent, numbers, description }
+}
+
 export interface ThreeCardSignals {
   dominantArcana: 'major-heavy' | 'minor-heavy' | 'balanced'
   majorArcanaCount: number
@@ -423,7 +530,22 @@ export interface ThreeCardSignals {
   polarityCount: { upright: number; reversed: number }
   hasFoolOrWorld: boolean
   dominantSuit: string | null
-  numeralProgression: string | null
+  /** Directional numeral progression signal (replaces old string field) */
+  numeralProgression: NumeralProgressionSignal | null
+  /** Elemental dignity for card positions 1+2 */
+  pairDignity12: {
+    dignity: ElementalDignity
+    description: string
+    courtDynamic: string | null
+    majorMinorAsymmetry: string | null
+  }
+  /** Elemental dignity for card positions 2+3 */
+  pairDignity23: {
+    dignity: ElementalDignity
+    description: string
+  }
+  /** Whether all three cards are Major Arcana */
+  allMajorArcana: boolean
 }
 
 export interface TarotSingleSynthesisPayload {
@@ -465,6 +587,24 @@ export interface TarotThreeSynthesisPayload {
   localDate: string
 }
 
+export interface CelticStructuralSignals {
+  majorArcanaCount: number
+  majorArcanaWeight: 'archetypal-heavy' | 'balanced' | 'practical-heavy'
+  reversedCount: number
+  reversalWeight: 'high-friction' | 'mixed' | 'all-upright'
+  dominantElement: string | null
+  absentElements: string[]
+  elementFieldQuality: string
+  courtCardCount: number
+  hasFoolOrWorld: boolean
+  crossingPairDignity: {
+    dignity: ElementalDignity
+    description: string
+    courtDynamic: string | null
+    majorMinorAsymmetry: string | null
+  }
+}
+
 export interface TarotCelticSynthesisPayload {
   cards: TarotCardPayload[]
   positions: SpreadPositionPayload[]
@@ -483,6 +623,7 @@ export interface TarotCelticSynthesisPayload {
   dailyTransitSummary: string | null
   weeklyTransitSummary: string | null
   localDate: string
+  signals?: CelticStructuralSignals
 }
 
 // ---------------------------------------------------------------------------
@@ -545,10 +686,83 @@ function parseCelticChapters(raw: unknown): SynthesisChapter[] {
   return chapters.filter(c => c.body.length > 0 || c.heading !== 'Synthesis')
 }
 
+function clientComputeCelticStructuralSignals(
+  cards: TarotCardPayload[],
+): CelticStructuralSignals {
+  const allElements = ['Fire', 'Earth', 'Air', 'Water']
+
+  const majorArcanaCount = cards.filter(c => c.arcana === 'major').length
+  let majorArcanaWeight: CelticStructuralSignals['majorArcanaWeight']
+  if (majorArcanaCount >= 5) majorArcanaWeight = 'archetypal-heavy'
+  else if (majorArcanaCount <= 2) majorArcanaWeight = 'practical-heavy'
+  else majorArcanaWeight = 'balanced'
+
+  const reversedCount = cards.filter(c => c.reversed).length
+  let reversalWeight: CelticStructuralSignals['reversalWeight']
+  if (reversedCount >= 5) reversalWeight = 'high-friction'
+  else if (reversedCount === 0) reversalWeight = 'all-upright'
+  else reversalWeight = 'mixed'
+
+  const elementMap: Record<string, number> = {}
+  for (const c of cards) {
+    if (c.element) elementMap[c.element] = (elementMap[c.element] ?? 0) + 1
+  }
+  const elementEntries = Object.entries(elementMap).sort((a, b) => b[1] - a[1])
+  const dominantElement = elementEntries[0]?.[0] ?? null
+  const dominantCount = elementEntries[0]?.[1] ?? 0
+  const absentElements = allElements.filter(el => !elementMap[el])
+
+  let elementFieldQuality: string
+  if (!dominantElement) {
+    elementFieldQuality = 'No element dominates — the spread is elementally fragmented or balanced.'
+  } else {
+    const absenceNote = absentElements.length > 0
+      ? ` The absence of ${absentElements.join(' and ')} is meaningful — that energy is not among the forces present.`
+      : ' All four elements appear.'
+    elementFieldQuality = `${dominantElement} dominates (${dominantCount} of ${cards.length} cards) — the reading's primary register is ${dominantElement === 'Fire' ? 'energized and creative' : dominantElement === 'Earth' ? 'grounded and embodied' : dominantElement === 'Air' ? 'mental and communicative' : 'emotional and intuitive'}.${absenceNote}`
+  }
+
+  const courtCardCount = cards.filter(c => clientIsCourtCard(c.name, c.arcana)).length
+  const hasFoolOrWorld = cards.some(c => c.id === 'the-fool' || c.id === 'the-world')
+
+  const card1 = cards[0]
+  const card2 = cards[1]
+  let crossingPairDignity: CelticStructuralSignals['crossingPairDignity']
+  if (card1 && card2) {
+    const dignity = clientComputeElementalDignity(card1.element, card2.element)
+    const description = clientDescribeElementalDignity(card1.name, card1.element, card2.name, card2.element, dignity)
+    const courtDynamic = clientIsCourtCard(card1.name, card1.arcana) && clientIsCourtCard(card2.name, card2.arcana)
+      ? clientDescribeCourtPairDynamic(card1.name, card1.element, card2.name, card2.element)
+      : null
+    const majorMinorAsymmetry = card1.arcana !== card2.arcana
+      ? clientDescribeMajorMinorAsymmetry(card1.name, card1.arcana, card1.suit, card2.name, card2.arcana, card2.suit)
+      : null
+    crossingPairDignity = { dignity, description, courtDynamic, majorMinorAsymmetry }
+  } else {
+    crossingPairDignity = { dignity: 'neutral', description: 'Insufficient cards.', courtDynamic: null, majorMinorAsymmetry: null }
+  }
+
+  return {
+    majorArcanaCount,
+    majorArcanaWeight,
+    reversedCount,
+    reversalWeight,
+    dominantElement,
+    absentElements,
+    elementFieldQuality,
+    courtCardCount,
+    hasFoolOrWorld,
+    crossingPairDignity,
+  }
+}
+
 export async function getTarotCelticSynthesis(
   payload: TarotCelticSynthesisPayload,
 ): Promise<SynthesisChapter[]> {
-  const result = await callProxy('tarot-celtic-synthesis', payload)
+  // Compute structural signals client-side and enrich the payload before sending
+  const signals = clientComputeCelticStructuralSignals(payload.cards)
+  const enrichedPayload: TarotCelticSynthesisPayload = { ...payload, signals }
+  const result = await callProxy('tarot-celtic-synthesis', enrichedPayload)
   const chapters = parseCelticChapters(result)
   if (chapters.length === 0) throw new Error('Empty synthesis response')
   return chapters
@@ -557,9 +771,10 @@ export async function getTarotCelticSynthesis(
 export async function getTarotDiscussResponse(
   discussContext: string,
   messages: ChatMessage[],
+  userIntention?: string | null,
 ): Promise<string> {
   try {
-    const result = await callProxy('tarot-discuss', { discussContext, messages })
+    const result = await callProxy('tarot-discuss', { discussContext, messages, userIntention: userIntention ?? null })
     return (result as string) || 'Unable to generate a response.'
   } catch (err) {
     return err instanceof Error ? err.message : GPT_SERVER_ERROR

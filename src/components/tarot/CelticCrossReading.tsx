@@ -853,6 +853,7 @@ export default function CelticCrossReading({
         isOpen={discussOpen}
         onClose={() => setDiscussOpen(false)}
         contextString={discussContext}
+        userIntention={userIntention}
       />
     </>
   )

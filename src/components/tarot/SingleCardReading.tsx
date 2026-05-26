@@ -17,6 +17,7 @@ interface SingleCardReadingProps {
   interpretation: InstantInterpretation | null
   synthesisPayload: TarotSingleSynthesisPayload | null
   personalDay: number
+  userIntention?: string | null
   onBack: () => void
   onSave: () => void
   onDiscuss: () => void
@@ -46,6 +47,7 @@ export default function SingleCardReading({
   interpretation,
   synthesisPayload,
   personalDay,
+  userIntention,
   onBack,
   onSave,
   onDiscuss,
@@ -221,6 +223,7 @@ export default function SingleCardReading({
         isOpen={discussOpen}
         onClose={() => setDiscussOpen(false)}
         contextString={discussContext}
+        userIntention={userIntention}
       />
     </div>
   )

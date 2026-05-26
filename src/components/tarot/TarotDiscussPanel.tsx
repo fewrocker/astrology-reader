@@ -6,9 +6,10 @@ interface TarotDiscussPanelProps {
   isOpen: boolean
   onClose: () => void
   contextString: string
+  userIntention?: string | null
 }
 
-export default function TarotDiscussPanel({ isOpen, onClose, contextString }: TarotDiscussPanelProps) {
+export default function TarotDiscussPanel({ isOpen, onClose, contextString, userIntention }: TarotDiscussPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -39,7 +40,7 @@ export default function TarotDiscussPanel({ isOpen, onClose, contextString }: Ta
     setInput('')
     setLoading(true)
     try {
-      const response = await getTarotDiscussResponse(contextString, [...messages, userMsg])
+      const response = await getTarotDiscussResponse(contextString, [...messages, userMsg], userIntention)
       setMessages(prev => [...prev, { role: 'assistant', content: response }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'The sky is briefly unavailable. Please try again.' }])
