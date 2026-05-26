@@ -343,6 +343,7 @@ function SingleReadingFlow({
       interpretation={drawn ? adaptSingleInterp(drawn.interp) : null}
       synthesisPayload={synthesisPayload}
       personalDay={computePersonalDay(birthDate)}
+      userIntention={userIntention || null}
       onBack={onBack}
       onSave={() => {}}
       onDiscuss={() => {}}
