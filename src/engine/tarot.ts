@@ -14,6 +14,24 @@ export type { TarotArcana } from '../data/tarot/cards'
 export type { SpreadType, SpreadPosition } from '../data/tarot/spreadPositions'
 export { SPREAD_POSITIONS, TAROT_CARDS }
 
+// ─── Chart rulership lookup (modern rulerships) ───────────────────────────────
+// Single authoritative source for client-side derivation.
+// Server-side mirror lives in server/services/gptTarot.ts — kept in lockstep.
+export const SIGN_RULERSHIPS: Record<string, string> = {
+  Aries: 'Mars',
+  Taurus: 'Venus',
+  Gemini: 'Mercury',
+  Cancer: 'Moon',
+  Leo: 'Sun',
+  Virgo: 'Mercury',
+  Libra: 'Venus',
+  Scorpio: 'Pluto',
+  Sagittarius: 'Jupiter',
+  Capricorn: 'Saturn',
+  Aquarius: 'Uranus',
+  Pisces: 'Neptune',
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface TarotAstroContext {
@@ -22,6 +40,8 @@ export interface TarotAstroContext {
   natalAscendantSign: ZodiacSign | null
   natalDominantElement: Element | null
   natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
+  /** Chart ruler = ruling planet of the Ascendant sign (modern rulerships). Null when ascendant is unavailable. */
+  chartRulerPlanet: string | null
 
   // Natal house placements (1–12 when available, null when chart lacks house data)
   natalMoonHouse: number | null
@@ -468,6 +488,7 @@ export function buildTarotAstroContext(
   let natalAscendantSign: ZodiacSign | null = null
   let natalDominantElement: Element | null = null
   let natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null = null
+  let chartRulerPlanet: string | null = null
 
   // Natal house placements — null when chart lacks house data (e.g. unknown birth time)
   let natalMoonHouse: number | null = null
@@ -481,6 +502,8 @@ export function buildTarotAstroContext(
     natalAscendantSign = natalChart.angles?.ascendant?.sign ?? null
     natalDominantElement = computeDominantElement(natalChart)
     natalDominantModality = computeDominantModality(natalChart)
+    // Chart ruler: ruling planet of the Ascendant sign (null when no ascendant)
+    chartRulerPlanet = natalAscendantSign ? (SIGN_RULERSHIPS[natalAscendantSign] ?? null) : null
 
     // Extract house placements from the same planet objects — house is 0 for unknown-time charts
     const moonPlanet = natalChart.planets.find(p => p.name === 'Moon')
@@ -539,6 +562,7 @@ export function buildTarotAstroContext(
     natalSunSign,
     natalMoonSign,
     natalAscendantSign,
+    chartRulerPlanet,
     natalDominantElement,
     natalDominantModality,
     natalMoonHouse,
@@ -558,7 +582,106 @@ export function buildTarotAstroContext(
 
 // ─── computeInstantInterpretation ─────────────────────────────────────────────
 
-function buildTransitInfluence(card: TarotCard, astroContext: TarotAstroContext): string {
+// Positional registers for the element-affinity fallback
+type PositionRegister = 'past-root' | 'present-active' | 'future-emerging'
+
+// IDs of positions that have a past/root temporal valence
+const PAST_ROOT_POSITION_IDS = new Set([
+  'past', 'recent-past', 'celtic-3-unconscious', 'celtic-4-recent-past',
+  'shadow', 'theme',
+])
+
+// IDs of positions that have a forward/aspirational temporal valence
+const FUTURE_EMERGING_POSITION_IDS = new Set([
+  'future', 'advice', 'action', 'bridge', 'gift',
+  'celtic-5-conscious-goal', 'celtic-6-near-future', 'celtic-10-outcome',
+])
+
+function getPositionRegister(position: SpreadPosition | null): PositionRegister | null {
+  if (!position) return null
+  if (PAST_ROOT_POSITION_IDS.has(position.id)) return 'past-root'
+  if (FUTURE_EMERGING_POSITION_IDS.has(position.id)) return 'future-emerging'
+  return 'present-active'
+}
+
+// True for court cards: Pages (11), Knights (12), Queens (13), Kings (14)
+function isCourtCard(card: TarotCard): boolean {
+  return card.arcana === 'minor' && card.number >= 11 && card.number <= 14
+}
+
+function getCourtRankLabel(card: TarotCard): string {
+  if (card.number === 11) return 'Page'
+  if (card.number === 12) return 'Knight'
+  if (card.number === 13) return 'Queen'
+  if (card.number === 14) return 'King'
+  return card.name
+}
+
+function buildPositionAwareAffinityLine(
+  card: TarotCard,
+  planet: string,
+  cardElement: Element,
+  transitElement: Element,
+  register: PositionRegister,
+): string {
+  const kw0 = card.keywords[0] ?? 'its themes'
+  const kw1 = card.keywords[1] ?? 'its energy'
+  const transitAdj = ELEMENT_ADJECTIVE[transitElement]
+  const sameElement = transitElement === cardElement
+
+  if (isCourtCard(card)) {
+    const rank = getCourtRankLabel(card)
+    const figure = `this ${rank} of ${cardElement}`
+    if (register === 'past-root') {
+      if (sameElement) {
+        return `The ${planet} transit has been deepening the ${cardElement} ground that ${figure} embodies — the ${kw0} and ${kw1} already at work here have shaped the situation from its roots.`
+      } else {
+        return `The ${planet} transit has been introducing ${transitAdj} pressure into the ${cardElement} ground that ${figure} embodies — a quality that has been operating beneath the surface of this situation, shaping it from below.`
+      }
+    } else if (register === 'future-emerging') {
+      if (sameElement) {
+        return `The ${planet} transit amplifies the ${cardElement} quality ${figure} carries — ${kw0} and ${kw1} are gathering, pointing toward the kind of mastery or presence this figure represents.`
+      } else {
+        return `The ${planet} transit brings ${transitAdj} energy into the domain of ${figure} — what approaches is a meeting between the ${cardElement} presence this card names and a force that will ask it to expand beyond its familiar ground.`
+      }
+    } else {
+      // present-active
+      if (sameElement) {
+        return `The ${planet} transit amplifies ${figure}'s ${cardElement} nature — ${kw0} and ${kw1} are immediately alive in this position, whether as a quality you are embodying or a figure you are encountering.`
+      } else {
+        return `The ${planet} transit introduces ${transitAdj} energy into ${figure}'s ${cardElement} domain — the tension between these two forces is active right now, asking for conscious integration in the role or relationship this card names.`
+      }
+    }
+  }
+
+  // Non-court card: position-aware but less relational
+  if (register === 'past-root') {
+    if (sameElement) {
+      return `The ${planet} transit has been amplifying this card's ${cardElement} nature — ${kw0} and ${kw1} have been operating as a shaping ground beneath this situation.`
+    } else {
+      return `The ${planet} transit has been introducing ${transitAdj} energy into this ${cardElement} card — these forces have been in tension beneath the surface, forming the root condition of what is present now.`
+    }
+  } else if (register === 'future-emerging') {
+    if (sameElement) {
+      return `The ${planet} transit amplifies this card's ${cardElement} nature — ${kw0} and ${kw1} are gathering momentum, pointing toward what is becoming available.`
+    } else {
+      return `The ${planet} transit brings ${transitAdj} energy into this ${cardElement} card — what approaches will ask for the integration of these contrasting forces as this direction takes shape.`
+    }
+  } else {
+    // present-active (default)
+    if (sameElement) {
+      return `The current ${planet} transit amplifies this card's ${cardElement} nature — ${kw0} and ${kw1} are heightened now.`
+    } else {
+      return `The current ${planet} transit introduces ${transitAdj} energy into this ${cardElement} card — a call to integrate these opposing forces consciously.`
+    }
+  }
+}
+
+function buildTransitInfluence(
+  card: TarotCard,
+  astroContext: TarotAstroContext,
+  position: SpreadPosition | null,
+): string {
   // Level 1: specific transit adaptation lookup
   const adaptations = TRANSIT_ADAPTATIONS[card.id]
   if (adaptations && adaptations.length > 0) {
@@ -586,13 +709,18 @@ function buildTransitInfluence(card: TarotCard, astroContext: TarotAstroContext)
     }
   }
 
-  // Level 2: element affinity with dominant transit planet
+  // Level 2: element affinity with dominant transit planet (position-aware)
   if (astroContext.dominantTransitPlanet) {
     const planet = astroContext.dominantTransitPlanet
     const transitElement = PLANET_ELEMENT_MAP[planet]
     const cardElement = card.element
+    const register = getPositionRegister(position)
 
     if (transitElement && cardElement) {
+      if (register !== null) {
+        return buildPositionAwareAffinityLine(card, planet, cardElement, transitElement, register)
+      }
+      // No position (single-card draw) — unchanged generic output
       if (transitElement === cardElement) {
         const kw0 = card.keywords[0] ?? 'its themes'
         const kw1 = card.keywords[1] ?? 'its energy'
@@ -709,7 +837,7 @@ export function computeInstantInterpretation(
   position: SpreadPosition | null,
   astroContext: TarotAstroContext,
 ): InstantInterpretation {
-  const transitInfluence = buildTransitInfluence(card, astroContext)
+  const transitInfluence = buildTransitInfluence(card, astroContext, position)
   const astroHeadline = buildAstroHeadline(card, astroContext)
   const elementResonanceNote = buildElementResonanceNote(card, astroContext)
   const lunarPhaseNote = buildLunarPhaseNote(astroContext)

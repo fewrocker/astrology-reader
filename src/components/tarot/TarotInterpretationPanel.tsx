@@ -23,6 +23,23 @@ export default function TarotInterpretationPanel({
 
   return (
     <div>
+      {/* Section 0: Position Frame (multi-card spreads only) */}
+      {interpretation.positionLabel && (
+        <div className={SECTION_CONTAINER}>
+          <p
+            className="text-xs uppercase tracking-widest font-heading mb-2"
+            style={{ color: '#c9a84c' }}
+          >
+            {interpretation.positionLabel}
+          </p>
+          {interpretation.positionMeaning && (
+            <p className="text-mystic-muted/80 text-sm italic leading-relaxed">
+              {interpretation.positionMeaning}
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Section 1: Core Meaning */}
       <div className={SECTION_CONTAINER}>
         <p className={SECTION_HEADER}>Core Meaning</p>

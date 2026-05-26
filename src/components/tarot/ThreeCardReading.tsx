@@ -449,12 +449,12 @@ function TarotInterpretationPanel({ dc, positionLabel, positionMeaning, personal
       {/* 1. Position header */}
       <div>
         <p
-          className="text-xs uppercase tracking-[0.2em] font-heading"
+          className="text-xs uppercase tracking-widest font-heading"
           style={{ color: '#c9a84c' }}
         >
           {positionLabel}
         </p>
-        <p className="text-mystic-muted text-xs italic mt-1 leading-relaxed">
+        <p className="text-mystic-muted/80 text-sm italic mt-1 leading-relaxed">
           {positionMeaning}
         </p>
       </div>
@@ -785,6 +785,7 @@ export default function ThreeCardReading({
           suit: dc.card.suit ?? undefined,
           number: dc.card.number,
           element: dc.card.element,
+          rulingPlanet: dc.card.rulingPlanet ?? null,
           reversed: dc.reversed,
           coreMeaning: interp.coreMeaning,
           symbolicTheme: interp.symbolicTheme,
@@ -857,6 +858,8 @@ export default function ThreeCardReading({
       natalSunSign: astroContext.natalSunSign ?? '',
       natalMoonSign: astroContext.natalMoonSign ?? '',
       natalAscSign: astroContext.natalAscendantSign ?? '',
+      chartRulerPlanet: astroContext.chartRulerPlanet,
+      natalDominantModality: astroContext.natalDominantModality,
       natalMoonHouse: astroContext.natalMoonHouse,
       natalVenusHouse: astroContext.natalVenusHouse,
       natalNorthNodeHouse: astroContext.natalNorthNodeHouse,
