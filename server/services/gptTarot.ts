@@ -41,6 +41,52 @@ export interface SpreadPositionPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Dominant modality helper
+// ---------------------------------------------------------------------------
+
+/** Zodiac-sign → modality lookup (mirrors src/engine/types.ts SIGN_MODALITIES). */
+const SIGN_MODALITIES_SERVER: Record<string, 'Cardinal' | 'Fixed' | 'Mutable'> = {
+  Aries: 'Cardinal', Taurus: 'Fixed',    Gemini: 'Mutable',
+  Cancer: 'Cardinal', Leo: 'Fixed',      Virgo: 'Mutable',
+  Libra: 'Cardinal', Scorpio: 'Fixed',   Sagittarius: 'Mutable',
+  Capricorn: 'Cardinal', Aquarius: 'Fixed', Pisces: 'Mutable',
+}
+
+/**
+ * Compute the dominant modality (Cardinal / Fixed / Mutable) for a natal chart.
+ * Sun, Moon, and Ascendant each receive double weight.
+ * Returns null when no clear winner exists.
+ *
+ * Server-side mirror of computeDominantModality in src/engine/tarot.ts.
+ */
+function computeDominantModality(
+  natalChart: { planets: Array<{ name: string; sign: string }>; angles?: { ascendant?: { sign: string } } },
+): 'Cardinal' | 'Fixed' | 'Mutable' | null {
+  try {
+    const counts: Record<'Cardinal' | 'Fixed' | 'Mutable', number> = {
+      Cardinal: 0, Fixed: 0, Mutable: 0,
+    }
+    const ascSign = natalChart.angles?.ascendant?.sign
+    for (const planet of natalChart.planets) {
+      const mod = SIGN_MODALITIES_SERVER[planet.sign]
+      if (!mod) continue
+      const weight = (planet.name === 'Sun' || planet.name === 'Moon') ? 2 : 1
+      counts[mod] += weight
+    }
+    if (ascSign && SIGN_MODALITIES_SERVER[ascSign]) {
+      counts[SIGN_MODALITIES_SERVER[ascSign]] += 2
+    }
+    const max = Math.max(...Object.values(counts))
+    const top = (Object.keys(counts) as ('Cardinal' | 'Fixed' | 'Mutable')[]).filter(
+      m => counts[m] === max,
+    )
+    return top.length === 1 ? top[0] : null
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Elemental dignity
 // ---------------------------------------------------------------------------
 
@@ -235,6 +281,7 @@ export interface TarotSingleSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -260,6 +307,7 @@ export interface TarotThreeSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -282,6 +330,7 @@ export interface TarotCelticSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: string | null
   natalMoonPhase: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
@@ -518,6 +567,7 @@ export async function handleTarotSingleSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -535,6 +585,7 @@ export async function handleTarotSingleSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -587,6 +638,7 @@ Numerology resonance: ${card.numerologyResonance}
 
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
@@ -645,6 +697,7 @@ export async function handleTarotThreeSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -663,6 +716,7 @@ export async function handleTarotThreeSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -755,6 +809,7 @@ ${signalLines.join('\n')}
 
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
@@ -829,6 +884,7 @@ export async function handleTarotCelticSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonPhase = payload.natalMoonPhase
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
@@ -849,6 +905,7 @@ export async function handleTarotCelticSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -935,6 +992,7 @@ ${crossPair.description}${crossPair.courtDynamic ? `\nCourt dynamic: ${crossPair
 
 ## This Person's Living Sky
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
