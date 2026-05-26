@@ -53,6 +53,11 @@ function buildDiscussContext(
   const personalDay = payload?.personalDay ?? 0
   ctx += `Natal: ${natalSun}, ${natalMoon}, ${natalAsc} | Moon: ${lunarPhase} | Personal Day: ${personalDay}\n`
 
+  // Natal dominant element (available via astroConnection)
+  if (interpretation.astroConnection.natalDominantElement) {
+    ctx += `Dominant Element: ${interpretation.astroConnection.natalDominantElement}\n`
+  }
+
   // Advance category when present
   if (payload?.advanceCategory) ctx += `Advance category: ${payload.advanceCategory}\n`
 
