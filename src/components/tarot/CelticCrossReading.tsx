@@ -11,6 +11,8 @@ import type {
   CelticSynthesisPayload,
   CelticCrossPrecomputedSignals,
 } from './types'
+import { computeInstantInterpretation as engineComputeInstantInterpretation } from '../../engine/tarot'
+import type { TarotAstroContext as EngineCtx } from '../../engine/tarot'
 import { CELTIC_CROSS_POSITIONS } from '../../data/tarot/spreadPositions'
 import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInterpretation'
 import CelticCrossCard from './CelticCrossCard'
@@ -23,6 +25,7 @@ import TarotDeckSelection from './TarotDeckSelection'
 interface CelticCrossReadingProps {
   userIntention: string | null
   tarotAstroContext: TarotAstroContext
+  engineAstroContext: EngineCtx
   onSave: (reading: SavedReading) => void
   onDiscard: () => void
 }
@@ -73,20 +76,49 @@ function toDrawnCard(card: DataTarotCard, reversed: boolean): DrawnCard {
   }
 }
 
-// ─── Stub: instant interpretation ────────────────────────────────────────────
-// Engine (task-0006) will provide a proper computeInstantInterpretation.
-function computeInstantInterpretation(card: DrawnCard, position: typeof CELTIC_CROSS_POSITIONS[number]): InstantInterpretation {
-  const reversalNote = card.reversed
-    ? `In reversal, ${card.coreMeaning.toLowerCase()} turns inward — its energy blocked, inverted, or awaiting release.`
+// ─── Engine-backed instant interpretation ─────────────────────────────────────
+// Calls the real computeInstantInterpretation from src/engine/tarot.ts.
+// Adapts CelticCrossPosition → SpreadPosition and EngineInterp → local InstantInterpretation.
+function computeInstantInterpretationForCeltic(
+  sourceCard: DataTarotCard,
+  reversed: boolean,
+  position: typeof CELTIC_CROSS_POSITIONS[number],
+  engineCtx: EngineCtx,
+): InstantInterpretation {
+  // Convert CelticCrossPosition to the SpreadPosition shape the engine expects
+  const enginePosition = {
+    id: position.id,
+    label: position.name,
+    meaning: position.description,
+    spreadType: 'celtic-cross' as const,
+    positionIndex: position.number - 1,
+  }
+
+  const engineInterp = engineComputeInstantInterpretation(sourceCard, reversed, enginePosition, engineCtx)
+
+  // Build a human-readable astroConnection string from the engine's structured AstroConnection
+  const parts: string[] = []
+  if (engineInterp.astroConnection.astroHeadline) parts.push(engineInterp.astroConnection.astroHeadline)
+  if (engineInterp.astroConnection.transitInfluence) parts.push(engineInterp.astroConnection.transitInfluence)
+  if (engineInterp.astroConnection.elementResonanceNote) parts.push(engineInterp.astroConnection.elementResonanceNote)
+  if (engineInterp.astroConnection.lunarPhaseNote) parts.push(engineInterp.astroConnection.lunarPhaseNote)
+  const astroConnectionStr = parts.filter(Boolean).join(' ') ||
+    [sourceCard.rulingPlanet, sourceCard.rulingSign].filter(Boolean).join(' — ') ||
+    'Astrological resonance present in the symbolic field.'
+
+  const reversalNote = reversed
+    ? engineInterp.astroConnection.advanceCategoryNote ||
+      `In reversal, ${engineInterp.coreMeaning.toLowerCase().slice(0, 60)}… turns inward — its energy blocked, inverted, or awaiting release.`
     : null
+
   return {
-    cardId: card.cardId,
+    cardId: engineInterp.cardId,
     position: position.number,
     positionName: position.name,
     positionDescription: position.description,
-    coreMeaning: card.coreMeaning,
-    emotionalMeaning: card.emotionalMeaning,
-    astroConnection: card.astroConnection,
+    coreMeaning: engineInterp.coreMeaning,
+    emotionalMeaning: engineInterp.emotionalMeaning,
+    astroConnection: astroConnectionStr,
     reversalNote,
   }
 }
@@ -143,6 +175,7 @@ function buildCelticSynthesisPayload(
       arcana: card.arcana,
       suit: card.suit,
       element: card.element,
+      number: card.number,
       reversed: card.reversed,
       coreMeaning: interps[i]?.coreMeaning ?? card.coreMeaning,
       symbolicTheme: card.symbolicTheme,
@@ -376,6 +409,7 @@ const linkBtnStyle: React.CSSProperties = {
 export default function CelticCrossReading({
   userIntention,
   tarotAstroContext,
+  engineAstroContext,
   onSave,
   onDiscard,
 }: CelticCrossReadingProps) {
@@ -606,7 +640,7 @@ export default function CelticCrossReading({
 
     const reversed = computeCardReversal()
     const nextDrawn = toDrawnCard(sourceCard, reversed)
-    const nextInterpretation = computeInstantInterpretation(nextDrawn, CELTIC_CROSS_POSITIONS[selectionIndex])
+    const nextInterpretation = computeInstantInterpretationForCeltic(sourceCard, reversed, CELTIC_CROSS_POSITIONS[selectionIndex], engineAstroContext)
 
     setSelectedDeckIndices(prev => [...prev, deckIndex])
     setDrawnCards(prev => [...prev, nextDrawn])

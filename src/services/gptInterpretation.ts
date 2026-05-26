@@ -480,6 +480,8 @@ export interface TarotCelticSynthesisPayload {
   advanceReason: string | null
   moonPhaseName: string
   moonSign: string
+  dailyTransitSummary: string | null
+  weeklyTransitSummary: string | null
   localDate: string
 }
 
@@ -548,6 +550,11 @@ export async function getTarotCelticSynthesis(
 ): Promise<SynthesisChapter[]> {
   // Adapt client-shaped CelticSynthesisPayload to the server-shaped
   // TarotCelticSynthesisPayload that handleTarotCelticSynthesis expects.
+  // buildCelticAstroCtx places formatTransitSummary output in significantTransits[0] (daily)
+  // and significantTransits[1] (weekly) — extract them here for the server payload.
+  const dailyTransitSummary = payload.astroContext.significantTransits[0] ?? null
+  const weeklyTransitSummary = payload.astroContext.significantTransits[1] ?? null
+
   const localDate = new Date().toISOString().slice(0, 10)
   const serverPayload: TarotCelticSynthesisPayload = {
     cards: payload.cards.map(c => ({
@@ -555,7 +562,7 @@ export async function getTarotCelticSynthesis(
       name: c.cardName,
       arcana: c.arcana,
       suit: c.suit,
-      number: 0,
+      number: c.number ?? 0,
       element: c.element,
       reversed: c.reversed,
       coreMeaning: c.coreMeaning,
@@ -585,6 +592,8 @@ export async function getTarotCelticSynthesis(
     advanceReason: null,
     moonPhaseName: payload.astroContext.currentMoonPhase,
     moonSign: payload.astroContext.moonSign,
+    dailyTransitSummary,
+    weeklyTransitSummary,
     localDate,
   }
 
