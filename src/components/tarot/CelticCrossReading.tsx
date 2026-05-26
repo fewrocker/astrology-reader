@@ -1,6 +1,5 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotCard as DataTarotCard } from '../../data/tarot/types'
 import type {
   SynthesisChapter,
@@ -16,6 +15,7 @@ import CelticCrossCard from './CelticCrossCard'
 import TarotSynthesisPanel from './TarotSynthesisPanel'
 import TarotDiscussPanel from './TarotDiscussPanel'
 import TarotDeckSelection from './TarotDeckSelection'
+import { shuffleTarotDeck, computeCardReversal } from './tarotUtils'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -45,19 +45,6 @@ type Phase =
 
 type SynthesisStatus = 'idle' | 'loading' | 'ready' | 'error'
 type SynthesisErrorKind = 'unavailable' | 'rate-limited' | 'timeout' | 'session-expired'
-
-function shuffleTarotDeck(): DataTarotCard[] {
-  const deck = [...ALL_TAROT_CARDS]
-  for (let index = deck.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1))
-    ;[deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]]
-  }
-  return deck
-}
-
-function computeCardReversal(): boolean {
-  return Math.random() < 0.3
-}
 
 // ─── Structural signals ───────────────────────────────────────────────────────
 function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSignals {

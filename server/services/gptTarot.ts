@@ -377,6 +377,12 @@ export function computeCelticStructuralSignals(cards: TarotCardPayload[]): Celti
   }
 }
 
+/**
+ * Server-side mirror of the canonical formatTransitSummary defined in
+ * src/components/tarot/tarotUtils.ts. Kept here because the server and client
+ * live in separate TypeScript compilation contexts and cannot share a module.
+ * Any behaviour change must be applied to both copies in lockstep.
+ */
 function formatTransitSummary(
   transitData: ReturnType<typeof calculateTransits>,
   periodLabel: 'Daily' | 'Weekly',

@@ -3,8 +3,7 @@ import type { ChartData } from '../../engine/types'
 import type { RateLimitInfo, TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import { TarotProvider, useTarot } from '../../context/TarotContext'
 import { useApp } from '../../context/AppContext'
-import { calculateTransits } from '../../engine/transits'
-import { computeInstantInterpretation, buildTarotAstroContext } from '../../engine/tarot'
+import { computeInstantInterpretation } from '../../engine/tarot'
 import type {
   TarotCard,
   TarotAstroContext,
@@ -12,7 +11,6 @@ import type {
   InstantInterpretation,
 } from '../../engine/tarot'
 import type { SpreadMode } from '../../types/tarot'
-import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
 import TarotHomeView from './TarotHomeView'
 import SingleCardReading from './SingleCardReading'
 import ThreeCardReading from './ThreeCardReading'
@@ -21,107 +19,14 @@ import SavedReadingsPage from './SavedReadingsPage'
 import DeckShuffleAnimation from './DeckShuffleAnimation'
 import type { FocusArea } from './TarotIntentionScreen'
 import type { ReadingMode as ShuffleReadingMode } from './TarotModeSelector'
-
-function shuffleTarotDeck(): TarotCard[] {
-  const deck = [...ALL_TAROT_CARDS] as TarotCard[]
-
-  for (let index = deck.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1))
-    ;[deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]]
-  }
-
-  return deck
-}
-
-function computeCardReversal(): boolean {
-  return Math.random() < 0.3
-}
-
-// ─── Numerology helpers ───────────────────────────────────────────────────────
-
-function computePersonalDay(birthDate: string): number {
-  const today = new Date()
-  const [, bMonth, bDay] = birthDate.split('-').map(Number)
-  const sum =
-    today.getDate() +
-    (today.getMonth() + 1) +
-    bMonth +
-    bDay +
-    Math.floor(today.getFullYear() / 1000) +
-    Math.floor((today.getFullYear() % 1000) / 100) +
-    Math.floor((today.getFullYear() % 100) / 10) +
-    (today.getFullYear() % 10)
-  let n = sum
-  while (n > 9 && n !== 11 && n !== 22) {
-    n = String(n).split('').reduce((a, d) => a + Number(d), 0)
-  }
-  return n
-}
-
-function computePersonalYear(birthDate: string): number {
-  const today = new Date()
-  const [, bMonth, bDay] = birthDate.split('-').map(Number)
-  const sum =
-    bMonth +
-    bDay +
-    Math.floor(today.getFullYear() / 1000) +
-    Math.floor((today.getFullYear() % 1000) / 100) +
-    Math.floor((today.getFullYear() % 100) / 10) +
-    (today.getFullYear() % 10)
-  let n = sum
-  while (n > 9 && n !== 11 && n !== 22) {
-    n = String(n).split('').reduce((a, d) => a + Number(d), 0)
-  }
-  return n
-}
-
-function formatTransitSummary(
-  transitData: ReturnType<typeof calculateTransits>,
-  periodLabel: 'Daily' | 'Weekly',
-): string {
-  const moon = transitData.currentPlanets.find(planet => planet.name === 'Moon')
-  const topAspects = transitData.transitAspects.slice(0, periodLabel === 'Daily' ? 5 : 7)
-  const ingresses = transitData.ingresses.slice(0, periodLabel === 'Daily' ? 2 : 4)
-  const retrogrades = transitData.retrogrades.filter(item => item.isRetro || item.status.includes('Stationing')).slice(0, 5)
-
-  const lines: string[] = []
-  lines.push(`${periodLabel} window: ${transitData.dateRange.start} to ${transitData.dateRange.end}`)
-  if (moon) {
-    lines.push(`Current Moon: ${moon.degree}°${moon.minute}' ${moon.sign}${moon.retrograde ? ' [Rx]' : ''}`)
-  }
-  if (topAspects.length > 0) {
-    lines.push(`${periodLabel} transit aspects:`)
-    for (const aspect of topAspects) {
-      const houseText = aspect.natalHouse ? `, natal house ${aspect.natalHouse}` : ''
-      lines.push(`- ${aspect.transitPlanet} ${aspect.symbol} natal ${aspect.natalPlanet} (${aspect.type}, orb ${aspect.orb}°, ${aspect.applying ? 'applying' : 'separating'}, ${aspect.nature}${houseText})`)
-    }
-  }
-  if (ingresses.length > 0) {
-    lines.push(`${periodLabel} sign changes:`)
-    for (const ingress of ingresses) {
-      lines.push(`- ${ingress.planet} moves from ${ingress.fromSign} to ${ingress.toSign} around ${ingress.approximateDate}`)
-    }
-  }
-  if (retrogrades.length > 0) {
-    lines.push(`${periodLabel} retrograde activity:`)
-    for (const retrograde of retrogrades) {
-      lines.push(`- ${retrograde.planet}: ${retrograde.status}`)
-    }
-  }
-
-  return lines.join('\n')
-}
-
-// ─── Engine context builder ───────────────────────────────────────────────────
-
-function buildEngineCtx(chartData: ChartData, birthDate: string): TarotAstroContext {
-  return buildTarotAstroContext(
-    chartData,
-    null,
-    computePersonalDay(birthDate),
-    null,
-  )
-}
+import {
+  shuffleTarotDeck,
+  computeCardReversal,
+  computePersonalDay,
+  computePersonalYear,
+  buildEngineCtx,
+  useTransitData,
+} from './tarotUtils'
 
 // ─── Reading flow containers ──────────────────────────────────────────────────
 
@@ -139,8 +44,7 @@ function SingleReadingFlow({
   onBack: () => void
 }) {
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
-  const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
-  const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+  const { currentMoonSign, dailyTransitSummary, weeklyTransitSummary } = useTransitData(chartData)
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
   const [drawn, setDrawn] = useState<{ card: TarotCard; reversed: boolean; interp: InstantInterpretation } | null>(null)
@@ -195,9 +99,9 @@ function SingleReadingFlow({
         advanceCategory: engineCtx.advanceCategory,
         advanceReason: engineCtx.advanceReason,
         moonPhaseName: engineCtx.lunarPhaseName ?? '',
-        moonSign: dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? '',
-        dailyTransitSummary: formatTransitSummary(dailyTransitData, 'Daily'),
-        weeklyTransitSummary: formatTransitSummary(weeklyTransitData, 'Weekly'),
+        moonSign: currentMoonSign,
+        dailyTransitSummary,
+        weeklyTransitSummary,
         spreadMode: null,
         localDate: new Date().toLocaleDateString('en-CA'),
       }
@@ -237,8 +141,7 @@ function ThreeReadingFlow({
   onBack: () => void
 }) {
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
-  const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
-  const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+  const { currentMoonSign: transitMoonSign, dailyTransitSummary, weeklyTransitSummary } = useTransitData(chartData)
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
   const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([])
@@ -264,10 +167,6 @@ function ThreeReadingFlow({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const transitMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? ''
-  const dailyTransitSummary = useMemo(() => formatTransitSummary(dailyTransitData, 'Daily'), [dailyTransitData])
-  const weeklyTransitSummary = useMemo(() => formatTransitSummary(weeklyTransitData, 'Weekly'), [weeklyTransitData])
 
   return (
     <ThreeCardReading
@@ -301,23 +200,7 @@ function CelticReadingFlow({
   onBack: () => void
 }) {
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
-  const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
-  const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
-
-  const currentMoonSign = useMemo(
-    () => dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? '',
-    [dailyTransitData],
-  )
-
-  const dailyTransitSummary = useMemo(
-    () => formatTransitSummary(dailyTransitData, 'Daily'),
-    [dailyTransitData],
-  )
-
-  const weeklyTransitSummary = useMemo(
-    () => formatTransitSummary(weeklyTransitData, 'Weekly'),
-    [weeklyTransitData],
-  )
+  const { currentMoonSign, dailyTransitSummary, weeklyTransitSummary } = useTransitData(chartData)
 
   return (
     <CelticCrossReading
@@ -492,7 +375,7 @@ export default function TarotPage({ chartData, birthDate, onOpenUpgrade }: Tarot
   // Build a TarotAstroContext for the provider (used by home view and nav)
   const astroContext = useMemo((): TarotAstroContext | null => {
     if (!chartData) return null
-    return buildTarotAstroContext(chartData, null, computePersonalDay(birthDate), null)
+    return buildEngineCtx(chartData, birthDate)
   }, [chartData, birthDate])
 
   if (!chartData) {
