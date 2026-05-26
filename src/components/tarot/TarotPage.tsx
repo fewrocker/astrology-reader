@@ -4,6 +4,7 @@ import type { RateLimitInfo, TarotSingleSynthesisPayload } from '../../services/
 import { TarotProvider, useTarot } from '../../context/TarotContext'
 import { useApp } from '../../context/AppContext'
 import { calculateTransits } from '../../engine/transits'
+import type { TransitData } from '../../engine/transits'
 import { computeInstantInterpretation, buildTarotAstroContext } from '../../engine/tarot'
 import type {
   TarotCard,
@@ -114,10 +115,10 @@ function formatTransitSummary(
 
 // ─── Engine context builder ───────────────────────────────────────────────────
 
-function buildEngineCtx(chartData: ChartData, birthDate: string): TarotAstroContext {
+function buildEngineCtx(chartData: ChartData, birthDate: string, transitData: TransitData | null): TarotAstroContext {
   return buildTarotAstroContext(
     chartData,
-    null,
+    transitData,
     computePersonalDay(birthDate),
     null,
   )
@@ -138,9 +139,9 @@ function SingleReadingFlow({
   ritualCardIndices: number[]
   onBack: () => void
 }) {
-  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate, dailyTransitData), [chartData, birthDate, dailyTransitData])
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
   const [drawn, setDrawn] = useState<{ card: TarotCard; reversed: boolean; interp: InstantInterpretation } | null>(null)
@@ -236,9 +237,9 @@ function ThreeReadingFlow({
   ritualCardIndices: number[]
   onBack: () => void
 }) {
-  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate, dailyTransitData), [chartData, birthDate, dailyTransitData])
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
   const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([])
@@ -300,9 +301,9 @@ function CelticReadingFlow({
   userIntention: string | null
   onBack: () => void
 }) {
-  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
   const dailyTransitData = useMemo(() => calculateTransits(chartData, 'daily'), [chartData])
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
+  const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate, dailyTransitData), [chartData, birthDate, dailyTransitData])
 
   const currentMoonSign = useMemo(
     () => dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? '',
