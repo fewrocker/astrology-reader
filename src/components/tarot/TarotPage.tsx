@@ -2,28 +2,16 @@ import { useMemo, useState } from 'react'
 import type { ChartData } from '../../engine/types'
 import type { RateLimitInfo, TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import { TarotProvider, useTarot } from '../../context/TarotContext'
-import type { TarotAstroContext } from '../../context/TarotContext'
 import { useApp } from '../../context/AppContext'
-import { SIGN_ELEMENTS, SIGN_MODALITIES } from '../../engine/types'
-import type { Element, ZodiacSign } from '../../engine/types'
 import { calculateTransits } from '../../engine/transits'
-import { computeInstantInterpretation } from '../../engine/tarot'
+import { computeInstantInterpretation, buildTarotAstroContext } from '../../engine/tarot'
 import type {
   TarotCard,
-  TarotAstroContext as EngineCtx,
-  InstantInterpretation as EngineInterp,
+  TarotAstroContext,
+  DrawnCard,
 } from '../../engine/tarot'
-import type {
-  DrawnCard as TypesDrawnCard,
-  InstantInterpretation as TypesInterp,
-  TarotAstroContext as TypesAstroCtx,
-  TarotSuit as TypesSuit,
-  TarotElement as TypesElement,
-  SpreadMode,
-} from '../../types/tarot'
+import type { SpreadMode } from '../../types/tarot'
 import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
-import type { TarotAstroContext as CelticCtx } from './types'
-import type { TarotCard as PanelCard, InstantInterpretation as PanelInterp } from './TarotInterpretationPanel'
 import TarotHomeView from './TarotHomeView'
 import SingleCardReading from './SingleCardReading'
 import ThreeCardReading from './ThreeCardReading'
@@ -83,95 +71,6 @@ function computePersonalYear(birthDate: string): number {
   return n
 }
 
-function computeDominantElement(chartData: ChartData): Element | null {
-  const counts: Record<Element, number> = { Fire: 0, Earth: 0, Air: 0, Water: 0 }
-  for (const planet of chartData.planets) {
-    const el = SIGN_ELEMENTS[planet.sign as ZodiacSign]
-    if (el) counts[el]++
-  }
-  const max = Math.max(...Object.values(counts))
-  if (max === 0) return null
-  return (Object.entries(counts).find(([, v]) => v === max)?.[0] as Element) ?? null
-}
-
-function computeDominantModality(chartData: ChartData): 'Cardinal' | 'Fixed' | 'Mutable' | null {
-  const counts = { Cardinal: 0, Fixed: 0, Mutable: 0 }
-  for (const planet of chartData.planets) {
-    const mod = SIGN_MODALITIES[planet.sign as ZodiacSign]
-    if (mod) counts[mod]++
-  }
-  const max = Math.max(...Object.values(counts))
-  if (max === 0) return null
-  return (Object.entries(counts).find(([, v]) => v === max)?.[0] as 'Cardinal' | 'Fixed' | 'Mutable') ?? null
-}
-
-// ─── Context builders ─────────────────────────────────────────────────────────
-
-function buildEngineCtx(chartData: ChartData, birthDate: string): EngineCtx {
-  return {
-    natalSunSign: (chartData.planets.find(p => p.name === 'Sun')?.sign ?? null) as ZodiacSign | null,
-    natalMoonSign: (chartData.planets.find(p => p.name === 'Moon')?.sign ?? null) as ZodiacSign | null,
-    natalAscendantSign: (chartData.angles?.ascendant?.sign ?? null) as ZodiacSign | null,
-    natalDominantElement: computeDominantElement(chartData),
-    natalDominantModality: computeDominantModality(chartData),
-    currentTransits: [],
-    retrogradeplanets: [],
-    dominantTransitPlanet: null,
-    lunarPhaseName: null,
-    lunarPhaseSymbol: null,
-    personalDay: computePersonalDay(birthDate),
-    advanceCategory: null,
-    advanceReason: null,
-  }
-}
-
-function buildThreeAstroCtx(
-  chartData: ChartData,
-  birthDate: string,
-  dailyTransitSummary: string,
-  weeklyTransitSummary: string,
-  currentMoonSign: string,
-): TypesAstroCtx {
-  const sunSign = chartData.planets.find(p => p.name === 'Sun')?.sign ?? ''
-  const moonSign = chartData.planets.find(p => p.name === 'Moon')?.sign ?? ''
-  return {
-    moonPhase: '',
-    moonSign: currentMoonSign,
-    personalDay: computePersonalDay(birthDate),
-    personalYear: computePersonalYear(birthDate),
-    sunSign,
-    moonSignNatal: moonSign,
-    ascendant: chartData.angles?.ascendant?.sign ?? '',
-    dominantElement: computeDominantElement(chartData) ?? '',
-    dominantModality: computeDominantModality(chartData) ?? '',
-    topTransits: [],
-    advanceCategory: null,
-    advanceReason: null,
-    dailyTransitSummary,
-    weeklyTransitSummary,
-  }
-}
-
-function buildCelticAstroCtx(
-  chartData: ChartData,
-  birthDate: string,
-  dailyTransitSummary: string,
-  weeklyTransitSummary: string,
-  currentMoonSign: string,
-): CelticCtx {
-  return {
-    sunSign: chartData.planets.find(p => p.name === 'Sun')?.sign ?? '',
-    moonSign: chartData.planets.find(p => p.name === 'Moon')?.sign ?? '',
-    ascendant: chartData.angles?.ascendant?.sign ?? '',
-    dominantElement: computeDominantElement(chartData) ?? '',
-    currentMoonPhase: currentMoonSign,
-    significantTransits: [dailyTransitSummary, weeklyTransitSummary].filter(Boolean),
-    personalDay: computePersonalDay(birthDate),
-    advanceCategory: null,
-    numerologyYear: computePersonalYear(birthDate),
-  }
-}
-
 function formatTransitSummary(
   transitData: ReturnType<typeof calculateTransits>,
   periodLabel: 'Daily' | 'Weekly',
@@ -209,68 +108,15 @@ function formatTransitSummary(
   return lines.join('\n')
 }
 
-// ─── Type adapters ────────────────────────────────────────────────────────────
+// ─── Engine context builder ───────────────────────────────────────────────────
 
-function adaptSingleCard(card: TarotCard): PanelCard {
-  return {
-    id: card.id,
-    name: card.name,
-    number: card.number,
-    arcana: card.arcana,
-    suit: card.suit,
-    uprightMeaning: card.uprightMeaning,
-    reversedMeaning: card.reversedMeaning,
-    keywords: card.keywords,
-    element: card.element ?? undefined,
-    reflectionQuestion: card.reflectionQuestion,
-  }
-}
-
-function adaptSingleInterp(eng: EngineInterp): PanelInterp {
-  return {
-    coreMeaning: eng.coreMeaning,
-    symbolicTheme: eng.symbolicTheme,
-    emotionalMeaning: eng.emotionalMeaning,
-    practicalGuidance: eng.practicalGuidance,
-    reflectionQuestion: eng.reflectionQuestion,
-    numerologyNote: eng.numerologyNote,
-    astroConnection: {
-      headline: eng.astroConnection.astroHeadline,
-      transitInfluence: eng.astroConnection.transitInfluence || null,
-      resonanceNote: eng.astroConnection.elementResonanceNote,
-      lunarNote: eng.astroConnection.lunarPhaseNote || undefined,
-    },
-  }
-}
-
-function adaptThreeDrawnCard(card: TarotCard, reversed: boolean): TypesDrawnCard {
-  return {
-    id: card.id,
-    name: card.name,
-    arcana: card.arcana,
-    number: card.number,
-    suit: (card.suit as TypesSuit) ?? null,
-    element: (card.element as TypesElement) ?? null,
-    reversed,
-  }
-}
-
-function adaptThreeInterp(eng: EngineInterp, card: TarotCard): TypesInterp {
-  return {
-    coreMeaning: eng.coreMeaning,
-    symbolicTheme: eng.symbolicTheme,
-    emotionalMeaning: eng.emotionalMeaning,
-    practicalGuidance: eng.practicalGuidance,
-    reflectionQuestion: eng.reflectionQuestion,
-    numerologyNote: eng.numerologyNote,
-    cardNumber: card.number,
-    astroConnection: {
-      headline: eng.astroConnection.astroHeadline,
-      transitInfluence: eng.astroConnection.transitInfluence,
-      lunarPhaseNote: eng.astroConnection.lunarPhaseNote || null,
-      advanceCategoryNote: eng.astroConnection.advanceCategoryNote || null,
-    },
-  }
+function buildEngineCtx(chartData: ChartData, birthDate: string): TarotAstroContext {
+  return buildTarotAstroContext(
+    chartData,
+    null,
+    computePersonalDay(birthDate),
+    null,
+  )
 }
 
 // ─── Reading flow containers ──────────────────────────────────────────────────
@@ -291,7 +137,7 @@ function SingleReadingFlow({
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
-  const [drawn, setDrawn] = useState<{ card: TarotCard; reversed: boolean; interp: EngineInterp } | null>(null)
+  const [drawn, setDrawn] = useState<{ card: TarotCard; reversed: boolean; interp: InstantInterpretation } | null>(null)
 
   const handlePickCard = (deckIndex: number) => {
     const card = deck[deckIndex]
@@ -344,9 +190,9 @@ function SingleReadingFlow({
     <SingleCardReading
       deckCardIds={deck.map(card => card.id)}
       selectedDeckIndices={selectedDeckIndices}
-      card={drawn ? adaptSingleCard(drawn.card) : null}
+      card={drawn?.card ?? null}
       reversed={drawn?.reversed ?? false}
-      interpretation={drawn ? adaptSingleInterp(drawn.interp) : null}
+      interpretation={drawn?.interp ?? null}
       synthesisPayload={synthesisPayload}
       personalDay={computePersonalDay(birthDate)}
       onBack={onBack}
@@ -375,10 +221,7 @@ function ThreeReadingFlow({
   const weeklyTransitData = useMemo(() => calculateTransits(chartData, 'weekly'), [chartData])
   const [deck] = useState(() => shuffleTarotDeck())
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
-  const [drawn, setDrawn] = useState<{ drawnCards: TypesDrawnCard[]; interpretations: TypesInterp[] }>({
-    drawnCards: [],
-    interpretations: [],
-  })
+  const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([])
 
   const handlePickCard = (deckIndex: number) => {
     if (selectedDeckIndices.includes(deckIndex)) return
@@ -386,33 +229,27 @@ function ThreeReadingFlow({
     if (!card) return
     const reversed = computeCardReversal()
     const interpretation = computeInstantInterpretation(card, reversed, null, engineCtx)
+    const drawnCard: DrawnCard = { card, reversed, interpretation }
 
     setSelectedDeckIndices(prev => [...prev, deckIndex])
-    setDrawn(prev => ({
-      drawnCards: [...prev.drawnCards, adaptThreeDrawnCard(card, reversed)],
-      interpretations: [...prev.interpretations, adaptThreeInterp(interpretation, card)],
-    }))
+    setDrawnCards(prev => [...prev, drawnCard])
   }
 
-  const astroContext = useMemo(
-    () => buildThreeAstroCtx(
-      chartData,
-      birthDate,
-      formatTransitSummary(dailyTransitData, 'Daily'),
-      formatTransitSummary(weeklyTransitData, 'Weekly'),
-      dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? '',
-    ),
-    [birthDate, chartData, dailyTransitData, weeklyTransitData],
-  )
+  const transitMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? ''
+  const dailyTransitSummary = useMemo(() => formatTransitSummary(dailyTransitData, 'Daily'), [dailyTransitData])
+  const weeklyTransitSummary = useMemo(() => formatTransitSummary(weeklyTransitData, 'Weekly'), [weeklyTransitData])
 
   return (
     <ThreeCardReading
       spreadMode={spreadMode}
       deckCardIds={deck.map(card => card.id)}
       selectedDeckIndices={selectedDeckIndices}
-      drawnCards={drawn.drawnCards}
-      instantInterpretations={drawn.interpretations}
-      astroContext={astroContext}
+      drawnCards={drawnCards}
+      astroContext={engineCtx}
+      dailyTransitSummary={dailyTransitSummary}
+      weeklyTransitSummary={weeklyTransitSummary}
+      transitMoonSign={transitMoonSign}
+      personalYear={computePersonalYear(birthDate)}
       userIntention={userIntention || null}
       onSave={() => {}}
       onDiscard={onBack}
@@ -442,22 +279,23 @@ function CelticReadingFlow({
     [dailyTransitData],
   )
 
-  const astroContext = useMemo(
-    () => buildCelticAstroCtx(
-      chartData,
-      birthDate,
-      formatTransitSummary(dailyTransitData, 'Daily'),
-      formatTransitSummary(weeklyTransitData, 'Weekly'),
-      currentMoonSign,
-    ),
-    [chartData, birthDate, dailyTransitData, weeklyTransitData, currentMoonSign],
+  const dailyTransitSummary = useMemo(
+    () => formatTransitSummary(dailyTransitData, 'Daily'),
+    [dailyTransitData],
+  )
+
+  const weeklyTransitSummary = useMemo(
+    () => formatTransitSummary(weeklyTransitData, 'Weekly'),
+    [weeklyTransitData],
   )
 
   return (
     <CelticCrossReading
       userIntention={userIntention || null}
-      tarotAstroContext={astroContext}
-      engineAstroContext={engineCtx}
+      tarotAstroContext={engineCtx}
+      dailyTransitSummary={dailyTransitSummary}
+      weeklyTransitSummary={weeklyTransitSummary}
+      moonSign={currentMoonSign}
       onSave={() => {}}
       onDiscard={onBack}
     />
@@ -548,16 +386,10 @@ function TarotPageInner({
 // ─── Exported page ────────────────────────────────────────────────────────────
 
 export default function TarotPage({ chartData, birthDate, onOpenUpgrade }: TarotPageProps) {
+  // Build a TarotAstroContext for the provider (used by home view and nav)
   const astroContext = useMemo((): TarotAstroContext | null => {
     if (!chartData) return null
-    return {
-      birthDate,
-      personalDay: computePersonalDay(birthDate),
-      moonPhase: null,
-      transitAspects: null,
-      advanceCategory: null,
-      dominantElement: computeDominantElement(chartData),
-    }
+    return buildTarotAstroContext(chartData, null, computePersonalDay(birthDate), null)
   }, [chartData, birthDate])
 
   if (!chartData) {

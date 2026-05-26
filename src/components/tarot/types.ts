@@ -1,46 +1,9 @@
-// Core tarot types — shared across single-card, three-card, and Celtic Cross components.
-// Will be aligned with data layer (task-0003) and engine (task-0006) when those land.
+// Core tarot types — component-specific structural types built on top of engine types.
+// Canonical types (TarotAstroContext, DrawnCard, InstantInterpretation) live in src/engine/tarot.ts.
 
-export type TarotArcana = 'major' | 'minor'
-export type TarotSuit = 'wands' | 'cups' | 'swords' | 'pentacles'
+export type { TarotArcana, TarotSuit } from '../../data/tarot/types'
+
 export type TarotZone = 'cross' | 'staff'
-
-export interface TarotAstroContext {
-  sunSign: string
-  moonSign: string
-  ascendant: string
-  dominantElement: string
-  currentMoonPhase: string
-  significantTransits: string[]
-  personalDay: number
-  advanceCategory: string | null
-  numerologyYear: number
-}
-
-export interface DrawnCard {
-  cardId: string
-  cardName: string
-  arcana: TarotArcana
-  suit?: TarotSuit
-  element: string | null
-  number?: number  // 0-21 for major, 1-14 for minor
-  reversed: boolean
-  coreMeaning: string
-  symbolicTheme: string
-  emotionalMeaning: string
-  astroConnection: string
-}
-
-export interface InstantInterpretation {
-  cardId: string
-  position: number
-  positionName: string
-  positionDescription: string
-  coreMeaning: string
-  emotionalMeaning: string
-  astroConnection: string
-  reversalNote: string | null
-}
 
 export interface SynthesisChapter {
   heading: string
@@ -58,39 +21,6 @@ export interface CelticCrossPrecomputedSignals {
   worldPosition: number | null
   repeatingNumerology: number[]
   suitDistribution: Record<string, number>
-}
-
-export interface CelticSynthesisPayload {
-  cards: Array<{
-    position: number
-    positionName: string
-    positionDescription: string
-    cardName: string
-    cardId: string
-    arcana: TarotArcana
-    suit?: string
-    element: string | null
-    number?: number
-    reversed: boolean
-    coreMeaning: string
-    symbolicTheme: string
-    emotionalMeaning: string
-    astroConnection: string
-  }>
-  precomputedSignals: CelticCrossPrecomputedSignals
-  astroContext: {
-    sunSign: string
-    moonSign: string
-    ascendant: string
-    dominantElement: string
-    currentMoonPhase: string
-    significantTransits: string[]
-    personalDay: number
-    advanceCategory: string | null
-    numerologyYear: number
-  }
-  userIntention: string | null
-  spreadType: 'celtic-cross'
 }
 
 export interface SavedCelticCrossReading {

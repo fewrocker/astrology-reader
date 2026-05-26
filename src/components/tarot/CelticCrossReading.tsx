@@ -3,18 +3,15 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotCard as DataTarotCard } from '../../data/tarot/types'
 import type {
-  TarotAstroContext,
-  DrawnCard,
-  InstantInterpretation,
   SynthesisChapter,
   SavedReading,
-  CelticSynthesisPayload,
   CelticCrossPrecomputedSignals,
 } from './types'
-import { computeInstantInterpretation as engineComputeInstantInterpretation } from '../../engine/tarot'
-import type { TarotAstroContext as EngineCtx } from '../../engine/tarot'
+import type { DrawnCard, InstantInterpretation, TarotAstroContext } from '../../engine/tarot'
+import { computeInstantInterpretation } from '../../engine/tarot'
 import { CELTIC_CROSS_POSITIONS } from '../../data/tarot/spreadPositions'
 import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInterpretation'
+import type { TarotCelticSynthesisPayload } from '../../services/gptInterpretation'
 import CelticCrossCard from './CelticCrossCard'
 import TarotSynthesisPanel from './TarotSynthesisPanel'
 import TarotDiscussPanel from './TarotDiscussPanel'
@@ -25,7 +22,9 @@ import TarotDeckSelection from './TarotDeckSelection'
 interface CelticCrossReadingProps {
   userIntention: string | null
   tarotAstroContext: TarotAstroContext
-  engineAstroContext: EngineCtx
+  dailyTransitSummary: string
+  weeklyTransitSummary: string
+  moonSign: string
   onSave: (reading: SavedReading) => void
   onDiscard: () => void
 }
@@ -60,69 +59,6 @@ function computeCardReversal(): boolean {
   return Math.random() < 0.3
 }
 
-function toDrawnCard(card: DataTarotCard, reversed: boolean): DrawnCard {
-  return {
-    cardId: card.id,
-    cardName: card.name,
-    arcana: card.arcana,
-    suit: card.suit,
-    element: card.element,
-    number: card.number,
-    reversed,
-    coreMeaning: reversed ? card.reversedMeaning : card.uprightMeaning,
-    symbolicTheme: card.symbolicTheme,
-    emotionalMeaning: card.emotionalMeaning,
-    astroConnection: [card.rulingPlanet, card.rulingSign].filter(Boolean).join(' — ') || 'Astrological resonance present in the symbolic field.',
-  }
-}
-
-// ─── Engine-backed instant interpretation ─────────────────────────────────────
-// Calls the real computeInstantInterpretation from src/engine/tarot.ts.
-// Adapts CelticCrossPosition → SpreadPosition and EngineInterp → local InstantInterpretation.
-function computeInstantInterpretationForCeltic(
-  sourceCard: DataTarotCard,
-  reversed: boolean,
-  position: typeof CELTIC_CROSS_POSITIONS[number],
-  engineCtx: EngineCtx,
-): InstantInterpretation {
-  // Convert CelticCrossPosition to the SpreadPosition shape the engine expects
-  const enginePosition = {
-    id: position.id,
-    label: position.name,
-    meaning: position.description,
-    spreadType: 'celtic-cross' as const,
-    positionIndex: position.number - 1,
-  }
-
-  const engineInterp = engineComputeInstantInterpretation(sourceCard, reversed, enginePosition, engineCtx)
-
-  // Build a human-readable astroConnection string from the engine's structured AstroConnection
-  const parts: string[] = []
-  if (engineInterp.astroConnection.astroHeadline) parts.push(engineInterp.astroConnection.astroHeadline)
-  if (engineInterp.astroConnection.transitInfluence) parts.push(engineInterp.astroConnection.transitInfluence)
-  if (engineInterp.astroConnection.elementResonanceNote) parts.push(engineInterp.astroConnection.elementResonanceNote)
-  if (engineInterp.astroConnection.lunarPhaseNote) parts.push(engineInterp.astroConnection.lunarPhaseNote)
-  const astroConnectionStr = parts.filter(Boolean).join(' ') ||
-    [sourceCard.rulingPlanet, sourceCard.rulingSign].filter(Boolean).join(' — ') ||
-    'Astrological resonance present in the symbolic field.'
-
-  const reversalNote = reversed
-    ? engineInterp.astroConnection.advanceCategoryNote ||
-      `In reversal, ${engineInterp.coreMeaning.toLowerCase().slice(0, 60)}… turns inward — its energy blocked, inverted, or awaiting release.`
-    : null
-
-  return {
-    cardId: engineInterp.cardId,
-    position: position.number,
-    positionName: position.name,
-    positionDescription: position.description,
-    coreMeaning: engineInterp.coreMeaning,
-    emotionalMeaning: engineInterp.emotionalMeaning,
-    astroConnection: astroConnectionStr,
-    reversalNote,
-  }
-}
-
 // ─── Structural signals ───────────────────────────────────────────────────────
 function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSignals {
   const elementDist: Record<string, number> = {}
@@ -131,14 +67,15 @@ function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSi
   let majorCount = 0, reversalCount = 0
   let foolPos: number | null = null, worldPos: number | null = null
 
-  cards.forEach((card, i) => {
-    if (card.arcana === 'major') majorCount++
-    if (card.reversed) reversalCount++
-    if (card.element) elementDist[card.element] = (elementDist[card.element] ?? 0) + 1
-    if (card.suit) suitDist[card.suit] = (suitDist[card.suit] ?? 0) + 1
-    if (card.number !== undefined) numerology[card.number] = (numerology[card.number] ?? 0) + 1
-    if (card.cardId === 'the-fool') foolPos = i + 1
-    if (card.cardId === 'the-world') worldPos = i + 1
+  cards.forEach((dc, i) => {
+    const c = dc.card
+    if (c.arcana === 'major') majorCount++
+    if (dc.reversed) reversalCount++
+    if (c.element) elementDist[c.element] = (elementDist[c.element] ?? 0) + 1
+    if (c.suit) suitDist[c.suit] = (suitDist[c.suit] ?? 0) + 1
+    numerology[c.number] = (numerology[c.number] ?? 0) + 1
+    if (c.id === 'the-fool') foolPos = i + 1
+    if (c.id === 'the-world') worldPos = i + 1
   })
 
   const dominantElement = Object.entries(elementDist).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
@@ -161,38 +98,58 @@ function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSi
 // ─── Build synthesis payload ──────────────────────────────────────────────────
 function buildCelticSynthesisPayload(
   cards: DrawnCard[],
-  interps: InstantInterpretation[],
   astroContext: TarotAstroContext,
   userIntention: string | null,
-): CelticSynthesisPayload {
+  dailyTransitSummary: string,
+  weeklyTransitSummary: string,
+  moonSign: string,
+): TarotCelticSynthesisPayload {
+  const localDate = new Date().toISOString().slice(0, 10)
   return {
-    cards: cards.map((card, i) => ({
-      position: i + 1,
-      positionName: CELTIC_CROSS_POSITIONS[i].name,
-      positionDescription: CELTIC_CROSS_POSITIONS[i].description,
-      cardName: card.cardName,
-      cardId: card.cardId,
-      arcana: card.arcana,
-      suit: card.suit,
-      element: card.element,
-      number: card.number,
-      reversed: card.reversed,
-      coreMeaning: interps[i]?.coreMeaning ?? card.coreMeaning,
-      symbolicTheme: card.symbolicTheme,
-      emotionalMeaning: interps[i]?.emotionalMeaning ?? card.emotionalMeaning,
-      astroConnection: interps[i]?.astroConnection ?? card.astroConnection,
+    cards: cards.map((dc, i) => ({
+      id: dc.card.id,
+      name: dc.card.name,
+      arcana: dc.card.arcana,
+      suit: dc.card.suit,
+      number: dc.card.number,
+      element: dc.card.element,
+      reversed: dc.reversed,
+      coreMeaning: dc.interpretation.coreMeaning,
+      symbolicTheme: dc.interpretation.symbolicTheme,
+      emotionalMeaning: dc.interpretation.emotionalMeaning,
+      practicalGuidance: dc.interpretation.practicalGuidance,
+      reflectionQuestion: dc.interpretation.reflectionQuestion,
+      numerologyResonance: dc.interpretation.numerologyNote,
+      astroHeadline: dc.interpretation.astroConnection.astroHeadline,
+      transitInfluence: dc.interpretation.astroConnection.transitInfluence,
+      lunarPhaseNote: dc.interpretation.astroConnection.lunarPhaseNote || null,
     })),
-    precomputedSignals: computeCelticCrossSignals(cards),
-    astroContext,
+    positions: CELTIC_CROSS_POSITIONS.map((pos, i) => ({
+      index: i,
+      label: pos.name,
+      meaning: pos.description,
+    })),
     userIntention,
-    spreadType: 'celtic-cross',
+    natalSunSign: astroContext.natalSunSign ?? '',
+    natalMoonSign: astroContext.natalMoonSign ?? '',
+    natalAscSign: astroContext.natalAscendantSign ?? '',
+    natalMoonPhase: astroContext.lunarPhaseName,
+    personalDay: astroContext.personalDay,
+    personalYear: 0,
+    lifePathNumber: 0,
+    advanceCategory: astroContext.advanceCategory,
+    advanceReason: astroContext.advanceReason,
+    moonPhaseName: astroContext.lunarPhaseName ?? '',
+    moonSign,
+    dailyTransitSummary,
+    weeklyTransitSummary,
+    localDate,
   }
 }
 
 // ─── Build discuss context string ─────────────────────────────────────────────
 function buildDiscussContext(
   cards: DrawnCard[],
-  interps: InstantInterpretation[],
   astroContext: TarotAstroContext,
   userIntention: string | null,
   synthesisChapters: SynthesisChapter[],
@@ -200,13 +157,12 @@ function buildDiscussContext(
   const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   let ctx = `User intention: ${userIntention ?? 'Not stated'}\n\n`
   ctx += `CELTIC CROSS READING — ${date}\n`
-  ctx += `Natal: ${astroContext.sunSign}, ${astroContext.moonSign}, ${astroContext.ascendant} | Moon: ${astroContext.currentMoonPhase} | Personal Day: ${astroContext.personalDay}\n`
-  ctx += `Significant transits: ${astroContext.significantTransits.join(', ') || 'None noted'}\n`
+  ctx += `Natal: ${astroContext.natalSunSign ?? ''}, ${astroContext.natalMoonSign ?? ''}, ${astroContext.natalAscendantSign ?? ''} | Moon: ${astroContext.lunarPhaseName ?? ''} | Personal Day: ${astroContext.personalDay}\n`
   ctx += astroContext.advanceCategory ? `Advance category: ${astroContext.advanceCategory}\n` : ''
   ctx += '\nPOSITIONS AND CARDS:\n'
-  cards.forEach((card, i) => {
-    ctx += `${i + 1}. ${CELTIC_CROSS_POSITIONS[i].name} — ${card.cardName} (${card.reversed ? 'Reversed' : 'Upright'})\n`
-    ctx += `   ${interps[i]?.coreMeaning ?? card.coreMeaning} | ${interps[i]?.astroConnection ?? card.astroConnection}\n`
+  cards.forEach((dc, i) => {
+    ctx += `${i + 1}. ${CELTIC_CROSS_POSITIONS[i].name} — ${dc.card.name} (${dc.reversed ? 'Reversed' : 'Upright'})\n`
+    ctx += `   ${dc.interpretation.coreMeaning} | ${dc.interpretation.astroConnection.astroHeadline}\n`
   })
   const signals = computeCelticCrossSignals(cards)
   ctx += `\nPRE-SYNTHESIS SIGNALS:\n`
@@ -219,10 +175,10 @@ function buildDiscussContext(
 }
 
 // ─── AI-free reading fallback ──────────────────────────────────────────────────
-function AiFreeReadingSummary({ cards, interps }: { cards: DrawnCard[]; interps: InstantInterpretation[] }) {
+function AiFreeReadingSummary({ cards }: { cards: DrawnCard[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      {cards.map((card, i) => (
+      {cards.map((dc, i) => (
         <div key={i} style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(201,168,76,0.12)' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'baseline', marginBottom: '0.4rem' }}>
             <span className="font-heading" style={{ color: '#c9a84c', fontSize: '0.875rem' }}>
@@ -230,14 +186,11 @@ function AiFreeReadingSummary({ cards, interps }: { cards: DrawnCard[]; interps:
             </span>
             <span style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.8rem' }}>—</span>
             <span style={{ color: 'rgba(232,230,227,0.8)', fontSize: '0.875rem' }}>
-              {card.cardName} {card.reversed ? '(Reversed)' : '(Upright)'}
+              {dc.card.name} {dc.reversed ? '(Reversed)' : '(Upright)'}
             </span>
           </div>
-          <p style={{ color: 'rgba(232,230,227,0.7)', fontSize: '0.85rem', lineHeight: 1.65, margin: 0 }}>{interps[i]?.coreMeaning}</p>
-          <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.8rem', marginTop: '0.35rem', fontStyle: 'italic' }}>{interps[i]?.emotionalMeaning}</p>
-          {interps[i]?.reversalNote && (
-            <p style={{ color: 'rgba(200,150,100,0.65)', fontSize: '0.8rem', marginTop: '0.35rem' }}>{interps[i].reversalNote}</p>
-          )}
+          <p style={{ color: 'rgba(232,230,227,0.7)', fontSize: '0.85rem', lineHeight: 1.65, margin: 0 }}>{dc.interpretation.coreMeaning}</p>
+          <p style={{ color: 'rgba(201,168,76,0.55)', fontSize: '0.8rem', marginTop: '0.35rem', fontStyle: 'italic' }}>{dc.interpretation.emotionalMeaning}</p>
         </div>
       ))}
     </div>
@@ -322,11 +275,10 @@ function ConstellationOverlay({ visible }: { visible: boolean }) {
 interface ErrorPanelProps {
   kind: SynthesisErrorKind
   cards: DrawnCard[]
-  interps: InstantInterpretation[]
   onRetry: () => void
   onShowIndividual: () => void
 }
-function ErrorPanel({ kind, cards, interps, onRetry, onShowIndividual }: ErrorPanelProps) {
+function ErrorPanel({ kind, cards, onRetry, onShowIndividual }: ErrorPanelProps) {
   if (kind === 'rate-limited') {
     return (
       <div style={{ textAlign: 'center', padding: '2rem 1.5rem' }}>
@@ -369,7 +321,7 @@ function ErrorPanel({ kind, cards, interps, onRetry, onShowIndividual }: ErrorPa
         <button type="button" onClick={onRetry} style={primaryBtnStyle}>Retry</button>
         <button type="button" onClick={onShowIndividual} style={outlineBtnStyle}>Read cards individually</button>
       </div>
-      <AiFreeReadingSummary cards={cards} interps={interps} />
+      <AiFreeReadingSummary cards={cards} />
     </div>
   )
 }
@@ -409,7 +361,9 @@ const linkBtnStyle: React.CSSProperties = {
 export default function CelticCrossReading({
   userIntention,
   tarotAstroContext,
-  engineAstroContext,
+  dailyTransitSummary,
+  weeklyTransitSummary,
+  moonSign,
   onSave,
   onDiscard,
 }: CelticCrossReadingProps) {
@@ -417,8 +371,8 @@ export default function CelticCrossReading({
 
   // ── Card data (determined at mount, revealed progressively) ───────────────
   const [selectedDeckIndices, setSelectedDeckIndices] = useState<number[]>([])
+  // Single source of truth: engine DrawnCard (card + reversed + interpretation)
   const [drawnCards, setDrawnCards] = useState<DrawnCard[]>([])
-  const [interpretations, setInterpretations] = useState<InstantInterpretation[]>([])
 
   // ── State machine ─────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>('dealing')
@@ -553,7 +507,7 @@ export default function CelticCrossReading({
     setSynthesisStatus('loading')
 
     try {
-      const payload = buildCelticSynthesisPayload(drawnCards, interpretations, tarotAstroContext, userIntention)
+      const payload = buildCelticSynthesisPayload(drawnCards, tarotAstroContext, userIntention, dailyTransitSummary, weeklyTransitSummary, moonSign)
       const chapters = await getTarotCelticSynthesis(payload)
       setSynthesisChapters(chapters)
       setSynthesisStatus('ready')
@@ -574,7 +528,7 @@ export default function CelticCrossReading({
       }
       setSynthesisStatus('error')
     }
-  }, [drawnCards, interpretations, tarotAstroContext, userIntention])
+  }, [drawnCards, tarotAstroContext, userIntention, dailyTransitSummary, weeklyTransitSummary, moonSign])
 
   const retrySynthesis = useCallback(() => {
     synthesisFireRef.current = false
@@ -587,10 +541,10 @@ export default function CelticCrossReading({
   // ─── Card reveal helpers ──────────────────────────────────────────────────
   const reveal = (position: number) => {
     setRevealedPositions(prev => new Set(prev).add(position))
-    const card = drawnCards[position - 1]
-    if (card) {
-      setBgTemp(card.arcana === 'major' ? 'warm' : 'cool')
-      setLiveMessage(`${card.cardName}, ${card.reversed ? 'reversed' : 'upright'}, in the position of ${CELTIC_CROSS_POSITIONS[position - 1].name}`)
+    const dc = drawnCards[position - 1]
+    if (dc) {
+      setBgTemp(dc.card.arcana === 'major' ? 'warm' : 'cool')
+      setLiveMessage(`${dc.card.name}, ${dc.reversed ? 'reversed' : 'upright'}, in the position of ${CELTIC_CROSS_POSITIONS[position - 1].name}`)
     }
   }
 
@@ -621,9 +575,6 @@ export default function CelticCrossReading({
       setPhase('final-pause')
     } else {
       // Reveal next card and enter hold.
-      // IMPORTANT: switch to 'holding' synchronously so the next slot does not
-      // briefly satisfy `isContinuingTarget` (which would cause a quick glow
-      // flash before the hold settles in).
       if (selectedCount < next) return
       setPhase('holding')
       reveal(next)
@@ -639,12 +590,24 @@ export default function CelticCrossReading({
     if (!sourceCard) return
 
     const reversed = computeCardReversal()
-    const nextDrawn = toDrawnCard(sourceCard, reversed)
-    const nextInterpretation = computeInstantInterpretationForCeltic(sourceCard, reversed, CELTIC_CROSS_POSITIONS[selectionIndex], engineAstroContext)
+    const celticPosition = CELTIC_CROSS_POSITIONS[selectionIndex]
+
+    // Use the engine's computeInstantInterpretation with the Celtic Cross position
+    const interpretation = computeInstantInterpretation(
+      sourceCard,
+      reversed,
+      celticPosition ?? null,
+      tarotAstroContext,
+    )
+
+    const drawnCard: DrawnCard = {
+      card: sourceCard,
+      reversed,
+      interpretation,
+    }
 
     setSelectedDeckIndices(prev => [...prev, deckIndex])
-    setDrawnCards(prev => [...prev, nextDrawn])
-    setInterpretations(prev => [...prev, nextInterpretation])
+    setDrawnCards(prev => [...prev, drawnCard])
 
     const nextCount = selectionIndex + 1
     setSelectedCount(nextCount)
@@ -652,7 +615,7 @@ export default function CelticCrossReading({
     if (nextCount === 10) {
       window.setTimeout(() => setPhase('awaiting-12'), 600)
     }
-  }, [deck, phase, selectedDeckIndices])
+  }, [deck, phase, selectedDeckIndices, tarotAstroContext])
 
   // Global keyboard handler for Space/Enter continue
   useEffect(() => {
@@ -672,19 +635,19 @@ export default function CelticCrossReading({
       schemaVersion: 1,
       readingType: 'celtic-cross',
       userId: '',  // set by parent/auth context
-      drawnCards: drawnCards.map((card, i) => ({ position: i + 1, cardId: card.cardId, reversed: card.reversed })),
+      drawnCards: drawnCards.map((dc, i) => ({ position: i + 1, cardId: dc.card.id, reversed: dc.reversed })),
       spreadType: 'celtic-cross',
       userIntention,
       astroContextSnapshot: {
         natalFingerprint: '',
         transitSnapshotDate: new Date().toISOString(),
-        moonPhase: tarotAstroContext.currentMoonPhase,
+        moonPhase: tarotAstroContext.lunarPhaseName ?? '',
         personalDay: tarotAstroContext.personalDay,
-        numerologyYear: tarotAstroContext.numerologyYear,
+        numerologyYear: 0,
       },
       interpretationPayload: {
         version: 1,
-        payload: { interpretations },
+        payload: { interpretations: drawnCards.map(dc => dc.interpretation) },
       },
       synthesisText: synthesisChapters.map(c => `${c.heading}\n${c.body}`).join('\n\n'),
       createdAt: new Date().toISOString(),
@@ -695,10 +658,11 @@ export default function CelticCrossReading({
 
   // ─── Derived values ───────────────────────────────────────────────────────
   const bgColor = bgTemp === 'warm' ? '#1a0f08' : bgTemp === 'cool' ? '#080d1a' : '#0d0d0f'
-  const currentInterp = revealedPositions.has(activePosition) ? interpretations[activePosition - 1] : null
+  const currentInterp = revealedPositions.has(activePosition) ? drawnCards[activePosition - 1]?.interpretation ?? null : null
+  const currentDc = revealedPositions.has(activePosition) ? drawnCards[activePosition - 1] ?? null : null
   const isSynthesisPhase = phase === 'synthesis' || phase === 'complete'
   const discussContext = isSynthesisPhase
-    ? buildDiscussContext(drawnCards, interpretations, tarotAstroContext, userIntention, synthesisChapters)
+    ? buildDiscussContext(drawnCards, tarotAstroContext, userIntention, synthesisChapters)
     : ''
 
   // ─── Card size based on viewport ─────────────────────────────────────────
@@ -816,10 +780,10 @@ export default function CelticCrossReading({
         )}
 
         {/* Interpretation panel for current card */}
-        {currentInterp && (phase === 'holding' || phase === 'continuing') && (
+        {currentInterp && currentDc && (phase === 'holding' || phase === 'continuing') && (
           <InterpretationPanel
             interp={currentInterp}
-            card={drawnCards[activePosition - 1]}
+            dc={currentDc}
             phase={phase}
             onContinue={handleContinue}
             isMobile={isMobile}
@@ -833,12 +797,11 @@ export default function CelticCrossReading({
               <ErrorPanel
                 kind={synthesisError}
                 cards={drawnCards}
-                interps={interpretations}
                 onRetry={retrySynthesis}
                 onShowIndividual={() => setShowAiFree(true)}
               />
             ) : showAiFree ? (
-              <AiFreeReadingSummary cards={drawnCards} interps={interpretations} />
+              <AiFreeReadingSummary cards={drawnCards} />
             ) : (
               <TarotSynthesisPanel
                 chapters={synthesisChapters}
@@ -898,13 +861,13 @@ export default function CelticCrossReading({
 // ─── Interpretation panel ─────────────────────────────────────────────────────
 function InterpretationPanel({
   interp,
-  card,
+  dc,
   phase,
   onContinue,
   isMobile,
 }: {
   interp: InstantInterpretation
-  card: DrawnCard
+  dc: DrawnCard
   phase: Phase
   onContinue: () => void
   isMobile: boolean
@@ -923,11 +886,11 @@ function InterpretationPanel({
       {/* Position + card name */}
       <div style={{ textAlign: 'center' }}>
         <p style={{ color: 'rgba(201,168,76,0.5)', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
-          {interp.positionName}
+          {interp.positionLabel}
         </p>
         <h2 className="font-heading" style={{ color: '#c9a84c', fontSize: isMobile ? '1.25rem' : '1.5rem' }}>
-          {card.cardName}
-          {card.reversed && <span style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.7em', marginLeft: '0.4em' }}>reversed</span>}
+          {dc.card.name}
+          {dc.reversed && <span style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.7em', marginLeft: '0.4em' }}>reversed</span>}
         </h2>
       </div>
 
@@ -939,16 +902,11 @@ function InterpretationPanel({
         <p style={{ color: 'rgba(201,168,76,0.6)', fontSize: '0.85rem', lineHeight: 1.7, fontStyle: 'italic' }}>
           {interp.emotionalMeaning}
         </p>
-        {interp.reversalNote && (
-          <p style={{ color: 'rgba(200,150,100,0.65)', fontSize: '0.8rem', lineHeight: 1.65, marginTop: '0.5rem' }}>
-            {interp.reversalNote}
-          </p>
-        )}
         <p style={{ color: 'rgba(201,168,76,0.4)', fontSize: '0.78rem', marginTop: '0.75rem', letterSpacing: '0.02em' }}>
-          {interp.astroConnection}
+          {interp.astroConnection.astroHeadline}
         </p>
         <p style={{ color: 'rgba(201,168,76,0.3)', fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
-          {interp.positionDescription}
+          {interp.positionMeaning}
         </p>
       </div>
 
@@ -1014,9 +972,7 @@ function DesktopLayout({ drawnCards, revealedPositions, activePosition, phase, c
         </div>
       </div>
 
-      {/* Staff: vertical column, 10 at top → 7 at bottom.
-          Sized ~30% larger than cross cards so users immediately recognize
-          them as additional cards to be dealt. */}
+      {/* Staff: vertical column, 10 at top → 7 at bottom. */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: '0 0 auto' }}>
         {[10, 9, 8, 7].map(pos => (
           <div key={pos} style={{ width: `calc(${cardWidth} * 1.3)` }}>
@@ -1062,7 +1018,7 @@ function MobileLayout({ drawnCards, revealedPositions, activePosition, phase, ca
         <div style={{ flex: 1, height: '1px', background: 'rgba(201,168,76,0.15)' }} />
       </div>
 
-      {/* Staff positions 7-10 — sized ~30% larger so they read as cards to be dealt */}
+      {/* Staff positions 7-10 */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(2, calc(${cardWidth} * 1.3))`, gap: '12px', justifyContent: 'center' }}>
         {[7, 8, 9, 10].map(pos => (
           <PositionSlot key={pos} position={pos} drawnCards={drawnCards} revealedPositions={revealedPositions} activePosition={activePosition} phase={phase} onAdvance={onAdvance} selectedCount={selectedCount} />
@@ -1088,7 +1044,7 @@ interface PositionSlotProps {
 function PositionSlot({ position, drawnCards, revealedPositions, activePosition, phase, isCrossing, onReveal12, onAdvance, selectedCount: _selectedCount }: PositionSlotProps) {
   void _selectedCount
   const pos = CELTIC_CROSS_POSITIONS[position - 1]
-  const card = drawnCards[position - 1] ?? null
+  const dc = drawnCards[position - 1] ?? null
   const isRevealed = revealedPositions.has(position)
 
   // A card is "active" (pulsing) when it's the next to be tapped
@@ -1111,7 +1067,7 @@ function PositionSlot({ position, drawnCards, revealedPositions, activePosition,
 
   return (
     <CelticCrossCard
-      card={card}
+      card={dc}
       position={pos}
       cardState={isRevealed ? 'face-up' : 'face-down'}
       isActive={isNextToReveal}
