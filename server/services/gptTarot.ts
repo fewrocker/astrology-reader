@@ -287,8 +287,6 @@ export interface TarotCelticSynthesisPayload {
   localDate: string
   /** Pre-computed structural signals for Celtic Cross (spec 6) */
   signals?: CelticStructuralSignals
-  dailyTransitSummary?: string | null
-  weeklyTransitSummary?: string | null
 }
 
 export interface TarotDiscussPayload {
@@ -795,21 +793,6 @@ export async function handleTarotCelticSynthesis(
 
   // Use pre-computed signals if provided, otherwise compute them (backward-compat)
   const signals: CelticStructuralSignals = payload.signals ?? computeCelticStructuralSignals(cards)
-
-  // Compute daily/weekly transit summaries if available
-  let dailyTransitSummary = payload.dailyTransitSummary ?? null
-  let weeklyTransitSummary = payload.weeklyTransitSummary ?? null
-
-  if (userId) {
-    const ctx = resolveUserBirthContext(userId)
-    if (ctx) {
-      const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
-      const dailyTransitData = calculateTransits(natalChart, 'daily')
-      const weeklyTransitData = calculateTransits(natalChart, 'weekly')
-      dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
-      weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
-    }
-  }
 
   const cardLines = cards.slice(0, 10).map((card, i) => {
     const pos = positions[i]
