@@ -225,6 +225,10 @@ export interface CelticCrossPosition {
   number: number
   name: string
   description: string
+  /** What this position demands of the card sitting in it — the specific pressure this position
+   * exerts on any card that lands here. Distinct from description, which names the position's
+   * general meaning; cardDemand names the interpretive ask the position places on the card. */
+  cardDemand: string
   zone: 'cross' | 'staff'
   gridArea: string
 }
@@ -235,6 +239,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 1,
     name: 'Present Situation',
     description: 'The heart of the matter. What is present and central right now — the environment, the question, the dominant energy the querent is living inside. This card defines the field in which everything else plays out.',
+    cardDemand: 'This position asks the card not what it means in the abstract, but what it is becoming in the body — the atmosphere the querent is breathing, the quality of attention the moment requires. A card here is a weather, not a direction. It does not point anywhere yet. It simply names what is.',
     zone: 'cross',
     gridArea: 'p12',
   },
@@ -243,6 +248,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 2,
     name: 'Challenge',
     description: 'What crosses the situation. The obstacle, the tension, the force that complicates, opposes, or tests. In the traditional spread this card crosses card 1 at a 90° angle — the crossing is physical and symbolic. It may be a block, a gift disguised as resistance, or a necessary friction.',
+    cardDemand: 'This position asks the card what it becomes when it is not separate from the situation but laid physically across it — complicating the center, qualifying what card one means by refusing to let it stand alone. A card here is not simply an obstacle; it is what the first card cannot be fully understood without.',
     zone: 'cross',
     gridArea: 'p12',
   },
@@ -251,6 +257,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 3,
     name: 'Unconscious Influence',
     description: 'What lies beneath awareness. The foundation, the root cause, the buried motivation or pattern driving the situation from below the surface. This is what the querent may not see but which shapes everything above it.',
+    cardDemand: 'This position asks the card what it has been doing without the querent\'s knowledge — the pressure it has been exerting on every other card from below the level of conscious attention. The discomfort of this position is specific: what lands here has been steering, and the querent has been letting it steer without realizing they handed it the wheel.',
     zone: 'cross',
     gridArea: 'p3',
   },
@@ -259,6 +266,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 4,
     name: 'Recent Past',
     description: 'What is passing away or has recently completed. An energy, relationship, or phase in retreat. Relevant because it explains how the present situation arrived — the momentum that carried the querent to this moment.',
+    cardDemand: 'This position asks the card what it left behind as it moved out of the foreground — not what it was at its peak, but what residue remains after the peak has passed. A card here is in motion away from the querent; the question is what it deposited on its way out, and whether that deposit is still shaping the ground the present situation stands on.',
     zone: 'cross',
     gridArea: 'p4',
   },
@@ -267,6 +275,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 5,
     name: 'Conscious Goal',
     description: 'What the querent is hoping for, aiming toward, or consciously aware of as the desired outcome. The aspiration, the ideal, the direction of the wish. Not necessarily what will happen — what is wanted.',
+    cardDemand: 'This position asks the card what it reveals about what the querent is consciously trying to make happen — and then asks whether that ambition aligns with what the unconscious influence card says is actually driving them. A card here names the surface wish; the tension between this position and position three is where the reading\'s most honest diagnosis lives.',
     zone: 'cross',
     gridArea: 'p5',
   },
@@ -275,6 +284,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 6,
     name: 'Near Future',
     description: 'What is approaching — not the ultimate outcome, but the next development. The energy or event moving into view on the horizon. A marker of what comes next in the near term if current trajectories hold.',
+    cardDemand: 'This position asks the card what it looks like when it is still becoming rather than arrived — visible on the horizon, but not yet in the hands. A card here is the next movement in the trajectory, not the final one. It names what the querent will likely be standing in next, before the outcome card speaks to where everything is ultimately heading.',
     zone: 'cross',
     gridArea: 'p6',
   },
@@ -283,6 +293,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 7,
     name: 'Inner State',
     description: "The querent's internal relationship to the situation — fears, attitudes, emotional position. How they feel about all of this inside, regardless of how they present it externally. The private face of the question.",
+    cardDemand: 'This position asks the card how the querent is actually inhabiting this experience in private — not how they have described it to others, not how they wish they felt, but the quality of their inner life right now when no one is watching. A card here names the self the querent carries alone into the situation, which may be very different from the self the external environment card sees.',
     zone: 'staff',
     gridArea: 'p7',
   },
@@ -291,6 +302,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 8,
     name: 'External Environment',
     description: 'The people, forces, and energies surrounding the querent — the social and material context in which the situation is unfolding. What others bring, what the world is offering or withholding.',
+    cardDemand: 'This position asks the card what the world is currently offering or withholding from the querent — and then places that answer in direct dialogue with position seven. The gap between inner state and external environment is diagnostically significant: what the querent carries internally and what the environment is providing are rarely the same thing, and the nature of that gap often contains the reading\'s most actionable information.',
     zone: 'staff',
     gridArea: 'p8',
   },
@@ -299,6 +311,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 9,
     name: 'Hopes and Fears',
     description: 'The deepest hope, the deepest fear — often the same thing. What is most wanted and most dreaded simultaneously. The ambivalence at the center of the question, the double edge of the longing.',
+    cardDemand: 'This position asks the card to hold two things at once: what the querent most wants to happen, and what they most dread — recognizing that these are frequently the same investment seen from opposite sides. A card here names the stakes of caring this much. The question this position presses is not what you hope for or what you fear, but whether you can want something badly enough to fear it and still move toward it honestly.',
     zone: 'staff',
     gridArea: 'p9',
   },
@@ -307,6 +320,7 @@ export const CELTIC_CROSS_POSITIONS: CelticCrossPosition[] = [
     number: 10,
     name: 'Outcome',
     description: 'The most likely resolution or direction of movement if current trajectories continue. Not fate — a probable crystallization given what is already in motion. The place toward which the constellation is pointing.',
+    cardDemand: 'This position asks the card what it points toward when all nine other energies have had their say — not what it promises, but what direction the full constellation is traveling when read as a single movement. Every other card converges here. The outcome position does not make a guarantee; it names where the arc is bending given what the present holds, what the challenge demands, what the unconscious has been shaping, and what the inner state makes possible.',
     zone: 'staff',
     gridArea: 'p10',
   },

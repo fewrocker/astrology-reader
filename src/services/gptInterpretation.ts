@@ -629,8 +629,8 @@ export interface TarotCelticSynthesisPayload {
   natalNorthNodeHouse: number | null
   natalMarsHouse: number | null
   personalDay: number
-  personalYear: number
-  lifePathNumber: number
+  personalYear: number | null
+  lifePathNumber: number | null
   advanceCategory: string | null
   advanceReason: string | null
   moonPhaseName: string
@@ -674,12 +674,13 @@ export async function getTarotThreeSynthesis(
 function parseCelticChapters(raw: unknown): SynthesisChapter[] {
   if (!raw || typeof raw !== 'string') return []
   const text = raw.trim()
+  if (!text) return []
   // Split on a newline preceding any heading marker: ##, **...**, or "N. "
   const parts = text
     .split(/\n(?=(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$|\d+\.\s+[A-Z]))/m)
     .map(s => s.trim())
     .filter(Boolean)
-  if (parts.length === 0) return []
+  if (parts.length === 0) return [{ heading: 'Synthesis', body: text }]
   const chapters = parts.map(section => {
     // Markdown heading: ## Heading\nbody
     const mdHeading = section.match(/^#{1,6}\s+([^\n]+)\n?([\s\S]*)$/)
@@ -698,7 +699,9 @@ function parseCelticChapters(raw: unknown): SynthesisChapter[] {
     }
     return { heading: 'Synthesis', body: section }
   })
-  return chapters.filter(c => c.body.length > 0 || c.heading !== 'Synthesis')
+  const filtered = chapters.filter(c => c.body.length > 0 || c.heading !== 'Synthesis')
+  // Guarantee non-empty input always yields at least one chapter
+  return filtered.length > 0 ? filtered : [{ heading: 'Synthesis', body: text }]
 }
 
 function clientComputeCelticStructuralSignals(

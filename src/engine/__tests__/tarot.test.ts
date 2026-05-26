@@ -116,9 +116,9 @@ const mockAstroContext: TarotAstroContext = {
 }
 
 const mockPositions: SpreadPosition[] = [
-  { spreadType: 'three-past-present-future', positionIndex: 0, label: 'Past', meaning: 'What came before.' },
-  { spreadType: 'three-past-present-future', positionIndex: 1, label: 'Present', meaning: 'What is now.' },
-  { spreadType: 'three-past-present-future', positionIndex: 2, label: 'Future', meaning: 'What is coming.' },
+  { id: 'past', spreadType: 'three-past-present-future', positionIndex: 0, label: 'Past', meaning: 'What came before.' },
+  { id: 'present', spreadType: 'three-past-present-future', positionIndex: 1, label: 'Present', meaning: 'What is now.' },
+  { id: 'future', spreadType: 'three-past-present-future', positionIndex: 2, label: 'Future', meaning: 'What is coming.' },
 ]
 
 // ─── drawCards: determinism ───────────────────────────────────────────────────
@@ -447,6 +447,43 @@ describe('computeInstantInterpretation', () => {
     expect(adviceResult.coreMeaning).toContain('In the advice position')
     expect(situationResult.practicalGuidance).not.toBe(adviceResult.practicalGuidance)
     expect(situationResult.reflectionQuestion).not.toBe(adviceResult.reflectionQuestion)
+  })
+
+  it('populates positionLabel and positionMeaning for a Celtic Cross adapted SpreadPosition', () => {
+    // Simulates what CelticCrossReading.tsx does: adapt CelticCrossPosition → SpreadPosition
+    const card = TAROT_CARDS.find(c => c.id === 'the-fool')!
+    const celticSpreadPosition: SpreadPosition = {
+      id: 'outcome',
+      label: 'Outcome',
+      meaning: 'The most likely resolution or direction of movement if current trajectories continue.',
+      spreadType: 'celtic-cross',
+      positionIndex: 9,
+    }
+    const result = computeInstantInterpretation(card, false, celticSpreadPosition, mockAstroContext)
+    expect(result.positionLabel).toBe('Outcome')
+    expect(result.positionMeaning).toBeTruthy()
+    expect(result.positionMeaning).toContain('resolution')
+  })
+
+  it('populates positionLabel for all 10 Celtic Cross positions when adapted correctly', () => {
+    const card = TAROT_CARDS.find(c => c.id === 'the-world')!
+    const celticPositionNames = [
+      'Present Situation', 'Challenge', 'Unconscious Influence', 'Recent Past',
+      'Conscious Goal', 'Near Future', 'Inner State', 'External Environment',
+      'Hopes and Fears', 'Outcome',
+    ]
+    celticPositionNames.forEach((name, index) => {
+      const position: SpreadPosition = {
+        id: `celtic-pos-${index}`,
+        label: name,
+        meaning: `Description for position ${index + 1}.`,
+        spreadType: 'celtic-cross',
+        positionIndex: index,
+      }
+      const result = computeInstantInterpretation(card, false, position, mockAstroContext)
+      expect(result.positionLabel).toBe(name)
+      expect(result.positionMeaning).toBeTruthy()
+    })
   })
 })
 

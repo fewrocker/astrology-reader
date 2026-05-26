@@ -713,6 +713,11 @@ export default function ThreeCardReading({
   const activeRevealIndex = placementComplete && revealedCount < 3 ? revealedCount : null
   const activeCardIndex = activeRevealIndex
 
+  // Kept in sync during render so handleCardTap always reads the current value,
+  // eliminating the stale-closure window that drops the first tap after placement.
+  const activeCardIndexRef = useRef<number | null>(null)
+  activeCardIndexRef.current = activeCardIndex
+
   const triggerRevealOverlay = useCallback(() => {
     setOverlayOpacity(0.25)
     const id = setTimeout(() => setOverlayOpacity(0), 500)
@@ -720,7 +725,7 @@ export default function ThreeCardReading({
   }, [])
 
   const handleCardTap = useCallback((index: number) => {
-    if (index !== activeCardIndex) return
+    if (index !== activeCardIndexRef.current) return
 
     triggerRevealOverlay()
 
@@ -748,7 +753,7 @@ export default function ThreeCardReading({
     }
 
     return () => clearTimeout(flipTimer)
-  }, [activeCardIndex, triggerRevealOverlay])
+  }, [triggerRevealOverlay])
 
   const handleDeckSelect = useCallback((selectionIndex: number) => {
     setSelectedCount(selectionIndex + 1)
