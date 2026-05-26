@@ -22,6 +22,8 @@ export interface TarotCardPayload {
   suit?: string
   number: number
   element: string | null
+  /** Ruling planet of this card (from astroConnections). Null for cards without a classical planetary ruler. */
+  rulingPlanet: string | null
   reversed: boolean
   coreMeaning: string
   symbolicTheme: string
@@ -32,6 +34,30 @@ export interface TarotCardPayload {
   astroHeadline: string
   transitInfluence: string
   lunarPhaseNote: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Chart rulership lookup — server-side mirror of src/engine/tarot.ts SIGN_RULERSHIPS.
+// Modern rulerships. Both copies must be maintained in lockstep.
+// ---------------------------------------------------------------------------
+const SIGN_RULERSHIPS_SERVER: Record<string, string> = {
+  Aries: 'Mars',
+  Taurus: 'Venus',
+  Gemini: 'Mercury',
+  Cancer: 'Moon',
+  Leo: 'Sun',
+  Virgo: 'Mercury',
+  Libra: 'Venus',
+  Scorpio: 'Pluto',
+  Sagittarius: 'Jupiter',
+  Capricorn: 'Saturn',
+  Aquarius: 'Uranus',
+  Pisces: 'Neptune',
+}
+
+function deriveChartRuler(ascSign: string | null | undefined): string | null {
+  if (!ascSign) return null
+  return SIGN_RULERSHIPS_SERVER[ascSign] ?? null
 }
 
 export interface SpreadPositionPayload {
@@ -235,6 +261,8 @@ export interface TarotSingleSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  chartRulerPlanet: string | null
+  natalDominantModality: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -260,6 +288,8 @@ export interface TarotThreeSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  chartRulerPlanet: string | null
+  natalDominantModality: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -282,6 +312,8 @@ export interface TarotCelticSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  chartRulerPlanet: string | null
+  natalDominantModality: string | null
   natalMoonPhase: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
@@ -518,6 +550,8 @@ export async function handleTarotSingleSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let chartRulerPlanet = payload.chartRulerPlanet
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -535,6 +569,8 @@ export async function handleTarotSingleSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
+      chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -587,6 +623,8 @@ Numerology resonance: ${card.numerologyResonance}
 
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${chartRulerPlanet ? `Chart ruler: ${chartRulerPlanet}${payload.card.rulingPlanet && payload.card.rulingPlanet === chartRulerPlanet ? ` — SAME AS THIS CARD'S RULING PLANET (${payload.card.rulingPlanet}): highest personal resonance signal — name this conjunction explicitly in the reading` : ''}` : ''}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
@@ -611,7 +649,7 @@ Write a complete single-card synthesis in exactly 4 short paragraphs plus 1 fina
 
 Paragraph 1: Start with the card interpretation itself. Lead with the card's symbolic and psychological meaning in the context of the person's intention — name how this card speaks directly to what they came to explore. This paragraph must name the living tension, threshold, or opportunity in the card and explicitly connect it to the stated intention (or to the most charged astrological signal if no intention was given).
 
-Paragraph 2: Connect the card to the natal chart. Mention at least one natal placement and explain why this specific card — its symbolism, element, arcana, and reversal if present — resonates with this person's birth pattern specifically. Use the Sun, Moon, Ascendant, Personal Day, Personal Year, and advance signal only when they genuinely sharpen the reading.
+Paragraph 2: Connect the card to the natal chart through the chart ruler. If the chart ruler is provided in "This Person's Sky Right Now": name it, then describe the specific relationship between this card's ruling planet or element and the person's chart ruler. A sentence produced here must be verifiably card-specific — it must not be equally true if a different card were drawn by this same person. If the card's ruling planet and the chart ruler are the same planet, name this conjunction explicitly and explain what it means for this person. If no chart ruler is provided, name at least one natal sign or house placement and explain why this specific card resonates with it. Do not produce sign-level name-dropping that would be equally true for any other person with the same Sun or Moon sign.
 
 Paragraph 3: Connect the card to the daily transits. Use the Daily Transit Context above concretely, but every transit point you mention must be explicitly tied back to the card. Do not write a standalone daily transit reading. Show how the most relevant transit planets, aspects, retrogrades, sign changes, or Moon movement activate, complicate, sharpen, or echo the card's symbolic message today.
 
@@ -645,6 +683,8 @@ export async function handleTarotThreeSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let chartRulerPlanet = payload.chartRulerPlanet
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -663,6 +703,8 @@ export async function handleTarotThreeSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
+      chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -755,6 +797,8 @@ ${signalLines.join('\n')}
 
 ## This Person's Sky Right Now
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${chartRulerPlanet ? `Chart ruler: ${chartRulerPlanet}` : ''}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
@@ -791,7 +835,7 @@ ADVICE: ${spreadPromptConfig.adviceInstruction.replace(/^ADVICE:\s*/, '')}${payl
 
 PSYCHOLOGICAL_PATTERN: ${spreadPromptConfig.psychologicalInstruction.replace(/^PSYCHOLOGICAL_PATTERN:\s*/, '')}
 
-ASTROLOGY_SYNTHESIS: One short paragraph that keeps the three-card constellation central while connecting it to the natal chart, Daily Transit Context, and Weekly Transit Context. Do not drift into a standalone astrology reading. Explain how the current sky activates this exact spread, and explicitly connect at least one daily transit feature and one weekly transit feature back to the cards. Any transit or natal placement you mention must be tied to a specific card in the same or immediately adjacent sentence.
+ASTROLOGY_SYNTHESIS: One short paragraph that keeps the three-card constellation central while connecting it to the natal chart, Daily Transit Context, and Weekly Transit Context. Do not drift into a standalone astrology reading. If the chart ruler is provided: in at least one sentence, draw on the chart ruler's relationship to one of the three drawn cards — name the chart ruler by planet name and explain what it means for this specific person that this card appears in this position. Explicitly connect at least one daily transit feature and one weekly transit feature back to the cards. Any transit or natal placement you mention must be tied to a specific card in the same or immediately adjacent sentence.
 
 TIMING: ${spreadPromptConfig.timingInstruction.replace(/^TIMING:\s*/, '')}
 
@@ -829,6 +873,8 @@ export async function handleTarotCelticSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let chartRulerPlanet = payload.chartRulerPlanet
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonPhase = payload.natalMoonPhase
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
@@ -849,6 +895,8 @@ export async function handleTarotCelticSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
+      chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -935,6 +983,8 @@ ${crossPair.description}${crossPair.courtDynamic ? `\nCourt dynamic: ${crossPair
 
 ## This Person's Living Sky
 Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${ordinalHouse(natalMoonHouse)} house` : ''}, Ascendant in ${natalAscSign}
+${chartRulerPlanet ? `Chart ruler: ${chartRulerPlanet}` : ''}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality}` : ''}
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
@@ -982,7 +1032,7 @@ Position 9 (hopes/fears — one card naming both) and position 10 (outcome). Wha
 The dominant psychological pattern this ten-card constellation reveals — a single named quality or dynamic running through the entire reading like a thread.${signals.courtCardCount >= 2 ? ` Name the collective dynamic of the ${signals.courtCardCount} court cards present — the relational cast or inner council this reading convenes.` : ''}
 
 **Astrology Resonance**
-Where do the natal chart and current sky echo the spread's symbolic themes? Be specific — name the sign, transit planet, or aspect that directly amplifies a specific card's meaning. Any transit or natal placement you mention must be explicitly tied to a specific card in the same or immediately adjacent sentence. Do not write standalone astrology observations.${dailyTransitSummary ? ' Connect at least one daily transit feature and one weekly transit feature to specific cards.' : ''}
+Where do the natal chart and current sky echo the spread's symbolic themes? If the chart ruler is provided in "This Person's Living Sky": treat it as the primary natal signal — name it and explain how it meets one specific card in this spread. This connection must be named at least as prominently as any Sun or Moon sign reference. Be specific — name the sign, transit planet, or aspect that directly amplifies a specific card's meaning. Any transit or natal placement you mention must be explicitly tied to a specific card in the same or immediately adjacent sentence. Do not write standalone astrology observations.${dailyTransitSummary ? ' Connect at least one daily transit feature and one weekly transit feature to specific cards.' : ''}
 
 **Practical Integration**
 Not prescriptive steps. Invitations: what does this constellation invite this person to move toward, release, or hold differently?${payload.userIntention ? ` These invitations must refer to the person's intention: "${payload.userIntention}".` : ''}
