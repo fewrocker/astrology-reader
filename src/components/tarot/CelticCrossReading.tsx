@@ -7,6 +7,7 @@ import type {
 } from './types'
 import type { DrawnCard, InstantInterpretation, TarotAstroContext } from '../../engine/tarot'
 import { computeInstantInterpretation } from '../../engine/tarot'
+import type { SpreadPosition } from '../../engine/tarot'
 import { CELTIC_CROSS_POSITIONS } from '../../data/tarot/spreadPositions'
 import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInterpretation'
 import type { SaveReadingRequest } from '../../services/readingsService'
@@ -599,11 +600,23 @@ export default function CelticCrossReading({
     const reversed = computeCardReversal()
     const celticPosition = CELTIC_CROSS_POSITIONS[selectionIndex]
 
-    // Use the engine's computeInstantInterpretation with the Celtic Cross position
+    // Adapt CelticCrossPosition (name/description) to SpreadPosition (label/meaning)
+    // so that positionLabel and positionMeaning are populated in the interpretation.
+    const spreadPosition: SpreadPosition | null = celticPosition
+      ? {
+          id: celticPosition.id,
+          label: celticPosition.name,
+          meaning: celticPosition.description,
+          spreadType: 'celtic-cross',
+          positionIndex: celticPosition.number - 1,
+        }
+      : null
+
+    // Use the engine's computeInstantInterpretation with the adapted position
     const interpretation = computeInstantInterpretation(
       sourceCard,
       reversed,
-      celticPosition ?? null,
+      spreadPosition,
       tarotAstroContext,
     )
 
@@ -794,8 +807,8 @@ export default function CelticCrossReading({
             interp={currentInterp}
             dc={currentDc}
             phase={phase}
-            onContinue={handleContinue}
             isMobile={isMobile}
+            positionIndex={activePosition - 1}
           />
         )}
 
@@ -896,16 +909,19 @@ function InterpretationPanel({
   interp,
   dc,
   phase,
-  onContinue,
   isMobile,
+  positionIndex,
 }: {
   panelRef: RefObject<HTMLDivElement>
   interp: InstantInterpretation
   dc: DrawnCard
   phase: Phase
-  onContinue: () => void
   isMobile: boolean
+  positionIndex: number
 }) {
+  const celticPos = CELTIC_CROSS_POSITIONS[positionIndex]
+  const cardDemand = celticPos?.cardDemand ?? null
+
   return (
     <div
       ref={panelRef}
@@ -931,6 +947,18 @@ function InterpretationPanel({
 
       {/* Interpretation */}
       <div style={{ padding: '1.25rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(201,168,76,0.12)' }}>
+        {/* Position description */}
+        {interp.positionMeaning && (
+          <p style={{ color: 'rgba(201,168,76,0.3)', fontSize: '0.75rem', marginBottom: '0.75rem', fontStyle: 'italic' }}>
+            {interp.positionMeaning}
+          </p>
+        )}
+        {/* Positional demand — what this position asks of the card */}
+        {cardDemand && (
+          <p style={{ color: 'rgba(201,168,76,0.45)', fontSize: '0.8rem', lineHeight: 1.65, marginBottom: '0.85rem', fontStyle: 'italic' }}>
+            {cardDemand}
+          </p>
+        )}
         <p style={{ color: 'rgba(232,230,227,0.85)', fontSize: '0.9rem', lineHeight: 1.75, marginBottom: '0.6rem' }}>
           {interp.coreMeaning}
         </p>
@@ -939,9 +967,6 @@ function InterpretationPanel({
         </p>
         <p style={{ color: 'rgba(201,168,76,0.4)', fontSize: '0.78rem', marginTop: '0.75rem', letterSpacing: '0.02em' }}>
           {interp.astroConnection.astroHeadline}
-        </p>
-        <p style={{ color: 'rgba(201,168,76,0.3)', fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
-          {interp.positionMeaning}
         </p>
       </div>
 
