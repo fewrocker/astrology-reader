@@ -190,15 +190,25 @@ export default function SingleCardReading({
         )}
 
         {/* Card Visual */}
+        <style>{`
+          @keyframes tarot-ring-pulse {
+            0%, 100% { box-shadow: 0 0 0 1px rgba(201,168,76,0.2), inset 0 0 0 1px rgba(201,168,76,0.1); }
+            50% { box-shadow: 0 0 0 2px rgba(201,168,76,0.55), inset 0 0 0 1px rgba(201,168,76,0.25); }
+          }
+        `}</style>
         <div className="flex justify-center mb-12">
           {card ? (
             <div
               className="relative"
+              onClick={revealReady && !revealed ? () => setRevealed(true) : undefined}
               style={{
                 maxHeight: 'none',
                 transform: revealReady ? 'translateY(0)' : 'translateY(12px)',
                 transition: 'transform 0.45s ease, opacity 0.45s ease',
                 opacity: revealReady ? 1 : 0.72,
+                cursor: revealReady && !revealed ? 'pointer' : undefined,
+                borderRadius: '0.75rem',
+                animation: revealReady && !revealed ? 'tarot-ring-pulse 2s ease-in-out infinite' : undefined,
               }}
             >
               <CardReveal
@@ -248,6 +258,22 @@ export default function SingleCardReading({
             />
           )}
         </div>
+
+        {/* Ritual invitation text — shown while card is face-down and ready to be tapped */}
+        {revealReady && !revealed && (
+          <p
+            className="text-center font-heading"
+            style={{
+              color: 'rgba(201,168,76,0.65)',
+              fontSize: '0.85rem',
+              letterSpacing: '0.04em',
+              marginTop: '-1.5rem',
+              marginBottom: '2rem',
+            }}
+          >
+            Visualize your intention and click on the card to start the ritual
+          </p>
+        )}
 
         {/* Card Identity */}
         {revealed && card && <div className="mb-16" aria-hidden="true" />}
