@@ -33,7 +33,7 @@ The pattern — assign `ref.current = value` at render time, read `ref.current` 
 ## Verification
 
 - `npm run build` — passes cleanly, no TypeScript errors (1925 modules transformed)
-- No test suite present in project; build output is the verification gate
+- `npx vitest run`: 73/73 passed (4 new tests in `threeCardRevealGuard.test.ts`)
 
 ## Notes
 
