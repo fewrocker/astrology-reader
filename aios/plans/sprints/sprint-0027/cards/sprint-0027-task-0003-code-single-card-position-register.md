@@ -22,3 +22,7 @@ Single-card draws flow through the same Level 2 code path as every spread positi
 The transit influence text for a single draw under a present-active register is slightly warmer and more grounded: instead of "The current Saturn transit amplifies this card's Earth nature — patience and long game are heightened now," the text names the energy as immediately alive rather than abstractly active. For court cards in particular, the present-active branch of `buildPositionAwareAffinityLine` explicitly frames the card as something being embodied or encountered — a meaningful distinction for a daily draw.
 
 The code becomes easier to reason about. The `if (register !== null)` guard no longer carries a hidden assumption about single draws. Any future register logic or addition to `buildPositionAwareAffinityLine` automatically applies to single draws without a separate code path to maintain.
+---
+## Outcome
+Status: done
+Implementation: Added SPREAD_POSITIONS import to TarotPage.tsx, defined module-level SINGLE_POSITION const, passed it instead of null at both computeInstantInterpretation call sites. Single draws now receive present-active register in buildTransitInfluence, enabling buildPositionAwareAffinityLine for Level 2 transit text. positionLabel and positionMeaning are now populated for single draws.
