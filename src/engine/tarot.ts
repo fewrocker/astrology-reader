@@ -150,6 +150,25 @@ const PLANET_PRIORITY: Record<string, number> = {
   Mars: 3, Sun: 2, Venus: 2, Mercury: 1, Moon: 1,
 }
 
+/**
+ * Compute a dominance score for a transit aspect that accounts for:
+ *   - Base planet priority (PLANET_PRIORITY — outer planets naturally outrank inner)
+ *   - Orb tightness: tighter orbs receive a higher multiplier (orb=0 → ×1.6, orb=8 → ×1.0)
+ *   - Applying bonus: aspects building toward exact are symbolically live (+15%)
+ *
+ * This prevents a wide, separating Pluto transit from suppressing a tight, applying
+ * Saturn transit when the Saturn transit is the astrologically significant one right now.
+ */
+function computeDominancePlanetScore(aspect: TransitAspect): number {
+  const basePriority = PLANET_PRIORITY[String(aspect.transitPlanet)] ?? 0
+  // Reward tighter orbs: orb=0 gives full multiplier, orb=8 gives ~0.6 multiplier
+  const maxOrb = 8
+  const orbMultiplier = 1 + (Math.max(0, maxOrb - aspect.orb) / maxOrb) * 0.6
+  // Reward applying aspects: they are building toward exact, more symbolically live
+  const applyingBonus = aspect.applying ? 1.15 : 1.0
+  return basePriority * orbMultiplier * applyingBonus
+}
+
 const ELEMENT_ADJECTIVE: Record<Element, string> = {
   Fire: 'fiery', Earth: 'grounding', Air: 'airy', Water: 'emotional',
 }
@@ -534,14 +553,13 @@ export function buildTarotAstroContext(
         .filter(r => r.isRetro)
         .map(r => r.planet)
 
-      // Dominant transit planet: highest-priority planet among active transit aspects
-      let topPriority = -1
+      // Dominant transit planet: highest orb-weighted score among active transit aspects
+      let topScore = -1
       for (const aspect of currentTransits) {
-        const planet = String(aspect.transitPlanet)
-        const priority = PLANET_PRIORITY[planet] ?? 0
-        if (priority > topPriority) {
-          topPriority = priority
-          dominantTransitPlanet = planet
+        const score = computeDominancePlanetScore(aspect)
+        if (score > topScore) {
+          topScore = score
+          dominantTransitPlanet = String(aspect.transitPlanet)
         }
       }
 
