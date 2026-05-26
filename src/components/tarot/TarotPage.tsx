@@ -21,6 +21,8 @@ import SavedReadingsPage from './SavedReadingsPage'
 import DeckShuffleAnimation from './DeckShuffleAnimation'
 import type { FocusArea } from './TarotIntentionScreen'
 import type { ReadingMode as ShuffleReadingMode } from './TarotModeSelector'
+import type { SnapshotScore } from '../../engine/advanceScoring'
+import { advanceSnapshotSessionCache } from '../reading/AdvanceTab'
 
 function shuffleTarotDeck(): TarotCard[] {
   const deck = [...ALL_TAROT_CARDS] as TarotCard[]
@@ -112,6 +114,27 @@ function formatTransitSummary(
   return lines.join('\n')
 }
 
+// ─── Advance score helper ─────────────────────────────────────────────────────
+
+/**
+ * Read today's SnapshotScore from the module-level session cache populated by
+ * AdvanceTab.  Mirrors the identical lookup in TodayPage.tsx.  Returns null if
+ * the user has not visited the Advance/Today tab yet in this session.
+ */
+function readTodayAdvanceScore(chartData: ChartData): SnapshotScore | null {
+  const chartKey = `${chartData.angles.ascendant.longitude.toFixed(4)}:${chartData.angles.midheaven.longitude.toFixed(4)}:${chartData.unknownTime}`
+  const todayStr = new Date().toISOString().slice(0, 10)
+  for (const period of ['daily', 'weekly', 'monthly'] as const) {
+    for (const [key, snapshots] of advanceSnapshotSessionCache.entries()) {
+      if (!key.startsWith(`${chartKey}:${period}:`)) continue
+      const todaySnap = snapshots.find(s => s.dateStr === todayStr)
+      if (!todaySnap || todaySnap.score.category === 'neutral') continue
+      return todaySnap.score
+    }
+  }
+  return null
+}
+
 // ─── Engine context builder ───────────────────────────────────────────────────
 
 function buildEngineCtx(chartData: ChartData, birthDate: string): TarotAstroContext {
@@ -119,7 +142,7 @@ function buildEngineCtx(chartData: ChartData, birthDate: string): TarotAstroCont
     chartData,
     null,
     computePersonalDay(birthDate),
-    null,
+    readTodayAdvanceScore(chartData),
   )
 }
 
@@ -492,7 +515,7 @@ export default function TarotPage({ chartData, birthDate, onOpenUpgrade }: Tarot
   // Build a TarotAstroContext for the provider (used by home view and nav)
   const astroContext = useMemo((): TarotAstroContext | null => {
     if (!chartData) return null
-    return buildTarotAstroContext(chartData, null, computePersonalDay(birthDate), null)
+    return buildTarotAstroContext(chartData, null, computePersonalDay(birthDate), readTodayAdvanceScore(chartData))
   }, [chartData, birthDate])
 
   if (!chartData) {
