@@ -690,11 +690,11 @@ function buildTransitInfluence(
     for (const entry of adaptations) {
       if (astroContext.dominantTransitPlanet !== entry.planet) continue
       if (entry.condition === 'retrograde') {
-        if (astroContext.retrogradeplanets.includes(entry.planet)) {
+        if (astroContext.retrogradePlanets.includes(entry.planet)) {
           return entry.emphasis
         }
       } else if (entry.condition === 'direct') {
-        if (!astroContext.retrogradeplanets.includes(entry.planet)) {
+        if (!astroContext.retrogradePlanets.includes(entry.planet)) {
           return entry.emphasis
         }
       } else {
