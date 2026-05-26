@@ -700,6 +700,8 @@ Proposal artifact schema by type:
   - **Problem / Opportunity** — what's missing or weak today, with concrete references to current product behavior and code (file paths)
   - **Vision** — what the feature should feel like when it exists; the experience, the signature moments, the user's journey through it; the emotional and functional core
   - **Specifications** — a thorough, numbered list of specs the implementation must fulfill. Cover: user-facing behavior, UI states (default, loading, empty, error, edge), data requirements, interaction rules, accessibility, performance expectations, edge cases, and acceptance-style checks. Specs must be precise enough to drive spec-driven development. Err on the side of more specs, not fewer — shallow spec lists produce shallow features.
+
+    **Specs are definition-of-done, not implementation instructions.** Each spec describes WHAT the system should do or how it should behave — from the user's perspective or as an observable outcome. Specs must NOT contain TypeScript types, interface definitions, pseudocode, algorithm implementations, function signatures, file paths, or any instruction telling the coding agent HOW to implement something. Those are the coding agent's job to discover by exploring the codebase. A spec that reads "the system shows X when Y happens" is correct. A spec that reads "implement interface Foo with fields bar: string, baz: number" is a violation.
   - **Out of Scope** — explicit boundaries to prevent scope creep
   - **Open Questions** — anything the subagent could not resolve and that must be answered during `/enhance`
 
@@ -715,7 +717,7 @@ Proposal artifact schema by type:
   - **Originated by** — voice(s)
   - **User guidance** — if provided, quoted verbatim
   - **Problem / Opportunity** — what's weak about the current code with file references
-  - **Desired state** — what "better" looks like in qualitative terms (cleaner boundaries, fewer responsibilities, clearer naming, etc.)
+  - **Desired state** — what "better" looks like in **qualitative and outcome terms** — cleaner boundaries, fewer responsibilities, clearer naming, measurable improvements (e.g., "the component re-renders only when its direct inputs change", "there is a single canonical type used everywhere"). Do NOT include TypeScript interfaces, pseudocode, algorithm logic, function signatures, or step-by-step implementation instructions. The coding agent reads the current code, understands the problem, and figures out how to get there.
 
 Wait for all Stage 2 subagents to finish before proceeding.
 
@@ -802,7 +804,7 @@ Before any proposal is generated, the sprint must know what it is about. The rec
 4. For each active proposal, create a sprint card file in `sprints/sprint-XXXX/cards/` named:
    - `sprint-XXXX-task-YYYY-[TASK_NAME].md`
 5. `[TASK_NAME]` must be a filesystem-safe slug derived from the proposal filename without the `.md` extension.
-6. The sprint card must copy the corresponding proposal content **verbatim**.
+6. The sprint card must copy the corresponding proposal content **verbatim**. Sprint cards are specs and definition-of-done documents — they describe WHAT must be true when the task is complete, not HOW to implement it. If a proposal violates this (e.g., contains TypeScript interface definitions, pseudocode, or step-by-step implementation instructions), fix it during card creation before copying — remove the implementation instructions and replace with outcome-oriented language.
 7. Also write `sprints/sprint-XXXX/plan.md` listing every generated card and the proposal file it came from.
 8. Write `sprints/sprint-XXXX/state.md` with the sprint status, task list, and completion tracking.
 
@@ -812,6 +814,33 @@ Before any proposal is generated, the sprint must know what it is about. The rec
 3. Record the branch name in `sprints/sprint-XXXX/state.md`.
 
 **6. Execute each task via a separate subagent**
+
+**Task agent prompt template — use this exactly, substituting the bracketed values. Do NOT add extra steps, file lists, interface definitions, or implementation instructions. The sprint card is the implementation contract; the subagent reads it and figures out the rest.**
+
+```
+You are a sprint task agent for the astrology-reader project at /projects/astrology-reader.
+
+## Your task
+[TASK_SLUG]
+
+## Sprint card
+Read: aios/plans/sprints/[SPRINT_ID]/cards/[TASK_SLUG].md
+
+## Setup
+Set up your worktree before doing anything else:
+git -C /projects/astrology-reader worktree add /projects/astrology-reader/.worktrees/[TASK_SLUG] -b [TASK_SLUG] [SPRINT_ID]
+Work in: /projects/astrology-reader/.worktrees/[TASK_SLUG]
+
+## Instructions
+1. Read the sprint card fully — it is the implementation contract.
+2. Read aios/guidelines.md for sprint context.
+3. Read aios/plans/sprints/[SPRINT_ID]/vision.md if it exists.
+4. Explore the codebase as needed. Implement the task. Run npm run build and fix all TypeScript errors.
+5. Write your review to the -review.md file for this card.
+6. Commit your work with: git add -A && git commit -m "[type](task-[YYYY]): <summary>"
+7. Update aios/plans/sprints/[SPRINT_ID]/state.md — mark this task completed.
+```
+
 1. Spawn one separate subagent for **each** sprint card.
 2. Each subagent is responsible only for its assigned card.
 3. Before implementation, each subagent must create a dedicated git worktree named exactly after the task slug:

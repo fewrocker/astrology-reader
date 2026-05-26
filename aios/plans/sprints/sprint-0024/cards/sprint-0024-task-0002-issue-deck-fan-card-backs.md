@@ -1,0 +1,11 @@
+**Type** — `Issue Fix`
+**Originated by** — Jobs, Carmack, Miyazaki
+**User guidance** — n/a
+
+**Problem** — `TarotDeckSelection.tsx` renders every card in the 78-card fan as the string `✦` (line 160 in the main card `<button>` and line 183 in the animating ghost `<button>`). The button is sized and positioned correctly — `72px × 116px`, proper fan geometry with rotation and offsetX/offsetY derived from position — and carries a breathing animation (`tarot-deck-breathe`). But its visual content is a single Unicode character at `fontSize: '1.1rem'` and `color: 'rgba(201,168,76,0.28)'`. A user opening any reading (single card, three-card, or Celtic Cross) sees 78 identical gold sparkle characters arranged in a fan shape, not a deck of face-down cards.
+
+The `CardBack` component at `src/components/tarot/CardBack.tsx` already provides the correct visual: indigo background (`#1a1040`), an inset gold frame at 8px inset, an eight-pointed SVG star with four crossing lines and eight point-diamond fills (all at `rgba(201,168,76,...)` stroke values), and structural corner lines radiating from the star points to the frame corners. `CardBack` accepts `interactive`, `onClick`, `onKeyDown`, `tabIndex`, and `aria-label` props, making it fully suitable as a drop-in inside the existing `<button>` element. It also carries its own breathing pulse animation via the `card-face-down` CSS class in `tarot.css`. The component is complete and functional; it is simply not imported or referenced anywhere in `TarotDeckSelection.tsx`.
+
+To reproduce: navigate to any tarot reading flow. The deck fan displayed before the first card is drawn shows 78 `✦` characters, not card backs.
+
+**Expected behavior** — Each card in the fan should render the `CardBack` component in place of the `✦` character. The `<button>` in `TarotDeckSelection.tsx` already controls dimensions, position, rotation, and pointer events; `CardBack` should be mounted inside it with `interactive={false}` (since the button itself handles interaction) filling 100% width and height, replacing the raw Unicode character entirely. The result is a fan of 78 face-down cards showing the indigo field, gold inset frame, eight-pointed star geometry, and breathing pulse — the correct first visual impression of the product before any card is drawn.

@@ -1,4 +1,4 @@
-# Taleb's Risk Review — Sprint 0023: Tarot Module
+# Taleb's Risk Review — Sprint 0024: Tarot Depth & Polish
 
 *Nassim Nicholas Taleb. May 2026.*
 
@@ -6,224 +6,305 @@
 
 ## Opening Observation
 
-The sprint vision is written with the confidence of someone who has never experienced a Black Swan. Everything is described as "battle-tested," "mature," "stable," "already working." This is precisely the language people use before something breaks spectacularly. Let me be the person in the room who asks what happens when the assumptions fail — not to be contrarian, but because robustness is built in the design phase, not patched in after the outage.
+Sprint 0023 shipped. The team is proud. Everything is "end-to-end functional." The vision document for sprint 0024 opens with the phrase "the mechanics are sound." This is exactly how people describe a bridge the week before it falls.
+
+I have now read the actual code. I have read `src/engine/tarot.ts`, `server/routes/tarot.ts`, `src/context/TarotContext.tsx`, `server/services/gptTarot.ts`, `src/components/tarot/CelticCrossReading.tsx`, `src/components/tarot/TarotPage.tsx`, the full card data layer, the rate-limiting middleware, and the spread position definitions. Sprint 0023 addressed several of my prior concerns — `gptTarot.ts` was extracted, `tarot_usage` is a separate table, `TarotContext` is isolated. Some proposals were implemented. Others were not. The new sprint introduces new fragilities I have not yet discussed.
+
+Here is what I see when I look at what was actually built versus what the team believes was built.
 
 ---
 
-## 1. The 78-Card AI-Free Layer: The Largest Hidden Fragility
+## 1. The Central Type System Incoherence: Three Parallel Type Universes
 
-The vision states: "The AI-free interpretation layer must be complete for all 78 cards. This is non-negotiable." But the spec then proposes to build this in a single sprint alongside animated card flips, a Celtic Cross UX with progressive reveals, saved readings, a new DB table, subscription gating, and a full GPT synthesis layer.
+This is the most important structural problem in the codebase and nobody appears to have named it.
 
-This is the most dangerous assumption in the entire sprint: that completeness and quality can be delivered simultaneously across 78 cards × (upright meaning + reversed meaning + emotional interpretation + practical guidance + reflection question + numerology resonance + astro connection) in the same time budget as the visual and infrastructure work.
+There are three separate definitions of `TarotAstroContext`, `DrawnCard`, and `InstantInterpretation` in this codebase:
 
-The data file proposed is `src/data/tarot/cards.ts`. If this file ships with 22 Major Arcana and placeholder stubs for the Minor Arcana — which is the path of least resistance under sprint pressure — the "AI-free instant interpretation" marketing claim collapses into a lie. Every reading where a Minor Arcana card is drawn (56 of 78 cards — 72% of the deck) would silently degrade. Users would receive empty fields or worse, reused text. There is no circuit breaker in the proposed architecture for a partially-populated card database.
+- **`src/context/TarotContext.tsx`** defines its own `TarotAstroContext` with fields: `birthDate`, `personalDay`, `moonPhase: unknown | null`, `transitAspects: unknown[] | null`, `advanceCategory`, `dominantElement`. The `moonPhase` and `transitAspects` fields are typed as `unknown` — a compiler-level admission that nobody decided what these should be.
 
-**What breaks:** `computeInstantInterpretation()` in `src/engine/tarot.ts` calls into `cards.ts`. If a card record is missing `reversedMeaning` or `reflectionQuestion`, the component either renders null, crashes, or renders stale fallback text. None of these is acceptable for a feature positioned as "instant, reliable, offline-resilient."
+- **`src/engine/tarot.ts`** defines `TarotAstroContext` (as `EngineCtx` in imports) with the full, correct structure: `natalSunSign`, `natalMoonSign`, `natalAscendantSign`, `currentTransits: TransitAspect[]`, `retrogradeplanets`, `dominantTransitPlanet`, `lunarPhaseName`, `personalDay`, `advanceCategory`, `advanceReason`.
 
-**My proposal:** The 78-card data layer must be treated as a separate, completeness-verified deliverable — not bundled into a UI sprint. It should ship with a compile-time assertion or a unit test that verifies every card ID has all required fields populated with non-empty strings. A test file at `src/data/tarot/__tests__/cards.completeness.test.ts` that iterates all 78 entries and asserts field presence is cheap insurance. Without it, the "non-negotiable" standard will be violated silently.
+- **`src/components/tarot/types.ts`** defines yet another `TarotAstroContext` with fields: `sunSign`, `moonSign`, `ascendant`, `dominantElement`, `currentMoonPhase: string`, `significantTransits: string[]`, `personalDay`, `advanceCategory`, `numerologyYear`. This is the type consumed by `CelticCrossReading.tsx`.
 
----
+These are not related by inheritance, not unified by a shared type, not validated against each other. They are three separate definitions that happen to describe the same concept. When `TarotPage.tsx` calls `buildCelticAstroCtx()` at line 155, it populates the `types.ts` version with `currentMoonPhase: ''` and `significantTransits: []` — hardcoded empty values. This is not a missing feature. This is a deliberately emptied data contract, and it means the Celtic Cross GPT synthesis runs without any live transit data.
 
-## 2. The `transitAdaptations.ts` Lookup Table: Combinatorial Incompleteness
+The vision document calls this out as a known gap. But calling it a gap understates the architectural problem. The three-type divergence means that every future developer who touches this feature must reason simultaneously about three different shapes for the same concept. Each fix applied to one context type is invisible to the other two. This is how bugs accumulate invisibly.
 
-The sprint specifies a static lookup table of card × transit combinations: `src/data/tarot/transitAdaptations.ts`. The vision gives one example: The Hermit × Mercury retrograde. This is elegant in theory.
+**What breaks under stress:** Sprint 0024 asks developers to "wire real transit data for all three reading flows." The developer doing this work will write code that populates the `EngineCtx` version and will wonder why the Celtic Cross still sends empty transits — because `CelticCrossReading.tsx` receives the `types.ts` version, not the engine version. The type system provides no warning because both types are structurally valid TypeScript. The bug will be invisible until someone manually inspects the GPT payload.
 
-The problem is the combinatorial space. There are 78 cards × roughly 10 transit planets × 12 possible transit types (conjunction, square, trine, opposition, sextile, quincunx, direct, retrograde, ingress, etc.) — easily 5,000+ combinations. In practice the team will build the 20 most obvious mappings, ship it as "complete," and the `computeInstantInterpretation()` engine will fall through to a default path for 99% of actual readings.
-
-This is not catastrophic — the fallback to generic card meaning is acceptable. What is fragile is if the code is written as though the lookup table is comprehensive. If the engine says "transit connection: Uranus trine natal Moon" and the lookup table has no match, it must not output an empty `transitConnection` field in the interpretation UI. It must degrade gracefully to the card's baseline astro connection from `astroConnections.ts`.
-
-The spec does not define the fallback chain. This is an omission that will produce silent holes in the output.
-
-**My proposal:** The `computeInstantInterpretation()` function must implement a three-level fallback: (1) card × specific transit match from `transitAdaptations.ts`, (2) card × transit planet match (ignoring aspect type), (3) card's baseline element/planet connection from `astroConnections.ts`. Every call must return a non-empty `transitConnection` string. Add a test that calls `computeInstantInterpretation()` with a random card + a transit combination not present in the table and asserts the output is complete.
+**The hidden assumption that will not hold:** The assumption is that developers can reason about which type they are working with at any moment. Under sprint pressure, this assumption fails. You get a bug where the data is present in one representation and absent in the one actually consumed.
 
 ---
 
-## 3. The GPT Synthesis Layer: Failure Mode Is Not Designed
+## 2. The `computeInstantInterpretation` Stub That Survived Production
 
-The existing GPT infrastructure in `server/services/gpt.ts` and `server/routes/gpt.ts` has a well-designed retry mechanism (`retryWithBackoff`, 3 attempts, exponential backoff), slot release on 5xx, and a 503/504 error path. This is good work. But the Tarot module introduces a new failure mode that the existing pattern does not handle: **the reading is partly visible when GPT fails**.
-
-For transit readings and solar returns, GPT failure means the user sees an error state and the reading is not shown. The user presses retry. Clean.
-
-For Tarot, the design is: (1) card is drawn and revealed, (2) instant interpretation renders immediately, (3) GPT synthesis loads asynchronously in `TarotSynthesisPanel.tsx`. If GPT fails after step 2, the user has a revealed card, an instant interpretation, and a broken synthesis panel. This is a fundamentally different UX failure mode. The question the spec does not answer is: **what does the synthesis panel show on GPT failure?**
-
-If it shows a spinner that never resolves, the user is trapped. If it shows a generic error string ("GPT unavailable"), that is inconsistent with the ritual experience. If it silently hides the synthesis section, the user loses value they may have paid for.
-
-**The Celtic Cross is worse.** Ten cards revealed. If GPT synthesis fails after a 60-second progressive reveal experience, the user has invested significant emotional and time capital and receives nothing in return for the "constellation reading" moment. The `RateLimitError` from `src/services/gptInterpretation.ts` already throws with tier information — the Tarot synthesis handler must catch this specifically and show the upgrade prompt rather than a broken spinner.
-
-**My proposal:** `TarotSynthesisPanel.tsx` must implement four explicit states: loading (skeleton), success, GPT unavailable (graceful degradation to enhanced instant interpretation with a "Synthesis unavailable — try again" retry button), and rate-limited (opens `UpgradeModal`). The AI-free synthesis from `computeThreeCardSynthesis()` must be surfaced as the fallback — not hidden. A reading that works without AI is a feature, not a consolation prize.
-
----
-
-## 4. The Saved Readings Schema: Data Integrity Risks
-
-The vision proposes a new table in `server/db.ts` — let me call out what is not said.
-
-The proposed schema stores: "drawn cards + reversals, spread mode, user question/intention, astro context snapshot (natal chart fingerprint, transit snapshot date, numerology day), full interpretation payload, created timestamp, optional journal entry linkage."
-
-Three concrete risks:
-
-**Risk 1: Schema migration fragility.** The existing `db.ts` uses `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` wrapped in try/catch for additive migrations. This pattern works for single columns. A new table is created via `CREATE TABLE IF NOT EXISTS` in the main `instance.exec()` block. If the readings table schema changes between sprint iterations — which it will, because the interpretation payload shape will evolve — there is no migration versioning. The `entries` table has already been through exactly this problem, which is why `SYNASTRY_CACHE_VERSION = 2` exists in `appState.ts` with explicit version guards. The readings table will need the same discipline from day one.
-
-**Risk 2: The `full interpretation payload` column.** If this is stored as a serialized JSON blob in a TEXT column (the pattern used in the `entries` table for `metadata`), then when the `InstantInterpretation` or `TarotSynthesis` type shape changes, old saved readings become unreadable unless the deserializer is versioned. The existing `entries` metadata field has this problem today — it works because entry metadata is simple. A full tarot reading interpretation is not simple.
-
-**Risk 3: Journal linkage as a foreign key.** If `optional journal entry linkage` is implemented as a FK to `entries(id)`, and the user deletes the journal entry, the reading's linkage becomes a dangling reference (even with `ON DELETE SET NULL`, the UI must handle null gracefully). If it is not a FK and is stored as a raw ID string, it silently becomes invalid. Neither option is specified.
-
-**My proposal:** (a) The readings table must include a `schema_version INTEGER DEFAULT 1` column from the first migration. Deserializers must check this version. (b) The journal linkage must be an explicit `journal_entry_id TEXT REFERENCES entries(id) ON DELETE SET NULL` with `ON DELETE SET NULL`. The UI must handle `journal_entry_id = null` as a normal case. (c) The full interpretation payload column must store a tagged union: `{ version: number, payload: ... }` so future migrations can identify and transform old records.
-
----
-
-## 5. The Subscription Gate: Edge Cases That Will Produce Real Support Tickets
-
-The current `gptRateLimit.ts` is a single counter: `gpt_usage(user_id, date, count)`. The Tarot module proposes to add tarot-specific limits on top of this:
-
-- Free: 1 card draw per day, 1 three-card reading per week
-- Advanced: unlimited
-
-The existing counter is **per-day and type-agnostic**. A free user who hits their transit reading limit today also cannot get their single daily Tarot card. This is the current behavior and it is already punitive. Adding Tarot limits means either: (a) sharing the existing counter (Tarot draws consume the same daily budget as transit readings, which will confuse users and produce complaints), or (b) creating separate counters per feature type (requires schema changes and new middleware logic).
-
-The vision says "The existing `gptRateLimit` middleware and `UpgradeModal` pattern must be extended to handle Tarot-specific limits." This sentence is doing a lot of work. "Extended" could mean anything.
-
-The weekly limit for three-card readings is particularly fragile. The existing counter is daily. A weekly counter requires either: (a) a new `tarot_weekly_usage` table, or (b) querying the last 7 days of `gpt_usage` and summing — which is a range query, not a point lookup, and breaks the O(1) performance guarantee of the current prepared-statement cache in `gptRateLimit.ts`.
-
-**My proposal:** The sprint must specify exactly which counter mechanism implements each Tarot gate *before* implementation begins. My recommendation is a separate `tarot_usage` table with columns `(user_id, date, daily_cards, weekly_cards_week_start)` where `week_start` is the ISO week's Monday date. This keeps each gate atomic and avoids modifying the existing GPT usage counter that already works for paying users.
-
----
-
-## 6. The Single Point of Failure Nobody Is Talking About: `src/data/tarot/cards.ts`
-
-The entire AI-free layer — which is the feature's claimed reliability guarantee — depends on a single TypeScript file containing 78 hand-authored card records. This file does not yet exist. It must be written by a human, validated by a human, and will inevitably contain:
-
-- Subtle differences in quality between cards written first (The Fool, The Magician) and cards written last (Four of Pentacles, Seven of Swords)
-- Minor Arcana cards that received three minutes of attention versus Major Arcana that received thirty
-- Copy-paste errors in `numerologyResonance` fields
-- Missing `reflectionQuestion` entries on cards where the author ran out of inspiration
-
-The spec calls this layer "the consistent symbolic foundation." But a hand-authored 78-entry database under time pressure is neither consistent nor a foundation — it is a fragile artifact.
-
-I am not saying don't build it. I am saying: treat the quality of this database as a first-class risk, not a background task. The vision's quality bar says "every card must have upright and reversed meanings, an emotional interpretation, a practical guidance line, a reflection question, and a numerology resonance note." This is measurable. Measure it programmatically. The compile-time assertion I proposed above is not optional.
-
----
-
-## 7. What Everyone Is Excited About That They Shouldn't Be: The Deterministic Seed
-
-The vision specifies: `drawCards(n: number, seed?: string): TarotCard[]` — "deterministic card draw that uses the user's natal chart data as a seed component so draws are not purely random."
-
-This sounds profound. "Your natal chart determines your cards." In practice, this means: if the same person draws a daily card twice in the same day, they always get the same card. If the seed is based on birth data + date, the card for any given day is pre-determined. The randomness is an illusion.
-
-This is not necessarily bad, but it has an unexamined consequence: **a determined user can reverse-engineer what card they will get tomorrow by inspecting the seed algorithm.** More importantly, if the seed is weak (e.g., just `birthdate + today's date` as a string, hashed naively), users with similar birth dates will draw similar cards. Two users born on the same day will always draw the same card on the same day.
-
-Is this a problem? It is a business risk if users discover it and feel the "personalization" is an illusion. It is a UX risk if a user draws "The Tower" every Monday for three months because the seeding algorithm has a harmonic with weekly periodicity.
-
-**My proposal:** The seed must incorporate enough entropy to avoid calendar harmonics. At minimum: SHA-256(userId + birthDate + currentDate + spreadType). The userId prevents same-birthday collisions. Test for calendar periodicity explicitly: for 10 test users, verify that their Monday cards over 4 weeks are not identical.
-
----
-
-## 8. The `AppState` Bloat Risk
-
-I am looking at `src/context/appState.ts`. This file already contains state for: form, birth data, chart, aspects, reading, transit (×5 fields), synastry (×8 fields), synastry transit (×4 fields), solar return (×4 fields), storage warning. It is 414 lines and growing.
-
-The vision proposes adding to `AppState`: "current reading type, drawn cards, interpretation results, saved reading IDs." This is at least 8–12 new fields.
-
-The `AppState` is already a God Object. Every component that calls `useAppState()` receives a reference to this entire object. Adding 10 Tarot fields means every component re-renders when any Tarot field changes, even components that have nothing to do with Tarot.
-
-The existing transit, synastry, and solar return state is already a performance debt. Tarot will make it worse unless it is put in a separate context.
-
-**My proposal:** Tarot reading state must live in a dedicated `TarotContext` (analogous to how `AuthContext.tsx` is separate from `AppContext.tsx`). The `AppState` should only hold `tarotView: TarotView | null` to know whether Tarot is active. This is not premature optimization — it is standard React architecture. Adding 10 more fields to `AppState` now will make the sixth sprint that touches this file the sprint that causes a mysterious re-render cascade that takes two days to diagnose.
-
----
-
-## 9. The Discuss ✦ Context Payload: Token Explosion
-
-The vision mandates: "all drawn cards with positions and reversal states, the full instant interpretation, the GPT synthesis if loaded, natal chart positions (Big Three + houses), current transits, numerology personal day/year, advance category signal, and the user's stated reading question/intention."
-
-For a Celtic Cross reading: 10 cards × (card name + position name + reversal + upright meaning + reversed meaning + emotional meaning + practical guidance + reflection question + numerology resonance + transit connection) — that is easily 5,000–8,000 tokens of context before the system prompt, natal chart, and transits are added. Add GPT synthesis (which could be 1,000–2,000 tokens), natal chart (300–500 tokens), transits (300–500 tokens), and the user's question — we are approaching the context limit of `gpt-4o-mini` (128k tokens technically, but the cost and latency at 10,000 tokens per call is non-trivial).
-
-The existing `callOpenAI()` in `server/services/gpt.ts` uses `max_tokens: 2000` by default. A `tarot-discuss` response budget of 2,000 tokens against a 10,000-token context is a 20% response-to-context ratio. This is fine for quality but expensive.
-
-The existing session call counter `_sessionCalls` in `gptInterpretation.ts` does not distinguish between a 300-token `daily-snapshot` call and a 10,000-token `tarot-discuss` call. The rate limit treats them identically. This is a hidden cost asymmetry.
-
-**My proposal:** (a) The `tarot-discuss` handler must use a summarized context, not the full raw interpretation payload. The `TarotDiscussModal.tsx` should send a `discussContext` string — pre-serialized on the client — not the raw nested objects. (b) The `callOpenAI()` invocation for `tarot-celtic-synthesis` and `tarot-discuss` must explicitly set `max_tokens: 3000` and `max_tokens: 1500` respectively, not inherit the 2,000 default. These are different use cases with different output length requirements.
-
----
-
-## 10. The Visual Asset Decision: The Unresolved Risk
-
-The vision says: "Options: (a) SVG card faces designed in code, (b) a curated open-license deck (e.g., Rider-Waite in public domain), (c) symbolic placeholder cards with rich CSS treatment." This decision is left as "the proposal for this area must make a concrete decision."
-
-I will make the decision: **option (b) is a legal trap and option (a) is a scope explosion.**
-
-The Rider-Waite deck is in the public domain — but only the original 1910 printing. Colored versions, digitized versions, and "Rider-Waite-Smith" reproductions with any modifications may carry copyright. The copyright status varies by jurisdiction. Using "public domain Rider-Waite" images downloaded from the internet without verifying the specific source's licensing is asking for a DMCA notice in production.
-
-Option (a), SVG card faces designed in code, is the right long-term answer — but it is not a sprint task, it is a design project. Full custom SVG card art for 78 cards is weeks of work, not days.
-
-**My proposal:** Ship sprint 0023 with option (c) — symbolic CSS cards with rich treatment — explicitly named as the v1 visual implementation. Define the visual spec for these cards precisely (card dimensions, gradient backgrounds per suit/arcana, symbolic icon, gold border treatment, typography for card name). Make the card face component accept a future `imageUrl` prop so option (b) or (a) can be injected later without a component rewrite. Do not let the visual asset decision block the module from shipping. Beautiful CSS cards that render reliably are better than a legal dispute or a scope explosion.
-
----
-
-## 11. The Server Architecture: What Happens When `handleGptRequest` Becomes 18 Cases
-
-Currently `handleGptRequest` in `server/services/gpt.ts` has 15 `case` branches. The Tarot module adds 4 more: `tarot-single-synthesis`, `tarot-three-synthesis`, `tarot-celtic-synthesis`, `tarot-discuss`. That is 19 cases in a single switch statement dispatching to a single file that is already 1,019 lines.
-
-This is not a catastrophic problem yet, but it is the file where the next sprint's bug will be introduced by a developer who edits line 400 without reading line 800. The `gpt.ts` service file is becoming a monolith.
-
-**My proposal:** Extract Tarot GPT handlers to `server/services/gptTarot.ts` and import them into `handleGptRequest`. The pattern already exists: the synastry handlers could have been in `gptSynastry.ts`. This is a 30-minute refactor that prevents a 3-hour debugging session six sprints from now.
-
----
-
-## 12. The Rate Limit Bypass: The Localhost Gate Is Wider Than It Looks
-
-In `gptRateLimit.ts` line 110:
+At line 76–92 of `src/components/tarot/CelticCrossReading.tsx`, I find this:
 
 ```typescript
-if (process.env.NODE_ENV !== 'production' && LOCALHOST.has(req.ip ?? '')) {
-  next()
-  return
+// ─── Stub: instant interpretation ────────────────────────────────────────────
+// Engine (task-0006) will provide a proper computeInstantInterpretation.
+function computeInstantInterpretation(card: DrawnCard, position: typeof CELTIC_CROSS_POSITIONS[number]): InstantInterpretation {
+```
+
+The comment says "Engine (task-0006) will provide a proper `computeInstantInterpretation`." Task-0006 shipped. The real `computeInstantInterpretation` exists in `src/engine/tarot.ts` and is already being imported and called correctly in `TarotPage.tsx` (line 10, imported as `computeInstantInterpretation from '../../engine/tarot'`). But `CelticCrossReading.tsx` has its own local stub that shadows the real function.
+
+The stub function, when examined, produces an `InstantInterpretation` with:
+- No transit influence (the `astroConnection` field is populated with `[card.rulingPlanet, card.rulingSign].filter(Boolean).join(' — ')` — a raw data field, not an interpreted signal)
+- No lunar phase note
+- No advance category note  
+- No element resonance note
+- No position-aware text — despite `position` being passed, the stub ignores position logic entirely beyond storing `position.name` and `position.description`
+- A reversal note constructed as a string template (`In reversal, ${card.coreMeaning.toLowerCase()} turns inward`) — not the card-specific reversed meaning
+
+This stub is what every Celtic Cross user receives in the interpretation panel during the reveal sequence. It is not the engine. It is a placeholder that was never replaced.
+
+The real engine function at line 678 of `src/engine/tarot.ts` computes all the missing signals: `buildTransitInfluence()`, `buildAstroHeadline()`, `buildElementResonanceNote()`, `buildLunarPhaseNote()`, `buildAdvanceCategoryNote()`, and `adaptInterpretationToPosition()`. All of this work exists and is tested. None of it reaches the Celtic Cross user.
+
+**What breaks:** Every Celtic Cross interpretation panel shows a stripped-down reading. This is not a future gap to address — this is the current state. The team shipped this believing task-0006 was complete. The stub is still in production.
+
+---
+
+## 3. The GPT Rate Limiter Is Not Wired to the Tarot Routes
+
+I looked at `server/routes/tarot.ts`. The file has two routes: `POST /api/tarot/check-limit` and `GET /api/tarot/usage`. Neither route touches GPT. The actual GPT synthesis calls for tarot — `handleTarotSingleSynthesis`, `handleTarotThreeSynthesis`, `handleTarotCelticSynthesis`, `handleTarotDiscuss` — are dispatched through `server/services/gpt.ts` via the main GPT router, not through the tarot router.
+
+This means tarot synthesis calls go through the existing `gptRateLimit` middleware — the same middleware that governs daily readings, solar returns, and synastry. A user who draws a Celtic Cross consumes the same daily GPT budget as a user who requests a daily transit reading.
+
+But the `tarot_usage` table, the `checkDailyCardLimit`, and `checkWeeklyThreeCardLimit` functions in `tarotGate.ts` — the functions I explicitly recommended building — govern card *draws*, not synthesis calls. The card draw limit and the GPT synthesis call are tracked by different systems that do not talk to each other.
+
+This creates a specific exploit: a user can draw their daily card (incrementing `daily_cards` in `tarot_usage`), receive the instant interpretation without triggering a synthesis, then call the synthesis endpoint directly. The draw counter says they've used their allowance. The synthesis counter (tracked by the generic GPT rate limiter) is separate. Whether this constitutes an exploit or intended behavior is not documented anywhere in the codebase.
+
+More importantly, the Celtic Cross has no draw counter at all — `checkCelticCrossAccess()` only checks tier. A basic-tier user can trigger 50 Celtic Cross GPT syntheses in a day and each one goes through the generic GPT limiter, not a tarot-specific gate.
+
+**The hidden assumption that will not hold:** The team believes they built a tarot-specific rate limiting system. They built a tarot-specific *draw counting* system. These are different things, and the difference matters when GPT costs are material.
+
+---
+
+## 4. The Celtic Cross Synthesis Runs Without the Live Sky
+
+This is not a gap. It is a design decision that was implemented and then described as a gap.
+
+In `server/services/gptTarot.ts`, `handleTarotCelticSynthesis` at line 448 does something notable. When `userId` is provided, it re-derives the natal chart and recalculates numerology. But it does not call `calculateTransits()`. The three-card handler at line 323 does call `calculateTransits()` for both daily and weekly periods. The single-card handler at line 220 does the same.
+
+The Celtic handler explicitly has no transit calculation:
+
+```typescript
+if (userId) {
+  const ctx = resolveUserBirthContext(userId)
+  if (ctx) {
+    // ... natal chart, numerology recalculated ...
+    // calculateTransits is NOT called
+  }
 }
 ```
 
-And in `TIER_LIMITS`:
+The Celtic Cross prompt therefore contains the person's natal Sun, Moon, Ascendant, Moon phase name, advance signal — but no daily transit summary, no weekly transit summary, no specific transit aspects. The prompt section labeled "## This Person's Living Sky" at line 509 shows only static natal data plus current Moon phase and personal day. The sky is not live. It is a snapshot of the person's birth chart plus a moon phase label — not the actual transits in effect today.
 
-```typescript
-const TIER_LIMITS: Record<Tier, number> = {
-  free: 10000,
-  basic: 10000,
-  advanced: 10000,
-}
-```
+For comparison, the single-card prompt has four distinct sections: "## This Person's Sky Right Now," "## Daily Transit Context," and "## Weekly Transit Context," each with real computed data. The Celtic Cross, supposedly the most complex and meaningful spread, has none of this.
 
-This is labeled "TEST MODE: limits raised to 10000 for all tiers — effectively disabled." The comment says TEST MODE but this is committed to the main branch and will be in production unless explicitly changed before deploy. The same pattern appears in `auth.ts` line 26: `const TIER_LIMITS: Record<string, number> = { free: 200, basic: 200, advanced: 200 }`.
-
-These are not test-mode guards. They are production configuration values that happen to be set to testing values. There is no `if (NODE_ENV !== 'production')` guard on the TIER_LIMITS constants. If this ships to production as-is, the entire rate limiting and subscription monetization model is disabled.
-
-This is not new — it presumably already exists in production. But the Tarot module will add new Tarot-specific limits, and if those are also initialized as 10000 "for testing," the subscription gate for Tarot will not work on day one.
-
-**My proposal:** Before adding any Tarot-specific limits, the existing TEST MODE constants must be resolved. Either: (a) move actual production limits to environment variables (`TIER_LIMIT_FREE=3`, `TIER_LIMIT_ADVANCED=20`) with the 10000 values only in `.env.test`, or (b) gate the 10000 values explicitly behind `NODE_ENV !== 'production'` checks. This is a security issue masquerading as a configuration issue.
+The vision document acknowledges this. But acknowledging it as a gap does not change the fact that every Celtic Cross synthesis currently produced is running without the most contextualizing data the system possesses. The ten-card constellation that is supposed to feel "written for them" is written against a partial sky.
 
 ---
 
-## Summary of Proposals
+## 5. The `gpt-4o-mini` Model Is Being Used for a 3000-Token Celtic Cross Synthesis
 
-| # | Area | Proposal | Priority |
-|---|------|----------|----------|
-| 1 | Cards data layer | Compile-time completeness assertion for all 78 cards | Critical |
-| 2 | Transit adaptations | Three-level fallback chain in `computeInstantInterpretation()` | High |
-| 3 | GPT synthesis failure | Four explicit states in `TarotSynthesisPanel`: loading, success, unavailable, rate-limited | Critical |
-| 4 | Saved readings | Schema versioning column + typed payload serialization + FK discipline | High |
-| 5 | Subscription gating | Separate `tarot_usage` table with daily/weekly counters | High |
-| 6 | Cards data quality | Treat database authoring as a first-class deliverable, not background work | Critical |
-| 7 | Deterministic seed | Incorporate userId + birthDate + date + spreadType; test for periodicity | Medium |
-| 8 | AppState growth | Isolate Tarot state in `TarotContext`, not `AppState` | High |
-| 9 | Discuss context payload | Pre-serialize context client-side; set explicit `max_tokens` per handler | Medium |
-| 10 | Visual assets | Ship CSS symbolic cards as v1; accept `imageUrl` prop for future upgrade | High |
-| 11 | GPT service monolith | Extract Tarot handlers to `server/services/gptTarot.ts` | Medium |
-| 12 | Rate limit TEST MODE | Gate 10000 limits behind `NODE_ENV` check before Tarot limits ship | Critical |
+In `server/services/gpt.ts`, the `callOpenAI` function is hardcoded to `model: 'gpt-4o-mini'`. The Celtic Cross synthesis handler passes `max_tokens: 3000`. This is the most expensive and complex prompt in the system — ten cards, eight named sections, specific instructions about archetypal framing, psychological dynamics, and astrology resonance — and it is being routed to the cheapest, least capable model in the OpenAI family.
+
+`gpt-4o-mini` is appropriate for the daily snapshot, the brief transit reading. It is a 30-second reading for a 300-token prompt. A Celtic Cross synthesis is a 3000-token output document that requires the model to hold ten card meanings, their positions, their elemental interactions, natal chart data, and a stated intention simultaneously while generating eight coherent sections. The model is not incapable of this, but the probability of the output being generic, repetitive, or internally contradictory is higher at this model tier.
+
+The team is not aware of this trade-off because there is no documentation of the model selection rationale. The model is hardcoded once and the decision is invisible.
+
+**The hidden assumption that will not hold:** The assumption is that `gpt-4o-mini` can produce synthesis quality that satisfies the "could this apply to any other person on the platform" quality bar for a ten-card Celtic Cross. This assumption has not been tested against the quality bar. It may be correct. It may not. The failure mode is silent: the model produces plausible-sounding text that passes a casual review but fails the bar under close reading. Nobody has an alert for this.
+
+---
+
+## 6. The `userId` Optional Everywhere: Data Flows Without Authorization at Key Points
+
+In `handleTarotSingleSynthesis(payload, userId?: number)`, the `userId` parameter is optional. When it is absent, the function uses the client-supplied payload values for natal signs, transit summaries, and personal day. The server does not verify these client-supplied values.
+
+This means a client can send a modified synthesis payload — different natal signs, different transit summary — and the server will use the client-supplied values without question. A user can claim to be a Scorpio Sun when they are a Gemini Sun, and the synthesis will be tailored to a Scorpio Sun.
+
+Is this a practical attack vector? For most users, no. For a user who wants a reading that better fits their self-concept, yes. More practically: it means the server has no ground truth for quality control. If the client has a bug that corrupts the natal sign serialization, the server will synthesize a reading against corrupted data without any warning. The `resolveUserBirthContext(userId)` path, which re-derives data server-side, only runs when `userId` is present and the user has a birth context registered. For anonymous or partially registered users, the fallback is entirely client-trust.
+
+This is not a sprint-0024 problem to solve. But it is a fragility that every sprint that adds synthesis handlers makes slightly worse.
+
+---
+
+## 7. What Everyone Is Excited About That They Shouldn't Be: Intention Threading
+
+The sprint vision has identified "intention threading" as the key depth gap. The proposal is to pass `userIntention` through the interpretation engine, the GPT prompts, and the Discuss context so that the reading is anchored to what the user actually came to explore.
+
+I looked at how `userIntention` currently flows through the system.
+
+In `handleTarotSingleSynthesis`, intention appears once at the very top of the prompt:
+
+```typescript
+const intentionLine = payload.userIntention
+  ? `The person drew this card seeking clarity on: "${payload.userIntention}"`
+  : 'This is an open daily draw — no specific question was asked.'
+```
+
+It is a single line inserted at the top, before the card data, the sky data, the transit context. The model reads it and moves on. There is no instruction to return to this intention at any point in the synthesis. There is no instruction to evaluate whether the card addresses the intention or diverges from it. There is no instruction to close the synthesis by reflecting the intention back to the user.
+
+In the GPT prompt instructions for the single-card synthesis, the word "intention" appears exactly once — in that opening line. The four-paragraph instruction block does not reference intention at any point. Paragraphs 2, 3, and 4 are about natal chart, daily transits, and weekly transits. The model is not instructed to anchor these to the stated intention.
+
+Sprint 0024 plans to "thread intention explicitly." Threading requires more than inserting the intention string once at the top of a prompt and expecting a language model to honor it across four paragraphs. A model responding to `max_tokens: 900` with no explicit instruction to weave the intention through each section will optimize for completion coherence, not intention relevance. The intention will influence the first sentence and fade.
+
+**The fragility:** The team will add the intention to the engine context and re-insert it in additional prompt positions and declare the threading done. The output will be slightly more intention-relevant than before. Whether it meets the vision's bar — "traceable in more than one paragraph" — depends on prompt engineering precision that has not yet been specified. This is an output quality claim that cannot be verified programmatically.
+
+---
+
+## 8. The Randomness Incoherence in the Celtic Cross
+
+At the top of `CelticCrossReading.tsx`, the card draw uses:
+
+```typescript
+function shuffleTarotDeck(): DataTarotCard[] {
+  const deck = [...ALL_TAROT_CARDS]
+  for (let index = deck.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(Math.random() * (index + 1))
+    // ...
+  }
+}
+
+function computeCardReversal(): boolean {
+  return Math.random() < 0.3
+}
+```
+
+This is `Math.random()` — the browser's non-seeded PRNG. Compare this to `src/engine/tarot.ts` where `drawCards()` uses a deterministic LCG seeded with `userId + birthDate + localDate + spreadType`. The engine provides a reproducible, user-anchored draw. `CelticCrossReading.tsx` ignores the engine entirely and uses pure randomness.
+
+This means:
+- A Celtic Cross user who draws the same day twice gets different cards each time
+- The Celtic Cross cannot be replicated from a seed (breaking saved readings replay)
+- The "natal chart shapes your draw" narrative that the product communicates does not apply to the Celtic Cross
+
+This is not a minor inconsistency. It is a philosophical incoherence. The single-card and three-card flows use the engine's seeded draw. The Celtic Cross uses dice. Users who do both in the same session are experiencing two different ontologies without knowing it.
+
+The saved reading schema in `types.ts` stores `drawnCards` with `cardId` and `reversed`, which allows replay. But if the reversal was assigned via `Math.random()`, replaying a saved reading cannot guarantee the same reversal states unless those states were saved at draw time. The schema saves them, so replay works — but the draw itself being unseed means the "personalized draw" marketing claim does not apply to the most premium spread in the product.
+
+---
+
+## 9. The Error Classification That Creates Incorrect User Messaging
+
+In `CelticCrossReading.tsx`, the synthesis error handler at lines 527–542:
+
+```typescript
+if (err instanceof RateLimitError) {
+  setSynthesisError('rate-limited')
+} else if (err instanceof Error) {
+  if (err.message.includes('401') || err.message.includes('Unauthorized')) {
+    setSynthesisError('session-expired')
+  } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
+    setSynthesisError('timeout')
+  } else {
+    setSynthesisError('unavailable')
+  }
+}
+```
+
+The classification logic uses string matching on error messages. `err.message.includes('401')` is a fragility: if the error message format ever changes — if a new middleware wraps the error differently — the '401' check fails silently and the user sees "The synthesis is resting" instead of "Your session has ended." This misclassification sends the user to retry an endpoint that will reject them until they re-authenticate.
+
+The string `'timeout'` will not be present if the AbortController fires and produces a `DOMException` with the message "signal is aborted without reason" or "The user aborted a request." The timeout classification will fail in exactly the scenario where a slow Celtic Cross synthesis times out — which is the most likely production failure mode given that `gpt-4o-mini` needs to produce 3000 tokens.
+
+**What breaks under stress:** A user waits through a 10-position reveal sequence, then waits through the constellation overlay, then waits 90 seconds for a synthesis that times out. The error fires. The timeout check misses because the error message format doesn't contain the string `'timeout'`. The user sees "The synthesis is resting" with a Retry button, retries, waits another 90 seconds, gets the same result. No error tells them the system has a timeout problem. No alert tells the team.
+
+---
+
+## 10. The `TarotContext.tsx` Type Definitions Have Not Been Updated
+
+The comment at line 4 of `src/context/TarotContext.tsx` reads:
+
+```typescript
+// Placeholder types — replaced when src/engine/tarot.ts and src/data/tarot/spreadPositions.ts land
+```
+
+These files have landed. `src/engine/tarot.ts` exists and exports its own `DrawnCard`, `InstantInterpretation`, `SpreadMode` types. But `TarotContext.tsx` still uses its own placeholder definitions:
+
+```typescript
+export interface DrawnCard {
+  id: string
+  name: string
+  suit: string | null
+  number: number | null
+}
+```
+
+This is a fraction of the actual `DrawnCard` shape. The context's `TarotState.drawnCards: DrawnCard[]` uses these stripped-down placeholder types. Components downstream of the context receive a different shape than the engine produces. This is why `TarotPage.tsx` imports separately from both:
+
+```typescript
+import { TarotProvider, useTarot } from '../../context/TarotContext'
+import type { TarotAstroContext } from '../../context/TarotContext'
+// ...
+import type {
+  TarotCard,
+  TarotAstroContext as EngineCtx,
+  InstantInterpretation as EngineInterp,
+} from '../../engine/tarot'
+```
+
+The as-aliasing (EngineCtx, EngineInterp) is a workaround for the name collision caused by the context's unreplaced placeholder types. The two type systems coexist by aliasing rather than unification.
+
+The comment saying "replaced when these files land" was written before the files landed. The files landed. The replacement did not happen. This is the footprint of a task that was marked done without verifying the cleanup.
+
+---
+
+## 11. The Data Layer Has No Defense Against Silent Truncation
+
+The `formatTransitSummary` function in `gptTarot.ts` slices arrays:
+
+```typescript
+const topAspects = transitData.transitAspects.slice(0, periodLabel === 'Daily' ? 5 : 7)
+const ingresses = transitData.ingresses.slice(0, periodLabel === 'Daily' ? 2 : 4)
+```
+
+The number 5 and 7 are hardcoded. If the transit engine returns 20 aspects, 15 are silently dropped. The GPT model sees only the first 5. If the most significant transit for this user's reading is aspect #8 — because aspects are ordered by something other than significance, such as calculation order — the model never sees it.
+
+I looked at how `transitData.transitAspects` is ordered. The `calculateTransits` function in `src/engine/transits.ts` presumably orders aspects by orb or by some priority. But the transit summary slice takes the first N without any documentation of what "first" means in this ordering. Whether "first" is "most relevant" or "most recently calculated" or "alphabetical by planet name" is not documented in `gptTarot.ts`.
+
+**The silent wrong result risk:** A user with Saturn square natal Sun (a major life transit, orb 0.5°) and Mercury trine natal Venus (a minor transit, orb 0.2°) may receive a synthesis that mentions Mercury-Venus and ignores Saturn-Sun — if Saturn-Sun happens to fall outside the top-5 slice. The reading would be plausible, internally coherent, and wrong.
+
+---
+
+## 12. What This Sprint Is Underestimating: The Prompt Engineering Is Not Engineering
+
+The sprint vision states: "The GPT prompt voice is capable but not yet ruthless." The fix is described as "tightening" prompts to enforce "fewer, sharper sentences" and "concrete imagery over abstraction."
+
+This framing understates the problem. Prompts are not configuration knobs. They are natural language instructions given to a probabilistic model. Tightening a prompt is a creative writing exercise with no ground truth for success, no unit tests, and no regression detection. The team will tighten the prompts, produce some test readings that seem better, and declare the work done. Whether the improvement is durable — whether it holds for a user with an unusual natal chart, a vague intention, or a spread heavy in court cards — cannot be determined without testing against a diverse set of real inputs.
+
+The "could this apply to any other person on the platform" quality bar is a human judgment that requires human reviewers to apply it to real outputs across diverse inputs. This is not a sprint task. It is an ongoing editorial function. If the team treats it as a one-time prompt edit, the prompts will regress under the pressure of the next sprint that touches them.
+
+I am not saying do not tighten the prompts. I am saying: build the infrastructure to know when they have been degraded. A small set of canonical test cases — specific natal charts, specific intentions, specific card draws — evaluated against the quality bar by a reviewer after every prompt change is not optional for a product whose primary value is interpretation quality.
+
+---
+
+## Summary of Fragilities
+
+| # | Fragility | Current State | Risk Level |
+|---|-----------|---------------|------------|
+| 1 | Three parallel `TarotAstroContext` type definitions | Active in production | High — every transit wiring attempt touches the wrong type |
+| 2 | Celtic Cross uses local stub instead of real engine | Active in production | Critical — every Celtic reading is degraded |
+| 3 | Tarot draw counter vs. synthesis counter are separate systems | Active in production | Medium — cost asymmetry, potential exploit |
+| 4 | Celtic synthesis runs without live transits | Active in production | Critical — core depth claim is false |
+| 5 | `gpt-4o-mini` for 3000-token Celtic synthesis | Active in production | Medium — quality ceiling unknown |
+| 6 | `userId` optional in synthesis handlers — client-supplied data unverified | Active in production | Low-Medium |
+| 7 | Intention threading is one-line insertion, not structural threading | Not yet built | Medium — output quality claim will not be met |
+| 8 | Celtic Cross uses `Math.random()` instead of seeded engine draw | Active in production | Medium — philosophical incoherence |
+| 9 | Error classification uses brittle string matching | Active in production | High — timeout failures produce wrong user messaging |
+| 10 | `TarotContext.tsx` placeholder types never replaced | Active in production | High — future type work touches wrong definitions |
+| 11 | Transit summary truncated by fixed slice with no orb-priority ordering | Active in production | Medium — silent wrong results possible |
+| 12 | Prompt quality has no regression detection infrastructure | Structural gap | High — improvements cannot be verified as durable |
 
 ---
 
 ## Final Observation
 
-The sprint vision is ambitious, well-structured, and shows genuine understanding of the product. What it lacks is a failure budget. Every feature is described by its happy path. The Tarot module will be used by real users who have slow connections, hit their rate limits, draw the Seven of Swords on a bad day, try to save a reading while their session has expired, and open a saved Celtic Cross from six months ago against a schema that has since changed.
+The team has a working tarot module. The mechanics are not "sound" in the sense of structurally correct — there are at least three places where the code does something other than what the team believes it does (items 2, 3, and 8 above). But the user experience works, the synthesis produces plausible output, and the failure modes are mostly soft.
 
-Robustness is not a feature you add later. It is the only feature that matters when everything else breaks.
+Sprint 0024 is asking the team to deepen interpretation quality against an implementation that has structural divergences the team does not know exist. The depth improvements will be applied on top of a stub that shadows the real engine. The transit wiring will populate a context type that is not consumed by the component that needs it. The intention threading will be added to a prompt structure that provides no mechanism to enforce it across multiple paragraphs.
 
-Build the failure paths before you build the animations.
+This is not a catastrophe. It is a distributed fragility — ten small things that each appear manageable, but whose combined effect is that the quality improvements sprint 0024 aims for will be partially or fully invisible to the user.
+
+Fix the three type universes first. Replace the Celtic Cross stub with the real engine. Seed the Celtic Cross draw deterministically. Then add depth.
+
+Antifragility is not built by adding features on top of a fragile foundation. It is built by making the foundation honest about what it actually does.

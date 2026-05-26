@@ -34,13 +34,11 @@ if (!isDev && JWT_SECRET.length < 32) {
 }
 
 if (!isDev && !process.env.STRIPE_SECRET_KEY) {
-  console.error('FATAL: STRIPE_SECRET_KEY must be set in production');
-  process.exit(1);
+  console.warn('WARN: STRIPE_SECRET_KEY not set — payment features will be unavailable');
 }
 
 if (!isDev && !process.env.STRIPE_WEBHOOK_SECRET) {
-  console.error('FATAL: STRIPE_WEBHOOK_SECRET must be set in production');
-  process.exit(1);
+  console.warn('WARN: STRIPE_WEBHOOK_SECRET not set — webhook processing will be unavailable');
 }
 
 if (!JWT_SECRET) {
