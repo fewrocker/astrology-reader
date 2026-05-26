@@ -555,6 +555,10 @@ export interface TarotSingleSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalMoonHouse: number | null
+  natalVenusHouse: number | null
+  natalNorthNodeHouse: number | null
+  natalMarsHouse: number | null
   personalDay: number
   personalYear: number
   advanceCategory: string | null
@@ -576,6 +580,10 @@ export interface TarotThreeSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalMoonHouse: number | null
+  natalVenusHouse: number | null
+  natalNorthNodeHouse: number | null
+  natalMarsHouse: number | null
   personalDay: number
   personalYear: number
   advanceCategory: string | null
@@ -613,6 +621,10 @@ export interface TarotCelticSynthesisPayload {
   natalMoonSign: string
   natalAscSign: string
   natalMoonPhase: string | null
+  natalMoonHouse: number | null
+  natalVenusHouse: number | null
+  natalNorthNodeHouse: number | null
+  natalMarsHouse: number | null
   personalDay: number
   personalYear: number
   lifePathNumber: number

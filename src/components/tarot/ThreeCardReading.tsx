@@ -38,7 +38,7 @@ export interface ThreeCardReadingProps {
   /** Personal year for GPT synthesis */
   personalYear: number
   userIntention: string | null
-  onSave: () => void
+  onSave: () => Promise<void>
   onDiscard: () => void
   onOpenDiscuss: () => void
   onPickCard: (deckIndex: number) => void
@@ -192,6 +192,51 @@ function computeAIFreeSynthesis(
       `What is this reading pointing toward that you have not yet been willing to name?`,
     ],
   }
+}
+
+// ─── Build rich discuss context string ────────────────────────────────────────
+function buildDiscussContext(
+  spreadPositions: SpreadPosition[],
+  drawnCards: DrawnCard[],
+  astroContext: TarotAstroContext,
+  userIntention: string | null,
+  dailyTransitSummary: string | null,
+  synthesisData: ParsedSynthesis | null,
+): string {
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  let ctx = `User intention: ${userIntention ?? 'Not stated'}\n\n`
+  ctx += `THREE CARD TAROT READING (${spreadPositions.map(p => p.label).join(' / ')}) — ${date}\n`
+  ctx += `Natal: ${astroContext.natalSunSign ?? ''}, ${astroContext.natalMoonSign ?? ''}, ${astroContext.natalAscendantSign ?? ''} | Moon: ${astroContext.lunarPhaseName ?? ''} | Personal Day: ${astroContext.personalDay}\n`
+  if (astroContext.natalDominantElement) ctx += `Dominant Element: ${astroContext.natalDominantElement}\n`
+  if (astroContext.advanceCategory) ctx += `Advance category: ${astroContext.advanceCategory}\n`
+
+  ctx += '\nPOSITIONS AND CARDS:\n'
+  drawnCards.forEach((dc, i) => {
+    const pos = spreadPositions[i]
+    ctx += `${i + 1}. ${pos?.label ?? `Position ${i + 1}`} — ${dc.card.name} (${dc.reversed ? 'Reversed' : 'Upright'})\n`
+    ctx += `   Core: ${dc.interpretation.coreMeaning}\n`
+    ctx += `   Theme: ${dc.interpretation.symbolicTheme}\n`
+    if (dc.interpretation.astroConnection.astroHeadline) {
+      ctx += `   Astro: ${dc.interpretation.astroConnection.astroHeadline}\n`
+    }
+  })
+
+  if (dailyTransitSummary) {
+    ctx += `\nDAILY TRANSIT CONTEXT:\n${dailyTransitSummary}\n`
+  }
+
+  if (synthesisData) {
+    ctx += '\nAI SYNTHESIS:\n'
+    if (synthesisData.openingSentence) ctx += `Opening: ${synthesisData.openingSentence}\n`
+    if (synthesisData.mainTheme) ctx += `Main Theme: ${synthesisData.mainTheme}\n`
+    if (synthesisData.mainTension) ctx += `Main Tension: ${synthesisData.mainTension}\n`
+    if (synthesisData.direction) ctx += `Direction: ${synthesisData.direction}\n`
+    if (synthesisData.hiddenInfluence) ctx += `Hidden Influence: ${synthesisData.hiddenInfluence}\n`
+    if (synthesisData.advice) ctx += `Advice: ${synthesisData.advice}\n`
+    if (synthesisData.timing) ctx += `Timing: ${synthesisData.timing}\n`
+  }
+
+  return ctx
 }
 
 function getElementGradient(element: string | null): string {
@@ -812,6 +857,10 @@ export default function ThreeCardReading({
       natalSunSign: astroContext.natalSunSign ?? '',
       natalMoonSign: astroContext.natalMoonSign ?? '',
       natalAscSign: astroContext.natalAscendantSign ?? '',
+      natalMoonHouse: astroContext.natalMoonHouse,
+      natalVenusHouse: astroContext.natalVenusHouse,
+      natalNorthNodeHouse: astroContext.natalNorthNodeHouse,
+      natalMarsHouse: astroContext.natalMarsHouse,
       personalDay: astroContext.personalDay,
       personalYear,
       advanceCategory: astroContext.advanceCategory,
@@ -836,7 +885,7 @@ export default function ThreeCardReading({
         const retryable = !(err instanceof RateLimitError) && !String(err).includes('400')
         setSynthesisState(retryable ? 'error-retryable' : 'error-permanent')
       })
-  }, [astroContext, drawnCards, instantInterpretations, placementComplete, spreadMode, spreadPositions, userIntention])
+  }, [astroContext, drawnCards, placementComplete, spreadMode, spreadPositions, userIntention])
 
   // Cleanup abort on unmount
   useEffect(() => {
@@ -849,10 +898,16 @@ export default function ThreeCardReading({
     setSynthesisState('idle')
   }, [])
 
-  const handleSave = useCallback(() => {
-    setSaveState('saved')
-    onSave()
-  }, [onSave])
+  const handleSave = useCallback(async () => {
+    if (saveState === 'saved') return
+    setSaveState('idle')
+    try {
+      await onSave()
+      setSaveState('saved')
+    } catch {
+      setSaveState('error')
+    }
+  }, [onSave, saveState])
 
   const handleBackRequest = useCallback(() => {
     setShowBackConfirm(true)
@@ -863,8 +918,12 @@ export default function ThreeCardReading({
     onDiscard()
   }, [onDiscard])
 
-  const handleSaveAndBack = useCallback(() => {
-    onSave()
+  const handleSaveAndBack = useCallback(async () => {
+    try {
+      await onSave()
+    } catch {
+      // Proceed with navigation even if save fails — user has chosen to leave
+    }
     abortRef.current?.abort()
     onDiscard()
   }, [onSave, onDiscard])
@@ -877,15 +936,14 @@ export default function ThreeCardReading({
 
   // Active synthesis data: GPT result or AI fallback
   const activeSynthesis = synthesisData ?? aiFallback
-  const discussContext = [
-    `THREE CARD TAROT READING (${spreadPositions.map(position => position.label).join(' / ')})`,
-    userIntention ? `Intention: ${userIntention}` : 'Intention: Open reading',
-    ...drawnCards.map((dc, index) => {
-      const position = spreadPositions[index]
-      return `${index + 1}. ${position.label}: ${dc.card.name} (${dc.reversed ? 'Reversed' : 'Upright'})\nCore: ${dc.interpretation.coreMeaning}\nTheme: ${dc.interpretation.symbolicTheme}\nGuidance: ${dc.interpretation.practicalGuidance}`
-    }),
-    activeSynthesis ? `Synthesis: ${activeSynthesis.mainTheme || activeSynthesis.openingSentence}` : 'Synthesis: Not loaded yet',
-  ].join('\n\n')
+  const discussContext = buildDiscussContext(
+    spreadPositions,
+    drawnCards,
+    astroContext,
+    userIntention,
+    dailyTransitSummary,
+    synthesisData,
+  )
 
   // Show "save before leaving" only when synthesis is complete
   const canSaveBeforeLeaving = showActions && saveState !== 'saved'

@@ -1,21 +1,21 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotCard as DataTarotCard } from '../../data/tarot/types'
 import type {
   SynthesisChapter,
-  SavedReading,
   CelticCrossPrecomputedSignals,
 } from './types'
 import type { DrawnCard, InstantInterpretation, TarotAstroContext } from '../../engine/tarot'
 import { computeInstantInterpretation } from '../../engine/tarot'
 import { CELTIC_CROSS_POSITIONS } from '../../data/tarot/spreadPositions'
 import { getTarotCelticSynthesis, RateLimitError } from '../../services/gptInterpretation'
+import type { SaveReadingRequest } from '../../services/readingsService'
 import type { TarotCelticSynthesisPayload } from '../../services/gptInterpretation'
 import CelticCrossCard from './CelticCrossCard'
 import TarotSynthesisPanel from './TarotSynthesisPanel'
 import TarotDiscussPanel from './TarotDiscussPanel'
 import TarotDeckSelection from './TarotDeckSelection'
+import { shuffleTarotDeck, computeCardReversal } from './tarotUtils'
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ interface CelticCrossReadingProps {
   dailyTransitSummary: string
   weeklyTransitSummary: string
   moonSign: string
-  onSave: (reading: SavedReading) => void
+  onSave: (payload: SaveReadingRequest) => Promise<void>
   onDiscard: () => void
 }
 
@@ -45,19 +45,6 @@ type Phase =
 
 type SynthesisStatus = 'idle' | 'loading' | 'ready' | 'error'
 type SynthesisErrorKind = 'unavailable' | 'rate-limited' | 'timeout' | 'session-expired'
-
-function shuffleTarotDeck(): DataTarotCard[] {
-  const deck = [...ALL_TAROT_CARDS]
-  for (let index = deck.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1))
-    ;[deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]]
-  }
-  return deck
-}
-
-function computeCardReversal(): boolean {
-  return Math.random() < 0.3
-}
 
 // ─── Structural signals ───────────────────────────────────────────────────────
 function computeCelticCrossSignals(cards: DrawnCard[]): CelticCrossPrecomputedSignals {
@@ -134,6 +121,10 @@ function buildCelticSynthesisPayload(
     natalMoonSign: astroContext.natalMoonSign ?? '',
     natalAscSign: astroContext.natalAscendantSign ?? '',
     natalMoonPhase: astroContext.lunarPhaseName,
+    natalMoonHouse: astroContext.natalMoonHouse,
+    natalVenusHouse: astroContext.natalVenusHouse,
+    natalNorthNodeHouse: astroContext.natalNorthNodeHouse,
+    natalMarsHouse: astroContext.natalMarsHouse,
     personalDay: astroContext.personalDay,
     personalYear: 0,
     lifePathNumber: 0,
@@ -399,6 +390,9 @@ export default function CelticCrossReading({
   // ── Cross-staff transition overlay ────────────────────────────────────────
   const [transitionVisible, setTransitionVisible] = useState(false)
 
+  // ── Save state ────────────────────────────────────────────────────────────
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
   // ── Discuss ───────────────────────────────────────────────────────────────
   const [discussOpen, setDiscussOpen] = useState(false)
 
@@ -630,30 +624,31 @@ export default function CelticCrossReading({
   }, [phase, handleReveal12, handleContinue])
 
   // ─── Save reading ─────────────────────────────────────────────────────────
-  const handleSave = () => {
-    const reading: SavedReading = {
-      schemaVersion: 1,
+  const handleSave = async () => {
+    if (saveState === 'saving' || saveState === 'saved') return
+    setSaveState('saving')
+    const payload: SaveReadingRequest = {
       readingType: 'celtic-cross',
-      userId: '',  // set by parent/auth context
-      drawnCards: drawnCards.map((dc, i) => ({ position: i + 1, cardId: dc.card.id, reversed: dc.reversed })),
-      spreadType: 'celtic-cross',
-      userIntention,
-      astroContextSnapshot: {
-        natalFingerprint: '',
-        transitSnapshotDate: new Date().toISOString(),
-        moonPhase: tarotAstroContext.lunarPhaseName ?? '',
-        personalDay: tarotAstroContext.personalDay,
-        numerologyYear: 0,
-      },
-      interpretationPayload: {
-        version: 1,
-        payload: { interpretations: drawnCards.map(dc => dc.interpretation) },
-      },
-      synthesisText: synthesisChapters.map(c => `${c.heading}\n${c.body}`).join('\n\n'),
-      createdAt: new Date().toISOString(),
-      journalEntryId: null,
+      spreadMode: 'celtic-cross',
+      firstCardName: drawnCards[0]?.card.name ?? '',
+      intentPreview: userIntention ?? null,
+      cards: drawnCards.map((dc, i) => ({
+        position: i + 1,
+        cardId: dc.card.id,
+        cardName: dc.card.name,
+        reversed: dc.reversed,
+        coreMeaning: dc.interpretation.coreMeaning,
+      })),
+      synthesis: synthesisChapters.length > 0
+        ? { chapters: synthesisChapters.map(c => ({ heading: c.heading, body: c.body })) }
+        : undefined,
     }
-    onSave(reading)
+    try {
+      await onSave(payload)
+      setSaveState('saved')
+    } catch {
+      setSaveState('error')
+    }
   }
 
   // ─── Derived values ───────────────────────────────────────────────────────
@@ -830,10 +825,32 @@ export default function CelticCrossReading({
                 >
                   Discuss ✦
                 </button>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <button type="button" onClick={handleSave} style={primaryBtnStyle}>
-                    Save this reading
-                  </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center', flexDirection: 'column', alignItems: 'center' }}>
+                  {saveState === 'idle' && (
+                    <button type="button" onClick={handleSave} style={primaryBtnStyle}>
+                      Save this reading
+                    </button>
+                  )}
+                  {saveState === 'saving' && (
+                    <button type="button" disabled style={{ ...primaryBtnStyle, opacity: 0.6, cursor: 'default' }}>
+                      Saving…
+                    </button>
+                  )}
+                  {saveState === 'saved' && (
+                    <p style={{ color: 'rgba(201,168,76,0.7)', fontSize: '0.875rem', fontFamily: 'inherit' }}>Saved ✓</p>
+                  )}
+                  {saveState === 'error' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.4rem' }}>
+                      <p style={{ color: 'rgba(220,80,80,0.85)', fontSize: '0.8rem' }}>Could not save. Try again.</p>
+                      <button
+                        type="button"
+                        onClick={() => setSaveState('idle')}
+                        style={linkBtnStyle}
+                      >
+                        Retry save
+                      </button>
+                    </div>
+                  )}
                   <button
                     type="button"
                     onClick={onDiscard}

@@ -23,6 +23,12 @@ export interface TarotAstroContext {
   natalDominantElement: Element | null
   natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
 
+  // Natal house placements (1–12 when available, null when chart lacks house data)
+  natalMoonHouse: number | null
+  natalVenusHouse: number | null
+  natalNorthNodeHouse: number | null
+  natalMarsHouse: number | null
+
   currentTransits: TransitAspect[]
   retrogradeplanets: string[]
   dominantTransitPlanet: string | null
@@ -463,12 +469,30 @@ export function buildTarotAstroContext(
   let natalDominantElement: Element | null = null
   let natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null = null
 
+  // Natal house placements — null when chart lacks house data (e.g. unknown birth time)
+  let natalMoonHouse: number | null = null
+  let natalVenusHouse: number | null = null
+  let natalNorthNodeHouse: number | null = null
+  let natalMarsHouse: number | null = null
+
   try {
     natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? null
     natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? null
     natalAscendantSign = natalChart.angles?.ascendant?.sign ?? null
     natalDominantElement = computeDominantElement(natalChart)
     natalDominantModality = computeDominantModality(natalChart)
+
+    // Extract house placements from the same planet objects — house is 0 for unknown-time charts
+    const moonPlanet = natalChart.planets.find(p => p.name === 'Moon')
+    const venusPlanet = natalChart.planets.find(p => p.name === 'Venus')
+    const northNodePlanet = natalChart.planets.find(p => p.name === 'NorthNode')
+    const marsPlanet = natalChart.planets.find(p => p.name === 'Mars')
+
+    // Treat house === 0 as "no data" (unknown birth time) — only accept 1–12
+    natalMoonHouse = moonPlanet?.house && moonPlanet.house >= 1 && moonPlanet.house <= 12 ? moonPlanet.house : null
+    natalVenusHouse = venusPlanet?.house && venusPlanet.house >= 1 && venusPlanet.house <= 12 ? venusPlanet.house : null
+    natalNorthNodeHouse = northNodePlanet?.house && northNodePlanet.house >= 1 && northNodePlanet.house <= 12 ? northNodePlanet.house : null
+    natalMarsHouse = marsPlanet?.house && marsPlanet.house >= 1 && marsPlanet.house <= 12 ? marsPlanet.house : null
   } catch {
     // defensive: malformed chart data produces null signals
   }
@@ -517,6 +541,10 @@ export function buildTarotAstroContext(
     natalAscendantSign,
     natalDominantElement,
     natalDominantModality,
+    natalMoonHouse,
+    natalVenusHouse,
+    natalNorthNodeHouse,
+    natalMarsHouse,
     currentTransits,
     retrogradeplanets,
     dominantTransitPlanet,
