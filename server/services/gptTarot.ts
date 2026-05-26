@@ -320,8 +320,8 @@ export interface TarotCelticSynthesisPayload {
   natalNorthNodeHouse: number | null
   natalMarsHouse: number | null
   personalDay: number
-  personalYear: number
-  lifePathNumber: number
+  personalYear: number | null
+  lifePathNumber: number | null
   advanceCategory: string | null
   advanceReason: string | null
   moonPhaseName: string
@@ -1055,8 +1055,8 @@ ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
 ${natalDominantModality ? `Dominant modality: ${natalDominantModality} — ${natalDominantModality === 'Cardinal' ? 'this person initiates; they meet force by moving toward it' : natalDominantModality === 'Fixed' ? 'this person holds; they meet force by standing their ground or enduring' : 'this person adapts; they meet force by reframing or moving with it'}` : ''}
 ${natalMoonPhase ? `Natal Moon Phase: ${natalMoonPhase}` : ''}
-Life Path: ${authorizedLifePath}
-Personal Year: ${authorizedPersonalYear}, Personal Day: ${authorizedPersonalDay}
+${authorizedLifePath !== null ? `Life Path: ${authorizedLifePath}` : ''}
+${authorizedPersonalYear !== null ? `Personal Year: ${authorizedPersonalYear}, ` : ''}Personal Day: ${authorizedPersonalDay}
 Current Moon: ${payload.moonPhaseName} in ${currentMoonSign}
 ${payload.advanceCategory ? `Advance signal: ${payload.advanceCategory} — ${payload.advanceReason ?? ''}` : ''}
 
