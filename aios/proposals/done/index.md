@@ -1,5 +1,22 @@
 # Completed Proposals Index
 
+## Sprint 0026
+
+### Issue Fixes
+
+- `issue-natal-dominant-modality-gap` — natalDominantModality computed client-side but never threaded into any of the 3 synthesis payloads or GPT prompts. *Originated by: Carmack, Taleb*
+
+### Code Enhancements
+
+- `code-court-card-transit-adaptations` — 36 court card entries missing from TRANSIT_ADAPTATIONS; court cards received generic fallback text instead of rank/element-specific guidance. *Originated by: Carmack, Miyazaki, Taleb*
+- `code-reversed-meanings-depth` — 7 Major Arcana reversed meanings written as simple negations; rewritten to describe off-axis, internalized, or blocked expressions of each archetype. *Originated by: Miyazaki, Carmack, Taleb*
+- `code-synthesis-prompt-specificity` — GPT synthesis prompts lacked card-specificity constraints; rewrote prompt instructions to require verifiably card-specific observations. *Originated by: Jobs, Carmack, Miyazaki*
+
+### Features
+
+- `feat-chart-ruler-natal-personalization` — Chart ruler (planet ruling the Ascendant sign) was never derived or threaded into synthesis; GPT prompts could not reference the primary natal personalization signal. *Originated by: Jobs, Carmack, Miyazaki, Taleb*
+- `feat-position-aware-instant-interpretation` — Instant (Level 1/2) interpretation showed the same generic text regardless of spread position; position label and meaning now displayed in the panel and used in the Level 2 fallback prompt. *Originated by: Jobs, Miyazaki*
+
 ## Sprint 0025
 
 ### Issue Fixes
