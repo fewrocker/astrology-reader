@@ -38,7 +38,7 @@ export interface ThreeCardReadingProps {
   /** Personal year for GPT synthesis */
   personalYear: number
   userIntention: string | null
-  onSave: () => void
+  onSave: () => Promise<void>
   onDiscard: () => void
   onOpenDiscuss: () => void
   onPickCard: (deckIndex: number) => void
@@ -894,10 +894,16 @@ export default function ThreeCardReading({
     setSynthesisState('idle')
   }, [])
 
-  const handleSave = useCallback(() => {
-    setSaveState('saved')
-    onSave()
-  }, [onSave])
+  const handleSave = useCallback(async () => {
+    if (saveState === 'saved') return
+    setSaveState('idle')
+    try {
+      await onSave()
+      setSaveState('saved')
+    } catch {
+      setSaveState('error')
+    }
+  }, [onSave, saveState])
 
   const handleBackRequest = useCallback(() => {
     setShowBackConfirm(true)
@@ -908,8 +914,12 @@ export default function ThreeCardReading({
     onDiscard()
   }, [onDiscard])
 
-  const handleSaveAndBack = useCallback(() => {
-    onSave()
+  const handleSaveAndBack = useCallback(async () => {
+    try {
+      await onSave()
+    } catch {
+      // Proceed with navigation even if save fails — user has chosen to leave
+    }
     abortRef.current?.abort()
     onDiscard()
   }, [onSave, onDiscard])
