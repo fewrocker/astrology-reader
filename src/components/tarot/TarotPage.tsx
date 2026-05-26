@@ -6,7 +6,7 @@ import { useApp } from '../../context/AppContext'
 import { useAuth } from '../../context/AuthContext'
 import { saveReading } from '../../services/readingsService'
 import type { SaveReadingRequest } from '../../services/readingsService'
-import { computeInstantInterpretation } from '../../engine/tarot'
+import { computeInstantInterpretation, SPREAD_POSITIONS } from '../../engine/tarot'
 import type {
   TarotCard,
   TarotAstroContext,
@@ -30,6 +30,10 @@ import {
   buildEngineCtx,
   useTransitData,
 } from './tarotUtils'
+
+// ─── Spread position constants ────────────────────────────────────────────────
+
+const SINGLE_POSITION = SPREAD_POSITIONS.find(p => p.id === 'single')!
 
 // ─── Reading flow containers ──────────────────────────────────────────────────
 
@@ -58,7 +62,7 @@ function SingleReadingFlow({
     const card = deck[deckIndex]
     if (!card) return
     const reversed = computeCardReversal()
-    const interp = computeInstantInterpretation(card, reversed, null, engineCtx)
+    const interp = computeInstantInterpretation(card, reversed, SINGLE_POSITION, engineCtx)
     setSelectedDeckIndices([deckIndex])
     setDrawn({ card, reversed, interp })
   }
