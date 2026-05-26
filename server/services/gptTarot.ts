@@ -67,52 +67,6 @@ export interface SpreadPositionPayload {
 }
 
 // ---------------------------------------------------------------------------
-// Dominant modality helper
-// ---------------------------------------------------------------------------
-
-/** Zodiac-sign → modality lookup (mirrors src/engine/types.ts SIGN_MODALITIES). */
-const SIGN_MODALITIES_SERVER: Record<string, 'Cardinal' | 'Fixed' | 'Mutable'> = {
-  Aries: 'Cardinal', Taurus: 'Fixed',    Gemini: 'Mutable',
-  Cancer: 'Cardinal', Leo: 'Fixed',      Virgo: 'Mutable',
-  Libra: 'Cardinal', Scorpio: 'Fixed',   Sagittarius: 'Mutable',
-  Capricorn: 'Cardinal', Aquarius: 'Fixed', Pisces: 'Mutable',
-}
-
-/**
- * Compute the dominant modality (Cardinal / Fixed / Mutable) for a natal chart.
- * Sun, Moon, and Ascendant each receive double weight.
- * Returns null when no clear winner exists.
- *
- * Server-side mirror of computeDominantModality in src/engine/tarot.ts.
- */
-function computeDominantModality(
-  natalChart: { planets: Array<{ name: string; sign: string }>; angles?: { ascendant?: { sign: string } } },
-): 'Cardinal' | 'Fixed' | 'Mutable' | null {
-  try {
-    const counts: Record<'Cardinal' | 'Fixed' | 'Mutable', number> = {
-      Cardinal: 0, Fixed: 0, Mutable: 0,
-    }
-    const ascSign = natalChart.angles?.ascendant?.sign
-    for (const planet of natalChart.planets) {
-      const mod = SIGN_MODALITIES_SERVER[planet.sign]
-      if (!mod) continue
-      const weight = (planet.name === 'Sun' || planet.name === 'Moon') ? 2 : 1
-      counts[mod] += weight
-    }
-    if (ascSign && SIGN_MODALITIES_SERVER[ascSign]) {
-      counts[SIGN_MODALITIES_SERVER[ascSign]] += 2
-    }
-    const max = Math.max(...Object.values(counts))
-    const top = (Object.keys(counts) as ('Cardinal' | 'Fixed' | 'Mutable')[]).filter(
-      m => counts[m] === max,
-    )
-    return top.length === 1 ? top[0] : null
-  } catch {
-    return null
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Elemental dignity
 // ---------------------------------------------------------------------------
 
@@ -466,19 +420,19 @@ export function computeCelticStructuralSignals(cards: TarotCardPayload[]): Celti
 }
 
 // ---------------------------------------------------------------------------
-// Server-side dominant modality computation
+// Dominant modality computation (server-side)
 // Mirrors computeDominantModality in src/engine/tarot.ts — kept here because
 // the server and client live in separate TypeScript compilation contexts.
 // Any logic change must be applied to both copies in lockstep.
 // ---------------------------------------------------------------------------
 
-const SERVER_SIGN_MODALITIES: Record<string, 'Cardinal' | 'Fixed' | 'Mutable'> = {
+const SIGN_MODALITIES: Record<string, 'Cardinal' | 'Fixed' | 'Mutable'> = {
   Aries: 'Cardinal', Taurus: 'Fixed', Gemini: 'Mutable', Cancer: 'Cardinal',
   Leo: 'Fixed', Virgo: 'Mutable', Libra: 'Cardinal', Scorpio: 'Fixed',
   Sagittarius: 'Mutable', Capricorn: 'Cardinal', Aquarius: 'Fixed', Pisces: 'Mutable',
 }
 
-function computeServerDominantModality(
+function computeDominantModality(
   natalChart: { planets: Array<{ name: string; sign: string }>; angles?: { ascendant?: { sign?: string } } },
 ): 'Cardinal' | 'Fixed' | 'Mutable' | null {
   try {
@@ -487,13 +441,13 @@ function computeServerDominantModality(
     }
     const ascSign = natalChart.angles?.ascendant?.sign
     for (const planet of natalChart.planets) {
-      const mod = SERVER_SIGN_MODALITIES[planet.sign]
+      const mod = SIGN_MODALITIES[planet.sign]
       if (!mod) continue
       const weight = (planet.name === 'Sun' || planet.name === 'Moon') ? 2 : 1
       counts[mod] += weight
     }
-    if (ascSign && SERVER_SIGN_MODALITIES[ascSign]) {
-      counts[SERVER_SIGN_MODALITIES[ascSign]] += 2
+    if (ascSign && SIGN_MODALITIES[ascSign]) {
+      counts[SIGN_MODALITIES[ascSign]] += 2
     }
     const max = Math.max(...Object.values(counts))
     const top = (Object.keys(counts) as ('Cardinal' | 'Fixed' | 'Mutable')[]).filter(m => counts[m] === max)
@@ -653,7 +607,7 @@ export async function handleTarotSingleSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
-      natalDominantModality = computeServerDominantModality(natalChart)
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
       chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
@@ -798,7 +752,7 @@ export async function handleTarotThreeSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
-      natalDominantModality = computeServerDominantModality(natalChart)
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
       chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
@@ -1001,7 +955,7 @@ export async function handleTarotCelticSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
-      natalDominantModality = computeServerDominantModality(natalChart)
+      natalDominantModality = computeDominantModality(natalChart)
       // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
       chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
