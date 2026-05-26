@@ -11,6 +11,7 @@ import { TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotAstroContext } from '../tarot'
 import type { ChartData } from '../types'
 import type { TransitData } from '../transits'
+import { SPREAD_POSITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/spreadPositions'
 
 // ─── Mock fixtures ────────────────────────────────────────────────────────────
