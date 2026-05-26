@@ -6,11 +6,13 @@ import {
   computeInstantInterpretation,
   computeThreeCardSynthesis,
   computeDailyDrawSeed,
+  buildNatalResonanceNote,
 } from '../tarot'
 import { TAROT_CARDS } from '../../data/tarot/cards'
 import type { TarotAstroContext } from '../tarot'
 import type { ChartData } from '../types'
 import type { TransitData } from '../transits'
+import { SPREAD_POSITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/spreadPositions'
 
 // ─── Mock fixtures ────────────────────────────────────────────────────────────
@@ -98,6 +100,11 @@ const mockAstroContext: TarotAstroContext = {
   natalAscendantSign: 'Leo',
   natalDominantElement: 'Fire',
   natalDominantModality: 'Cardinal',
+  chartRulerPlanet: 'Sun',
+  natalMoonHouse: 4,
+  natalVenusHouse: 2,
+  natalNorthNodeHouse: null,
+  natalMarsHouse: 1,
   currentTransits: mockTransitData.transitAspects,
   retrogradePlanets: ['Mercury'],
   dominantTransitPlanet: 'Saturn',
@@ -264,6 +271,89 @@ describe('buildTarotAstroContext', () => {
   it('never throws even with malformed chart data', () => {
     const badChart = { planets: [], houses: [], angles: {} as ChartData['angles'], unknownTime: true, houseSystem: 'placidus' as const }
     expect(() => buildTarotAstroContext(badChart, null, 5, null)).not.toThrow()
+  })
+
+  it('tight applying Saturn outscores wide separating Pluto', () => {
+    // Pluto: base priority 10, orb 4.8° separating
+    // Saturn: base priority 7, orb 0.3° applying
+    // Pluto score: 10 * (1 + (8-4.8)/8 * 0.6) * 1.0 = 10 * (1 + 0.24) = 12.4
+    // Saturn score: 7 * (1 + (8-0.3)/8 * 0.6) * 1.15 = 7 * (1 + 0.5775) * 1.15 ≈ 12.69
+    const transitsWithMixedOrbs: TransitData = {
+      period: 'daily',
+      dateRange: { start: '2026-05-25', end: '2026-05-25' },
+      currentPlanets: [],
+      transitAspects: [
+        {
+          transitPlanet: 'Pluto',
+          natalPlanet: 'Sun',
+          natalHouse: 1,
+          natalSign: 'Aries',
+          type: 'trine',
+          orb: 4.8,
+          exactAngle: 120,
+          applying: false,
+          nature: 'harmonious',
+          symbol: '△',
+        },
+        {
+          transitPlanet: 'Saturn',
+          natalPlanet: 'Moon',
+          natalHouse: 4,
+          natalSign: 'Cancer',
+          type: 'opposition',
+          orb: 0.3,
+          exactAngle: 180,
+          applying: true,
+          nature: 'challenging',
+          symbol: '☍',
+        },
+      ],
+      ingresses: [],
+      retrogrades: [],
+    }
+    const ctx = buildTarotAstroContext(mockChartData, transitsWithMixedOrbs, 5, null)
+    expect(ctx.dominantTransitPlanet).toBe('Saturn')
+  })
+
+  it('Pluto still outscores Saturn when both have equal orbs (priority hierarchy preserved)', () => {
+    // With identical orb and both separating, PLANET_PRIORITY determines the winner.
+    // Pluto score: 10 * (1 + (8-2)/8 * 0.6) * 1.0 = 10 * 1.45 = 14.5
+    // Saturn score: 7  * (1 + (8-2)/8 * 0.6) * 1.0 = 7  * 1.45 = 10.15
+    const transitsEqualOrbs: TransitData = {
+      period: 'daily',
+      dateRange: { start: '2026-05-25', end: '2026-05-25' },
+      currentPlanets: [],
+      transitAspects: [
+        {
+          transitPlanet: 'Pluto',
+          natalPlanet: 'Sun',
+          natalHouse: 1,
+          natalSign: 'Aries',
+          type: 'square',
+          orb: 2.0,
+          exactAngle: 90,
+          applying: false,
+          nature: 'challenging',
+          symbol: '□',
+        },
+        {
+          transitPlanet: 'Saturn',
+          natalPlanet: 'Moon',
+          natalHouse: 4,
+          natalSign: 'Cancer',
+          type: 'square',
+          orb: 2.0,
+          exactAngle: 90,
+          applying: false,
+          nature: 'challenging',
+          symbol: '□',
+        },
+      ],
+      ingresses: [],
+      retrogrades: [],
+    }
+    const ctx = buildTarotAstroContext(mockChartData, transitsEqualOrbs, 5, null)
+    expect(ctx.dominantTransitPlanet).toBe('Pluto')
   })
 })
 
@@ -462,5 +552,83 @@ describe('computeThreeCardSynthesis', () => {
     const synthesis = computeThreeCardSynthesis(drawnCards, mockPositions, mockAstroContext)
     expect(synthesis.interpretedCards).toHaveLength(3)
     expect(synthesis.spreadPositions).toHaveLength(3)
+  })
+})
+
+// ─── buildNatalResonanceNote ──────────────────────────────────────────────────
+
+describe('buildNatalResonanceNote', () => {
+  it('returns a non-empty string when card ruling planet matches chartRulerPlanet', () => {
+    // The Sun card (The Sun, id: 'the-sun') has rulingPlanet: 'Sun'
+    // mockAstroContext has chartRulerPlanet: 'Sun' (Leo Ascendant)
+    const sunCard = TAROT_CARDS.find(c => c.id === 'the-sun')!
+    expect(sunCard).toBeDefined()
+    const note = buildNatalResonanceNote(sunCard, mockAstroContext)
+    expect(note).toBeTruthy()
+    expect(note).toContain('Sun')
+    expect(note).toContain('Ascendant')
+  })
+
+  it('mentions the chart ruler planet in the chart ruler match note', () => {
+    // The Sun card and Sun chart ruler (Leo Ascendant) should produce a note naming Sun
+    const sunCard = TAROT_CARDS.find(c => c.id === 'the-sun')!
+    const note = buildNatalResonanceNote(sunCard, mockAstroContext)
+    expect(note).toContain('Sun rules both this card')
+  })
+
+  it('returns empty string when no correspondence is found', () => {
+    // The Tower (id: 'the-tower') is ruled by Mars.
+    // mockAstroContext chartRulerPlanet is Sun, natalDominantElement is Fire.
+    // The Tower's element is Fire — so it WOULD match element. Use a Water card + Air chart.
+    const towerCard = TAROT_CARDS.find(c => c.id === 'the-tower')! // Mars/Fire
+    const noMatchContext: TarotAstroContext = {
+      ...mockAstroContext,
+      chartRulerPlanet: 'Saturn', // not Mars
+      natalDominantElement: 'Water', // not Fire
+    }
+    const note = buildNatalResonanceNote(towerCard, noMatchContext)
+    expect(note).toBe('')
+  })
+
+  it('returns empty string when all chart context is null', () => {
+    const anyCard = TAROT_CARDS.find(c => c.id === 'the-hermit')!
+    const emptyContext: TarotAstroContext = {
+      ...mockAstroContext,
+      chartRulerPlanet: null,
+      natalDominantElement: null,
+      natalAscendantSign: null,
+    }
+    const note = buildNatalResonanceNote(anyCard, emptyContext)
+    expect(note).toBe('')
+  })
+
+  it('returns a note for court card whose suit element matches natal dominant element', () => {
+    // King of Wands is a Fire court card. Context with Fire dominant but non-matching chart ruler.
+    const kingOfWands = TAROT_CARDS.find(c => c.id === 'king-of-wands')!
+    expect(kingOfWands).toBeDefined()
+    const courtContext: TarotAstroContext = {
+      ...mockAstroContext,
+      chartRulerPlanet: 'Saturn', // not a match to King of Wands (null rulingPlanet)
+      natalDominantElement: 'Fire', // matches king-of-wands element
+    }
+    const note = buildNatalResonanceNote(kingOfWands, courtContext)
+    expect(note).toBeTruthy()
+    expect(note).toContain('Fire')
+  })
+
+  it('natalResonanceNote is populated on the AstroConnection object', () => {
+    const sunCard = TAROT_CARDS.find(c => c.id === 'the-sun')!
+    const result = computeInstantInterpretation(sunCard, false, null, mockAstroContext)
+    // chartRulerPlanet is 'Sun' and the-sun has rulingPlanet: 'Sun' → match expected
+    expect(result.astroConnection.natalResonanceNote).toBeTruthy()
+    expect(result.astroConnection.natalResonanceNote).toContain('Sun')
+  })
+
+  it('natalResonanceNote is empty string when no match on AstroConnection', () => {
+    // High Priestess is Moon-ruled. mockAstroContext chartRulerPlanet is Sun (not Moon).
+    // natalDominantElement is Fire, High Priestess is Water — no match.
+    const highPriestess = TAROT_CARDS.find(c => c.id === 'the-high-priestess')!
+    const result = computeInstantInterpretation(highPriestess, false, null, mockAstroContext)
+    expect(result.astroConnection.natalResonanceNote).toBe('')
   })
 })

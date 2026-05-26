@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TAROT_CARD_BY_ID } from '../../data/tarot/cards'
 import type { DrawnCard, TarotAstroContext } from '../../engine/tarot'
+import { computeThreeCardSynthesis } from '../../engine/tarot'
 import type { SpreadMode, ThreeCardSynthesisSkeleton } from '../../types/tarot'
 import { SPREAD_DEFINITIONS } from '../../data/tarot/spreadPositions'
 import type { SpreadPosition } from '../../data/tarot/types'
@@ -20,6 +21,7 @@ import TarotDiscussPanel from './TarotDiscussPanel'
 import TarotDeckSelection from './TarotDeckSelection'
 import { CardBack } from './CardBack'
 import { TarotCard as TarotCardComponent } from './TarotCard'
+import ThreeCardConstellationPreview from './ThreeCardConstellationPreview'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -931,6 +933,19 @@ export default function ThreeCardReading({
     onDiscard()
   }, [onSave, onDiscard])
 
+  // Compute constellation preview signals once all three cards are available.
+  // Uses computeThreeCardSynthesis (client-side, zero latency) for the same
+  // structural signals that are also sent to GPT — surfaced here immediately
+  // as a bridge before the AI synthesis arrives.
+  const constellationSynthesis = useMemo(() => {
+    if (drawnCards.length !== 3) return null
+    return computeThreeCardSynthesis(drawnCards, spreadPositions, astroContext)
+  }, [drawnCards, spreadPositions, astroContext])
+
+  // Show constellation preview when all cards are revealed and synthesis is
+  // either loading or complete (so it stays visible once the user has seen it).
+  const showConstellationPreview = phase === 'all-revealed' && constellationSynthesis !== null
+
   // Determine if synthesis zone should be visible
   const showSynthesisZone = phase === 'all-revealed' && synthesisState !== 'idle'
 
@@ -1118,6 +1133,13 @@ export default function ThreeCardReading({
             )
           })}
         </div>
+
+        {/* ── Constellation preview ────────────────────────────────────────── */}
+        {showConstellationPreview && constellationSynthesis && (
+          <div className="tarot-fade-in">
+            <ThreeCardConstellationPreview synthesis={constellationSynthesis} />
+          </div>
+        )}
 
         {/* ── Synthesis zone ───────────────────────────────────────────────── */}
         {showSynthesisZone && (

@@ -75,6 +75,11 @@ export default function TarotInterpretationPanel({
         <p className={SECTION_HEADER}>In Your Sky Now</p>
         {interpretation.astroConnection.transitInfluence ? (
           <>
+            {interpretation.astroConnection.natalResonanceNote && (
+              <p className="text-mystic-muted/80 text-sm mb-3">
+                ✶ {interpretation.astroConnection.natalResonanceNote}
+              </p>
+            )}
             {interpretation.astroConnection.astroHeadline && (
               <p
                 className="font-heading italic mb-3"
@@ -91,7 +96,14 @@ export default function TarotInterpretationPanel({
             )}
           </>
         ) : interpretation.astroConnection.elementResonanceNote ? (
-          <p className="text-mystic-text/80 text-sm">{interpretation.astroConnection.elementResonanceNote}</p>
+          <>
+            {interpretation.astroConnection.natalResonanceNote && (
+              <p className="text-mystic-muted/80 text-sm mb-3">
+                ✶ {interpretation.astroConnection.natalResonanceNote}
+              </p>
+            )}
+            <p className="text-mystic-text/80 text-sm">{interpretation.astroConnection.elementResonanceNote}</p>
+          </>
         ) : (
           <p className="text-mystic-muted text-sm italic">
             Enter your birth data to see your sky connection.
