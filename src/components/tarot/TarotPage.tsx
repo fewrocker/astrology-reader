@@ -9,6 +9,7 @@ import type {
   TarotCard,
   TarotAstroContext,
   DrawnCard,
+  InstantInterpretation,
 } from '../../engine/tarot'
 import type { SpreadMode } from '../../types/tarot'
 import { ALL_TAROT_CARDS } from '../../data/tarot/cards'
