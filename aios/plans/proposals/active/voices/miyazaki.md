@@ -1,182 +1,131 @@
-# Voice: Hayao Miyazaki — Sprint 0024 Tarot Module Review
+# Voice: Hayao Miyazaki — Sprint 0027 Tarot Module Review
 
-*Soul, craft, and the distance between functional and alive.*
-
----
-
-## What They Built, and What It Cost Them
-
-Sprint 0023 delivered the skeleton. This I understand. You must have the bones before you can have the breath. I read the code carefully — all of it — and I want to say clearly: the skeleton is not bad. The state machine in `CelticCrossReading.tsx` has genuine intelligence. The phase transitions — dealing, drawing, awaiting-12, holding, continuing, cross-staff-transition, final-pause, constellation-text, synthesis, complete — these are the marks of someone who thought about the rhythm of a Celtic Cross reading and tried to honor it in code. The synthesis fires early, during the transition text, so the user is not waiting. The mandatory 3-second hold after each card is revealed — this is right. Someone felt the rhythm.
-
-But Sprint 0024's vision is precise about what was lost in the rush: the readings arrive without the sky. The Celtic Cross positions are interpreted by a stub function that strips away everything meaningful. The user's intention enters the machine and never comes back out. The cards in the deck fan are `✦` symbols, not cards. The shuffle animation exists and is not used.
-
-This is not a list of bugs. It is a list of places where someone ran out of time and marked the work done when it was only done *structurally*. That is the most dangerous kind of incomplete — it passes a review, it ships, it runs, and then you wonder why the product feels hollow.
+*On coverage gaps, absent specificity, and what happens when the data layer fails the human sitting with a card.*
 
 ---
 
-## The Stub That Breaks Everything
+## What I Read Before Writing This
 
-I want to stay on this. Line 78 of `CelticCrossReading.tsx`:
+I read the sprint 0027 vision and its precise articulation of what is missing. Then I read the card data itself — all four Minor Arcana files, the Major Arcana, the transit adaptations. Then the engine function that routes through the three-level fallback. Then the interpretation panel that presents the result. Then the server synthesis handlers to understand what ultimately reaches the person.
 
-```
-// ─── Stub: instant interpretation ────────────────────────────────────────────
-```
+I want to say something clearly before anything else: the product that exists now — after sprints 0024 through 0026 — is genuinely better than what I described in sprint 0024. The Celtic Cross stub has been replaced. The sky is real now. The synthesis handlers receive actual transit data. The chart ruler is derived and threaded. The reversed Major Arcana — seven of them — were rewritten with the specificity that was always possible. I recorded specific defects in sprint 0024 and they were corrected. This is what it looks like when a team takes their work seriously.
 
-This stub computes `InstantInterpretation` for each Celtic Cross position by taking the card's `coreMeaning` directly — unmodified, position-unaware, sky-unaware, intention-unaware — and building a reversal note from a template string. That is all it does. The `positionDescription` from `CELTIC_CROSS_POSITIONS` is passed through unchanged, but it is not *used* to shape what the card means in that position. It is decoration.
-
-So when the user reveals The Tower in the Foundation position, what they read is: whatever the card's standard `coreMeaning` is, followed by a reversal note if applicable, followed by the position's description as a separate disconnected paragraph. These three things are listed. They are not woven. The Foundation position — representing what underlies the entire situation, what cannot be changed, the ground beneath the question — this context does not touch the Tower's meaning at all. The Tower in any other position would say the same thing.
-
-This is the opposite of Tarot. Tarot is a language of context. The same card says different things in different positions. If the code cannot express this, the code is not doing Tarot.
-
-The real `computeInstantInterpretation` in `src/engine/tarot.ts` can handle positions. The vision document says so explicitly: "Celtic needs to pass `CELTIC_CROSS_POSITIONS[i]` into it." This is one line of change that opens a door. But it has to actually be done.
+But sprint 0027 has found a real failure, and I want to talk about it honestly.
 
 ---
 
-## The Deck Fan Is a Lie
+## The Gap Is Not Technical — It Is a Failure of Attention
 
-Open `TarotDeckSelection.tsx`. Every card in the fan is rendered as a `<button>` whose only content is the string `✦`. The card dimensions are correct — `72px × 116px`, a proper tarot proportion. The fan geometry is computed properly, with rotation and offset derived from position in the spread. The breathing animation fires. The hover and selection states are wired. All of this infrastructure exists for a card that is just a character.
+When someone draws the Two of Wands while Saturn is opposing their natal Sun, the system has nothing specific to say. It falls through to: "The current Saturn transit introduces structured energy into this Fire card — a call to integrate these opposing forces consciously."
 
-The `CardBack` component in `CardBack.tsx` — the proper one, with the eight-pointed star geometry, the inset gold frame, the structural lines radiating to the corners — this exists. It was written with care. It breathes. It has the right weight and darkness. And it is not used here.
+That sentence is not wrong. It is also not for anyone. It could have been printed in a mass-market horoscope column and distributed to every Scorpio in the world on a Tuesday.
 
-This is the gap between building something and using it. Someone built `CardBack.tsx` correctly. Someone else was assembling `TarotDeckSelection.tsx` and reached for the fastest solution: a unicode character in a styled div. The result is that when a user sits before 78 face-down cards and reaches to draw one, what they see is 78 golden sparkles. Not cards. Not a deck. A list of identical symbols that happen to be arranged in a fan.
+The Two of Wands is a specific card. It shows a specific person at a specific parapet, holding a globe that contains the world they are imagining for themselves, with one wand rooted and one braced against the wall, looking out at a horizon they have not yet crossed. And Saturn — Saturn, the planet of delays, of earned maturation, of the weight that proves whether commitment is real — Saturn is pressing down on this moment. This combination says something precise. It says: the vision you have been holding at the edge of action is now being tested by a force that will not allow indefinite deferral. What you have been calling "planning" is about to meet the question of whether you actually believe in it.
 
-A card back is not decoration. It is the object that represents uncertainty, possibility, the hidden. When a real tarot reader spreads a deck face-down across a table, the back of each card is the same, and that sameness is the point — you cannot see what any of them hold. The visual weight of 78 identical backs is part of what makes the draw feel significant. A sparkle character does not carry this weight.
+That is the sentence the system should produce. Instead it produces "structured energy into this Fire card."
 
----
+The failure is not that the code has a bug. The failure is that someone did not write the sentence. The data is absent. The coverage gap is 28 pip cards with no transit adaptations for their most symbolically charged transit conditions. This means that for a large fraction of all real draws made by real users who have actual outer planet transits in their charts, the "In Your Sky Now" section of the interpretation panel is showing them a generic fire-meets-Saturn line that was generated procedurally from element labels.
 
-## The Shuffle That Was Built and Abandoned
-
-`DeckShuffleAnimation.tsx` is a substantial component. It has a full state machine of its own: idle, intention-set, shuffling, card-selected, revealing, revealed. It has a proper 3D flip. It has a breathing animation for the face-down card, with `tarotCardBreathe` running at 3 seconds. It has a fade-through-black transition between shuffling and card-selected. It has a hint system — localStorage-persisted, timed, contextual (touch vs. click). It respects `prefers-reduced-motion`. It has proper ARIA live regions.
-
-This component was built thoughtfully. And then — according to the vision document — it is not wired into the current home flow. The home view skips directly to deck selection without a shuffle ritual.
-
-I do not know exactly how this happened. Perhaps the integration was left for a subsequent task that was never quite reached. Perhaps the API between components shifted during development and the reconnection was deprioritized. The result is that a beautiful entrance ritual exists in isolation, doing nothing.
-
-The sprint vision calls this out directly: "The DeckShuffleAnimation.tsx exists but is unused in the current home flow." This is fixable. The component already knows its own phases. The home view needs to be taught to pass through it. But until that connection is made, the ritual is theater without an audience.
+This is the specific kind of hollow that is worse than silence. It looks like depth. It sounds like depth. It uses the right vocabulary. But it does not know what it is saying. The user who is carrying something real and drew this card deserves better.
 
 ---
 
-## The Element Temperature That Does Not Register
+## What the Reversed Pip Meanings Are Missing
 
-In `tarot.css`:
+Let me read some of these reversed meanings carefully.
 
-```css
-.element-fire  { background: rgba(232, 96, 60, 0.04); }
-.element-water { background: rgba(74, 144, 217, 0.04); }
-.element-air   { background: rgba(176, 200, 224, 0.03); }
-.element-earth { background: rgba(138, 111, 60, 0.03); }
-```
+The Seven of Pentacles reversed: "suggests impatience that is disrupting a sound long-term investment — harvesting too early, abandoning what needed more time, or the anxiety of a slow return undermining the commitment to the original plan."
 
-These classes exist. Four percent opacity fire tint, three percent opacity earth tint. These are values so small that on most displays they will be effectively invisible. The spirit behind them is right: when The Sun is revealed, the air should feel slightly warmer. When The High Priestess arrives, cooler, more watery. This is the kind of thing users will never consciously notice and will always subconsciously feel when it is calibrated properly.
+This is accurate. It names the right domain. But it does not name a psychology. It names a behavior — harvesting too early — without saying who the person is who does this, what they feel, what they tell themselves to justify it. It could apply to anyone who is impatient about anything long-term. It does not name the specific human experience of being someone who is afraid that waiting means being foolish, that the harvest is never going to come, that the whole investment was a mistake and the only dignity left is to cut your losses before anyone notices.
 
-But 4% opacity means the class is present in the stylesheet, class names are available, and the effect is functionally inert. Meanwhile, `CelticCrossReading.tsx` has its own inline temperature system: `bgColor = bgTemp === 'warm' ? '#1a0f08' : bgTemp === 'cool' ? '#080d1a' : '#0d0d0f'` — switching the background color of the entire reading container based on whether the revealed card is Major or Minor Arcana. This is a stronger signal, and it works. Major Arcana → warm amber-dark. Minor Arcana → cool indigo-dark.
+Compare this to what sprint 0026 accomplished with the reversed High Priestess: "She has not gone quiet; she has become the only authority in the room. The person experiencing this reversal has listened so exclusively to what they already know that they have lost the capacity to test it against what is actually happening."
 
-Two systems, competing, neither quite right. The CSS classes go unused in the Celtic flow. The inline background switch conflates arcana with element: the Five of Cups (Water, Minor Arcana) will produce a cool-indigo background, which happens to be right for Water. The Six of Wands (Fire, Minor Arcana) will also produce cool-indigo, which is wrong for Fire.
+This second description is doing something different. It is not describing the behavior. It is describing the person from the inside — what it feels like to be them, what mechanism has produced the situation. Someone who reads that description will recognize themselves or someone they know, not as a behavioral category but as a specific psychological formation.
 
-Element is more semantically precise than arcana for temperature. The signal should be: this card is Fire, therefore warm. This card is Water, therefore cool. This card is Earth, therefore a deep warm-green. This card is Air, therefore a high cool-silver. And the opacity should be 8-12%, not 3-4% — enough to actually shift the register of the room.
+The pip reversals need to move in this direction. Not all of them — many of the upright meanings are strong enough that a shorter reversed note functions well as a contrast. But the dense psychological cards — the Eight of Swords, the Nine of Swords, the Five of Pentacles, the Six of Cups, the Seven of Cups — these carry enough internal complexity that a reversed meaning of six lines structured as behavior-description is genuinely insufficient.
 
----
+The Eight of Swords reversed is currently: "signals the beginning of release — the blindfold slipping, the bonds being recognized as loose enough to escape, the first moment of seeing that the cage is not as sealed as it appeared. The release begins with perception rather than external action."
 
-## What the Loading States Are Doing Wrong
+This is adequate. But what is the actual experience of the person drawing the Eight of Swords reversed? It is the specific experience of realizing that you have been the one maintaining the confinement. That the story you have been telling yourself about why you cannot leave — the relationship, the job, the way of being — was a story with you as its author. The release is not relief. It is a strange grief, because the cage was yours, and recognizing that means you could have left years ago. That specific recognition — the mix of freedom and self-recrimination — is what the Eight of Swords reversed is pointing at. The current text describes the first moment of seeing. It does not name what that seeing costs.
 
-In `TarotSynthesisPanel.tsx`, when chapters are loading:
-
-```
-"The cards are being read as a constellation."
-```
-
-This is correct. This is the right voice. It is styled as a font-heading italic centered paragraph, gold at 55% opacity, 1.05rem. It is patient, it explains itself without explaining itself, it uses the product's symbolic language. I approved of this when I first read Sprint 0023. I still approve of it.
-
-But in `CelticCrossReading.tsx` Phase `dealing`:
-
-```
-"The cards are being placed…"
-```
-
-And Phase `drawing`:
-
-```
-"Draw a card from the deck for each of the ten positions (0/10)."
-```
-
-This second line is a counter in parentheses. `(0/10)`. This is a progress bar written in text form. It is functional. It is also exactly the wrong voice for this moment. The user is not completing a form with ten fields. They are drawing ten cards from a deck for a reading they came to because something in their life is unclear or unsettled. The counter says: you have 10/10 tasks remaining. Do them efficiently.
-
-I understand why the counter is there. It is useful. The user needs to know how many cards they still need to draw. But there is a difference between "Draw a card from the deck for each of the ten positions (0/10)" and "Place the first card. The Foundation awaits." One is a task list. The other is an invitation. The task list tells the user they are operating a machine. The invitation tells them they are participating in something.
-
-The instruction text in the header should know which position is next and speak to it by name: "The Foundation position awaits your choice." Then "The Crossing card." Then "What is below you." Then "What is above you." Each position has a name. Each name carries meaning. Using the name instead of a counter costs nothing and changes everything.
+The sprint vision quotes the goal precisely: "named descriptions of the card's symbolic field operating as blocked, internalized, or arrested." The key word is named. Not described, not summarized — named, as in given the specific title that makes a person say: yes, that is exactly what this is.
 
 ---
 
-## The Constellation Overlay — Almost Sacred
+## The Fool and Justice — The Two That Are Missing
 
-The `ConstellationOverlay` component shows when the Celtic Cross enters the synthesis phase:
+There is something I find quietly telling about which two Major Arcana lack transit adaptations.
 
-```
-"The cards are now being read as a constellation."
-```
+The Fool is the card of pure beginning, the leap before the ground is verified. Its ruling planet is Uranus — the planet of sudden liberation, disruption, the unexpected rotation. The Fool under a Uranus transit is the purest expression of both forces simultaneously: the archetype whose entire nature is to leap, amplified by the planet whose entire nature is to force a leap. There is something that has been waiting in this alignment that has not been named. When someone draws The Fool and Uranus is transiting a personal point in their chart, the system should recognize that this is not a moment for hedging or for balance. This is the moment the card was built for.
 
-This text appears over a dark overlay at `rgba(0,0,0,0.75)`, in font-heading at 1.375rem, in italic, at 92% white opacity, centered. It transitions in with 0.8s ease-out. It shows for 2800ms then fades.
+Under Saturn, The Fool changes entirely. The Fool under Saturn is not the joyful leap — it is the leap that feels most unreasonable, most precarious, most likely to be judged. It is the beginning that someone takes not because conditions are favorable but because they understand that Saturn will keep refusing to make conditions favorable indefinitely, and at some point courage is required precisely because the conditions are as hostile as they will be. The Fool under Saturn is not freedom. It is the cost of freedom.
 
-This is a genuinely good moment. The user has spent time drawing ten cards, holding each one, moving through positions. Then darkness, and this sentence. It works as a ritual pause. The timing is right. The voice is right.
+These two entries are missing. They should not be missing. The Fool is one of the most drawn cards in the deck — it carries the energy that many people are hoping to find when they open a tarot reading, the confirmation that beginning is possible. And the system has nothing specific to say about it under any transit condition.
 
-But then the fade leads directly into the synthesis chapter display, which has a loading skeleton if synthesis is still pending. The skeleton is a `GptSkeleton` component — a shimmer effect. The transition from the sacred overlay to the practical shimmer is a tone break. One moment the user is in darkness with a poetic sentence. The next they are watching a content-loading animation, which is the visual language of web content that is fetching from a server.
+Justice is even more particular. Its planetary associations — Venus and Saturn depending on the tradition — already point toward specific transit meanings. Venus transiting Justice is the honest accounting of whether what you have been calling love is actually fair, whether the exchange in a relationship reflects real reciprocity or the comfortable fiction of it. Saturn transiting Justice is cause and effect arriving with no softening, the moment when the consequences of choices made years ago present themselves with the perfect impersonality of natural law.
 
-The gap between these two should be bridged. If synthesis is not ready when the overlay fades, the loading state should use the product's own language, not a generic skeleton. Something like: *"The synthesis is forming. Stay with the cards."* In the same italic gold voice as the constellation sentence. The skeleton appears when the synthesis is structurally ready to be broken into chapters, not before the voice arrives.
+These are not generic ideas. They are specific situations that specific people find themselves in, and when they draw Justice in that moment, they deserve to find language that meets them there.
 
 ---
 
-## The Interpretation Panel After Each Card — Nine Disconnected Moments
+## What the Single Card Draw Is Still Missing
 
-The `InterpretationPanel` inside `CelticCrossReading.tsx` renders after each card is revealed during the hold/continuing phases. It shows: position name, card name, core meaning, emotional meaning, reversal note (if applicable), astro connection, position description.
+The sprint vision names a tertiary target: the single card draw does not activate position-aware transit affinity because it passes `null` as the position, causing the level-2 fallback to produce a generic rather than position-aware line. Single card draws are the most frequent draw type in the entire product. Most people who use this product daily are drawing one card in the morning and reading what it says about their day.
 
-These are correct fields. They are rendered cleanly — restrained type, right opacity levels, appropriate spacing. The panel appears with a 0.4s fade-in animation.
+For these draws, the transit affinity line currently reads: "The current Saturn transit amplifies this card's Fire nature — planning and vision without movement are heightened now." This is the level-2 generic output. It mentions the card's keywords without actually connecting them to the specific quality of Saturn meeting Fire. It sounds like something the system generated because it had to say something.
 
-But look at what the astro connection contains. In `toDrawnCard()`:
+The fix is simple — the single card position already exists in the spread positions data, it simply needs to be passed instead of null. But I want to say something about why this matters beyond the technical fix.
 
-```
-astroConnection: [card.rulingPlanet, card.rulingSign].filter(Boolean).join(' — ') || 'Astrological resonance present in the symbolic field.'
-```
+The person drawing a single card in the morning is in a different state than the person who has come to lay out a Celtic Cross. They are often doing something quiet and private. They have a cup of something warm, or they are about to begin their day and want a word of orientation. The reading they receive should feel like it was spoken directly to them in that small private moment. Not: "this fire card meets Saturn's energy." But: something that understands that this particular card, on this particular day, under this particular sky, is saying something specific to someone who is just beginning a day and wants to know what to be attentive to.
 
-This is a join of two strings. If the card has a ruling planet and sign, you get "Mars — Aries". If not, you get the fallback: "Astrological resonance present in the symbolic field." Both of these are displayed in the interpretation panel at 40% gold opacity.
-
-"Mars — Aries" tells the user almost nothing without context. What does it mean that the card in the Foundation position is ruled by Mars and Aries? Is this relevant to the user's natal chart? Is Mars currently transiting anything significant? The astro connection is a label without a sentence.
-
-"Astrological resonance present in the symbolic field." is the fallback, and it is philosophically true in the same way that "matter exists" is philosophically true. It communicates nothing that is specific to this user, this card, this day.
-
-The sprint vision addresses this directly: the Celtic synthesis needs real transit data wired in, and the instant interpretation engine needs to use it. Until that connection is made, the astro section in each card's interpretation panel is a placeholder wearing the clothes of a feature.
+Position awareness would allow the engine to frame the transit note as a present-active influence rather than an abstract pairing. That small change — from "this fire meets Saturn" to "the current Saturn transit is pressing exactly here, against this card's specific territory, on a day when you are being asked to..." — is the difference between a system producing output and a reading that feels addressed.
 
 ---
 
-## What Would Change Everything
+## On the Craft of Writing Transit Adaptations
 
-I am not interested in identifying problems without pointing toward what to do. Here are the things that, if addressed, would close the distance between what this product is and what it is trying to be.
+The sprint vision is clear about the quality bar: these entries should name "the specific experience of sustained effort being tested at exactly the moment when commitment was just forming." I want to say something about what that means at the level of individual sentences, because it is easy to misunderstand.
 
-**First: Use the CardBack component everywhere.** Replace the `✦` in `TarotDeckSelection.tsx` with the proper `CardBack` component. This is one import and one JSX replacement. The visual effect — a fan of actual card backs with proper geometry and breathing animation — changes the entire register of the drawing experience.
+The existing Major Arcana transit entries are genuinely good. Let me read one: "Saturn's transit transforms The Hermit's voluntary withdrawal into something more urgent and less optional — the inner journey is not a luxury to be scheduled when convenient but a necessity that Saturn is now requiring."
 
-**Second: Wire the shuffle ritual back in.** `DeckShuffleAnimation.tsx` exists and is complete. The home flow should pass through it before reaching deck selection. The user should see the deck breathe, should see the intention echo above it as cards fan and shift. This component was built to do exactly this work.
+What this sentence does: it takes two forces — the Hermit's nature and Saturn's nature — and describes the specific quality of their meeting. Not "Saturn brings structure" and not "the Hermit represents solitude." It describes what it feels like to be a person experiencing both at once. The inner journey is not a luxury. That phrase does specific work. It names what the person has been treating the inner journey as (a luxury, a thing for when life permits) and what the transit is revealing (it is not that).
 
-**Third: Replace the position counter with a position invitation.** In the Celtic Cross drawing phase, instead of "(0/10)", show the name and meaning of the *next* position to be drawn. "The Foundation — what underlies this moment." The user draws toward something named, not toward a count.
+The pip card transit adaptations need to do this same work. They need to find the specific quality of the meeting, not the summary of the individual forces. The Two of Wands meeting Saturn: commitment was just forming. Saturn does not care that it was just forming. Saturn's question is whether the commitment is real. The Two of Wands person has been standing at the parapet for as long as they have been standing at the parapet, and Saturn has decided that the standing has gone on long enough to constitute an answer in itself.
 
-**Fourth: Replace the stub with the real engine.** One line in `handleActualDeckSelect`: pass `CELTIC_CROSS_POSITIONS[selectionIndex]` into the real `computeInstantInterpretation` from the engine rather than the local stub. This unlocks position-aware, sky-aware, intention-threaded interpretation for all ten Celtic positions simultaneously.
+The Nine of Swords meeting Saturn: the anxiety has been a form of control — if you worry enough about everything, perhaps nothing unexpected will arrive. Saturn, which is nothing but the unexpected arrival of consequence, meets this directly. The Nine of Swords under Saturn is the person whose anxiety has finally run out of new material to generate, because the thing they were afraid of has arrived and it is real and it is exactly as bad and also exactly as manageable as things tend to be.
 
-**Fifth: Thread the sky into the Celtic synthesis.** The three-card flow sends `dailyTransitSummary` and `weeklyTransitSummary` to the GPT. The Celtic flow does not. The payloads need to match. Without the sky, the Celtic synthesis is a ten-card reading for an abstract person. With the sky, it is a reading for the specific human sitting in front of it.
-
-**Sixth: Calibrate the element temperature to element, not arcana.** The background shift during Celtic Cross reveals should respond to the card's element. Fire cards → warm. Water cards → cool. Earth cards → deep. Air cards → clear. And the opacity should be high enough to actually register — not 4%, but something closer to 10%, enough to shift the perceptual register without being visible as a visual effect.
+These are the kinds of specific formulations the new entries need to reach. Two to three per card, for the transit conditions that most dramatically shift the card's meaning. Saturn, Pluto, Uranus for most cards. Mars for Wands and Swords. Neptune for Cups. Venus for Pentacles. Mercury retrograde for the mental cards.
 
 ---
 
-## The Humanity That Is Already There
+## The Reflection Question as Doorway
 
-I want to end honestly: there is real craft in this codebase. Someone wrote `CrossStaffTransition` — the overlay between the cross and the staff of the Celtic Cross — and gave it this text: *"The cross has spoken. The staff now tells you where you are going."* This sentence is correct in the deepest sense. It understands the Celtic Cross as a narrative structure, not just a layout. The cross is diagnosis; the staff is trajectory. The code honors this.
+I want to note something about the pip card data that I find consistently well-crafted: the reflection questions. These are, in my reading, the strongest writing in the entire data layer. 
 
-Someone wrote the `ConstellationOverlay` — the darkness and the sentence before synthesis — and got the timing right on the first try. 2800ms of the text, 800ms of fade, synthesis arriving as the darkness lifts. This is not the work of someone who was only engineering. This is the work of someone who felt the rhythm.
+"What have you been calling 'planning' that is actually a way of experiencing the journey without taking the risk of it?" — Two of Wands.
 
-The three-card `computeAIFreeSynthesis` fallback — the one that runs when GPT is unavailable — contains this line: "Neither is wrong; both are real." Referring to elemental conflicts between cards. A developer building a fallback algorithm wrote that sentence. That sentence is true. Not every fallback algorithm contains truth.
+"What are you spending your energy defending that might be better served by advancing rather than holding ground?" — Seven of Wands.
 
-This is not a product built by people who do not care. It is a product where caring people ran out of time and left seams where the care stopped. The seams are specific: the deck fan's content, the stub interpretation, the missing sky data, the shuffle ritual that is built but not connected. Close these seams and you have something that honors the original intention.
+"What communication or decision have you been holding back that this moment of swift movement is asking you to finally release?" — Eight of Wands.
 
-The user who comes to a tarot reading at ten in the morning, alone, uncertain about something they cannot name — they will not see the code. They will feel whether it was built with attention. Right now, they will feel some attention and some haste, and they will not know which to trust. The goal of Sprint 0024 is to make that ambiguity resolve clearly: everything here was made for you, made with care, and it knows you were coming.
+These are not gentle. They address the person directly, using their own avoidance patterns as the question. They do not ask what the card means; they ask what the person is doing. This is the spirit that should animate the reversed meanings and the transit adaptations as they are written. The same directness, the same willingness to name a specific human evasion rather than a general principle.
+
+The reversed meaning for the Two of Wands is already close to this: "a future that has been mapped and planned and re-planned but never committed to, a horizon that remains beautiful precisely because it has not been tested by proximity." This is the right register. It needs to extend one step further — into who this person is, what they are protecting by staying at the parapet, what the re-planning is doing for them psychologically.
 
 ---
 
-*— Hayao Miyazaki, reviewing sprint 0024*
+## What Must Not Be Forgotten
+
+The sprint vision is specific and correct about its priorities: transit adaptation coverage first, pip reversed meanings second, single-card position context third. I agree with this ordering.
+
+But I want to name something that I hope does not get lost in the work: the transit adaptations are not a coverage exercise. They are not a matter of filling in the empty slots so that no card falls through to level 2. They are an opportunity to do something that the upright meanings and reversed meanings cannot do — to speak to the person about this specific intersection of their inner situation (the card's symbolic field) and the sky above them right now.
+
+When someone draws the Five of Swords under a Pluto transit, Pluto is pressing on the specific wound that the Five of Swords already carries: the hollow victory, the argument that damaged the relationship, the winning that cost more than it was worth. Pluto does not need to be explained in general. It needs to be pointed directly at what the Five of Swords is already about. "What Pluto asks when the Five of Swords appears is not whether you won, but what winning cost you, and whether you have allowed yourself to truly feel that cost — or whether you have been moving quickly enough that the accounting has not yet caught up with you."
+
+That is the sentence I want to exist in this database. That is what the person who drew the Five of Swords under a Pluto transit deserves to read when they open their interpretation panel.
+
+Write the entries that are that specific. Not every one of them — two or three per card, for the transits that matter most. But make each one say something that the person could not have found anywhere else, for any other card, on any other day.
+
+---
+
+*— Hayao Miyazaki, reviewing sprint 0027*

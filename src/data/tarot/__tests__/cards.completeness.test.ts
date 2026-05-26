@@ -118,6 +118,25 @@ describe('Tarot card data completeness', () => {
     }
   })
 
+  it('all pip cards (Two through Nine) have at least one transit adaptation entry', () => {
+    const suits = ['wands', 'cups', 'swords', 'pentacles'] as const
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
+    const coveredCardIds = new Set(TRANSIT_ADAPTATIONS.map(e => e.cardId))
+    const missing: string[] = []
+    for (const suit of suits) {
+      for (const number of numbers) {
+        const id = `${number}-of-${suit}`
+        if (!coveredCardIds.has(id)) {
+          missing.push(id)
+        }
+      }
+    }
+    expect(
+      missing,
+      missing.length > 0 ? `Missing transit adaptations for: ${missing.join(', ')}` : ''
+    ).toHaveLength(0)
+  })
+
   it('astro connections covers exactly 78 cards', () => {
     expect(Object.keys(CARD_ASTRO_CONNECTIONS)).toHaveLength(78)
   })

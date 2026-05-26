@@ -1,4 +1,4 @@
-# Taleb's Risk Review — Sprint 0024: Tarot Depth & Polish
+# Taleb's Risk Review — Sprint 0027: Transit Coverage & Reversed Depth
 
 *Nassim Nicholas Taleb. May 2026.*
 
@@ -6,305 +6,258 @@
 
 ## Opening Observation
 
-Sprint 0023 shipped. The team is proud. Everything is "end-to-end functional." The vision document for sprint 0024 opens with the phrase "the mechanics are sound." This is exactly how people describe a bridge the week before it falls.
+Let me begin with what has been accomplished since I wrote the sprint-0024 review, because I am capable of acknowledging when a codebase improves.
 
-I have now read the actual code. I have read `src/engine/tarot.ts`, `server/routes/tarot.ts`, `src/context/TarotContext.tsx`, `server/services/gptTarot.ts`, `src/components/tarot/CelticCrossReading.tsx`, `src/components/tarot/TarotPage.tsx`, the full card data layer, the rate-limiting middleware, and the spread position definitions. Sprint 0023 addressed several of my prior concerns — `gptTarot.ts` was extracted, `tarot_usage` is a separate table, `TarotContext` is isolated. Some proposals were implemented. Others were not. The new sprint introduces new fragilities I have not yet discussed.
+The three parallel `TarotAstroContext` type definitions are gone. `TarotContext.tsx` now imports from `src/engine/tarot.ts` directly and re-exports the canonical types. The Celtic Cross stub is gone — `CelticCrossReading.tsx` now calls `computeInstantInterpretation` from the real engine. The Celtic Cross synthesis now calls `calculateTransits()` and populates `dailyTransitSummary` and `weeklyTransitSummary`. The intention threading is no longer a one-line insertion — it is an `intentionAnchor` instruction that appears multiple times in the prompt with explicit paragraph-by-paragraph requirements. The seeded draw has been unified. These were the most critical structural fragilities I named, and they were addressed.
 
-Here is what I see when I look at what was actually built versus what the team believes was built.
+The foundation is now honest about what it does.
 
----
+Sprint 0027 operates on a different problem. The sprint is fundamentally a data completion task: write 56-plus transit adaptation entries and elevate 28 reversed meanings. This is craft work, not structural work. The fragilities I am naming today are different in character from the ones I named before — they are not scaffolding failures but quality-control gaps, coverage logic errors, and hidden assumptions about what "completion" means.
 
-## 1. The Central Type System Incoherence: Three Parallel Type Universes
-
-This is the most important structural problem in the codebase and nobody appears to have named it.
-
-There are three separate definitions of `TarotAstroContext`, `DrawnCard`, and `InstantInterpretation` in this codebase:
-
-- **`src/context/TarotContext.tsx`** defines its own `TarotAstroContext` with fields: `birthDate`, `personalDay`, `moonPhase: unknown | null`, `transitAspects: unknown[] | null`, `advanceCategory`, `dominantElement`. The `moonPhase` and `transitAspects` fields are typed as `unknown` — a compiler-level admission that nobody decided what these should be.
-
-- **`src/engine/tarot.ts`** defines `TarotAstroContext` (as `EngineCtx` in imports) with the full, correct structure: `natalSunSign`, `natalMoonSign`, `natalAscendantSign`, `currentTransits: TransitAspect[]`, `retrogradeplanets`, `dominantTransitPlanet`, `lunarPhaseName`, `personalDay`, `advanceCategory`, `advanceReason`.
-
-- **`src/components/tarot/types.ts`** defines yet another `TarotAstroContext` with fields: `sunSign`, `moonSign`, `ascendant`, `dominantElement`, `currentMoonPhase: string`, `significantTransits: string[]`, `personalDay`, `advanceCategory`, `numerologyYear`. This is the type consumed by `CelticCrossReading.tsx`.
-
-These are not related by inheritance, not unified by a shared type, not validated against each other. They are three separate definitions that happen to describe the same concept. When `TarotPage.tsx` calls `buildCelticAstroCtx()` at line 155, it populates the `types.ts` version with `currentMoonPhase: ''` and `significantTransits: []` — hardcoded empty values. This is not a missing feature. This is a deliberately emptied data contract, and it means the Celtic Cross GPT synthesis runs without any live transit data.
-
-The vision document calls this out as a known gap. But calling it a gap understates the architectural problem. The three-type divergence means that every future developer who touches this feature must reason simultaneously about three different shapes for the same concept. Each fix applied to one context type is invisible to the other two. This is how bugs accumulate invisibly.
-
-**What breaks under stress:** Sprint 0024 asks developers to "wire real transit data for all three reading flows." The developer doing this work will write code that populates the `EngineCtx` version and will wonder why the Celtic Cross still sends empty transits — because `CelticCrossReading.tsx` receives the `types.ts` version, not the engine version. The type system provides no warning because both types are structurally valid TypeScript. The bug will be invisible until someone manually inspects the GPT payload.
-
-**The hidden assumption that will not hold:** The assumption is that developers can reason about which type they are working with at any moment. Under sprint pressure, this assumption fails. You get a bug where the data is present in one representation and absent in the one actually consumed.
+Here is what I see.
 
 ---
 
-## 2. The `computeInstantInterpretation` Stub That Survived Production
+## 1. The `dominantTransitPlanet` Single-Winner Selection Is the Wrong Architecture for Coverage
 
-At line 76–92 of `src/components/tarot/CelticCrossReading.tsx`, I find this:
+This is the most important fragility in the entire transit adaptation system, and the sprint is proposing to build more data on top of it without changing the architecture.
+
+In `buildTransitInfluence()` at line 680–755 of `src/engine/tarot.ts`, the Level 1 lookup iterates through the `TRANSIT_ADAPTATIONS` for a card and matches entries against `astroContext.dominantTransitPlanet` or `astroContext.retrogradeplanets`. The `dominantTransitPlanet` field is computed in `buildTarotAstroContext()` by iterating through `currentTransits` and selecting the single highest-priority planet by `PLANET_PRIORITY`.
+
+The priority table is: Pluto=10, Neptune=9, Uranus=8, Saturn=7, Jupiter=5, Mars=3, Sun=2, Venus=2, Mercury=1, Moon=1.
+
+Here is the fragility: a user with Saturn conjunct natal Sun (orb 0.2°, applying, a defining transit of their year) will have Saturn suppressed as `dominantTransitPlanet` if they also have a Pluto transit active — say, Pluto trine natal Moon (orb 3.5°, separating, largely past its peak). Pluto wins by priority. The Saturn transit adaptation fires, if it exists. The specific, tight, cardinal-year Saturn transit does not.
+
+The priority system treats planet identity as a proxy for significance, but planet identity is not the same thing as the significance of a specific transit. A wide, separating Pluto trine is less significant for most people on most days than a tight, applying Saturn opposition. The system has no concept of orb, applying/separating status, or transit type — it only knows which planet has the highest static priority number.
+
+**What this means for sprint 0027's work:** The team is about to write approximately 56 new transit adaptation entries, each carefully crafted to name "the specific meeting between the card's symbolic field and the transit planet's register." Every one of these entries will fire conditionally based on whether the relevant planet is the highest-priority transit planet active for the user. For a user with Pluto dominant (which is many users, since Pluto moves slowly and its orb window is wide), almost no Saturn, Uranus, or Mars entries will ever fire regardless of how well-written they are. The coverage improvement the sprint claims will materialize for users without an active Pluto transit; for users with an active Pluto transit, it will be invisible.
+
+The team believes writing the entries completes the coverage. Completing the entries only completes the data layer. Whether the entries are accessible to real users depends on the single-winner selection logic that the sprint is not touching.
+
+---
+
+## 2. The Retrograde Matching Logic Has a Priority-Override Bug
+
+Look at the Level 1 matching logic in `buildTransitInfluence()`, specifically the `condition: 'any'` branch:
 
 ```typescript
-// ─── Stub: instant interpretation ────────────────────────────────────────────
-// Engine (task-0006) will provide a proper computeInstantInterpretation.
-function computeInstantInterpretation(card: DrawnCard, position: typeof CELTIC_CROSS_POSITIONS[number]): InstantInterpretation {
-```
-
-The comment says "Engine (task-0006) will provide a proper `computeInstantInterpretation`." Task-0006 shipped. The real `computeInstantInterpretation` exists in `src/engine/tarot.ts` and is already being imported and called correctly in `TarotPage.tsx` (line 10, imported as `computeInstantInterpretation from '../../engine/tarot'`). But `CelticCrossReading.tsx` has its own local stub that shadows the real function.
-
-The stub function, when examined, produces an `InstantInterpretation` with:
-- No transit influence (the `astroConnection` field is populated with `[card.rulingPlanet, card.rulingSign].filter(Boolean).join(' — ')` — a raw data field, not an interpreted signal)
-- No lunar phase note
-- No advance category note  
-- No element resonance note
-- No position-aware text — despite `position` being passed, the stub ignores position logic entirely beyond storing `position.name` and `position.description`
-- A reversal note constructed as a string template (`In reversal, ${card.coreMeaning.toLowerCase()} turns inward`) — not the card-specific reversed meaning
-
-This stub is what every Celtic Cross user receives in the interpretation panel during the reveal sequence. It is not the engine. It is a placeholder that was never replaced.
-
-The real engine function at line 678 of `src/engine/tarot.ts` computes all the missing signals: `buildTransitInfluence()`, `buildAstroHeadline()`, `buildElementResonanceNote()`, `buildLunarPhaseNote()`, `buildAdvanceCategoryNote()`, and `adaptInterpretationToPosition()`. All of this work exists and is tested. None of it reaches the Celtic Cross user.
-
-**What breaks:** Every Celtic Cross interpretation panel shows a stripped-down reading. This is not a future gap to address — this is the current state. The team shipped this believing task-0006 was complete. The stub is still in production.
-
----
-
-## 3. The GPT Rate Limiter Is Not Wired to the Tarot Routes
-
-I looked at `server/routes/tarot.ts`. The file has two routes: `POST /api/tarot/check-limit` and `GET /api/tarot/usage`. Neither route touches GPT. The actual GPT synthesis calls for tarot — `handleTarotSingleSynthesis`, `handleTarotThreeSynthesis`, `handleTarotCelticSynthesis`, `handleTarotDiscuss` — are dispatched through `server/services/gpt.ts` via the main GPT router, not through the tarot router.
-
-This means tarot synthesis calls go through the existing `gptRateLimit` middleware — the same middleware that governs daily readings, solar returns, and synastry. A user who draws a Celtic Cross consumes the same daily GPT budget as a user who requests a daily transit reading.
-
-But the `tarot_usage` table, the `checkDailyCardLimit`, and `checkWeeklyThreeCardLimit` functions in `tarotGate.ts` — the functions I explicitly recommended building — govern card *draws*, not synthesis calls. The card draw limit and the GPT synthesis call are tracked by different systems that do not talk to each other.
-
-This creates a specific exploit: a user can draw their daily card (incrementing `daily_cards` in `tarot_usage`), receive the instant interpretation without triggering a synthesis, then call the synthesis endpoint directly. The draw counter says they've used their allowance. The synthesis counter (tracked by the generic GPT rate limiter) is separate. Whether this constitutes an exploit or intended behavior is not documented anywhere in the codebase.
-
-More importantly, the Celtic Cross has no draw counter at all — `checkCelticCrossAccess()` only checks tier. A basic-tier user can trigger 50 Celtic Cross GPT syntheses in a day and each one goes through the generic GPT limiter, not a tarot-specific gate.
-
-**The hidden assumption that will not hold:** The team believes they built a tarot-specific rate limiting system. They built a tarot-specific *draw counting* system. These are different things, and the difference matters when GPT costs are material.
-
----
-
-## 4. The Celtic Cross Synthesis Runs Without the Live Sky
-
-This is not a gap. It is a design decision that was implemented and then described as a gap.
-
-In `server/services/gptTarot.ts`, `handleTarotCelticSynthesis` at line 448 does something notable. When `userId` is provided, it re-derives the natal chart and recalculates numerology. But it does not call `calculateTransits()`. The three-card handler at line 323 does call `calculateTransits()` for both daily and weekly periods. The single-card handler at line 220 does the same.
-
-The Celtic handler explicitly has no transit calculation:
-
-```typescript
-if (userId) {
-  const ctx = resolveUserBirthContext(userId)
-  if (ctx) {
-    // ... natal chart, numerology recalculated ...
-    // calculateTransits is NOT called
+} else {
+  // 'any' — match if dominant or retrograde
+  if (
+    astroContext.dominantTransitPlanet === entry.planet ||
+    astroContext.retrogradeplanets.includes(entry.planet)
+  ) {
+    return entry.emphasis
   }
 }
 ```
 
-The Celtic Cross prompt therefore contains the person's natal Sun, Moon, Ascendant, Moon phase name, advance signal — but no daily transit summary, no weekly transit summary, no specific transit aspects. The prompt section labeled "## This Person's Living Sky" at line 509 shows only static natal data plus current Moon phase and personal day. The sky is not live. It is a snapshot of the person's birth chart plus a moon phase label — not the actual transits in effect today.
+The retrograde branch of this condition fires for any planet that is retrograde — regardless of whether that planet is the dominant transit planet. This means that if Mercury is retrograde (which it is for roughly 19% of the year), any card that has an `any`-condition Mercury entry will match, even if Pluto is the dominant transit planet for this user.
 
-For comparison, the single-card prompt has four distinct sections: "## This Person's Sky Right Now," "## Daily Transit Context," and "## Weekly Transit Context," each with real computed data. The Celtic Cross, supposedly the most complex and meaningful spread, has none of this.
+Now combine this with iteration order. The function iterates through `adaptations` in array order. If a card's Mercury retrograde entry appears before its Saturn entry in `TRANSIT_ADAPTATIONS`, the Mercury retrograde text fires every time Mercury is retrograde, regardless of what Saturn is doing.
 
-The vision document acknowledges this. But acknowledging it as a gap does not change the fact that every Celtic Cross synthesis currently produced is running without the most contextualizing data the system possesses. The ten-card constellation that is supposed to feel "written for them" is written against a partial sky.
+The Three of Swords has: `condition: 'retrograde'` for Venus retrograde. The Hermit has: `condition: 'retrograde'` for Mercury retrograde, `condition: 'direct'` for Mercury direct, and `condition: 'any'` for Saturn. If Mercury is retrograde and Saturn is the dominant transit planet, the Hermit's matching logic will:
 
----
+1. Check the Mercury retrograde entry: `astroContext.retrogradeplanets.includes('Mercury')` — true. Return the Mercury text.
 
-## 5. The `gpt-4o-mini` Model Is Being Used for a 3000-Token Celtic Cross Synthesis
+The Saturn entry is never reached.
 
-In `server/services/gpt.ts`, the `callOpenAI` function is hardcoded to `model: 'gpt-4o-mini'`. The Celtic Cross synthesis handler passes `max_tokens: 3000`. This is the most expensive and complex prompt in the system — ten cards, eight named sections, specific instructions about archetypal framing, psychological dynamics, and astrology resonance — and it is being routed to the cheapest, least capable model in the OpenAI family.
+This is not a theoretical edge case. Mercury is retrograde three times per year for approximately three weeks each. During Mercury retrograde seasons, any card with a Mercury retrograde `condition: 'any'` entry will always return the Mercury text, even when Saturn or Pluto is doing something far more significant for the person drawing.
 
-`gpt-4o-mini` is appropriate for the daily snapshot, the brief transit reading. It is a 30-second reading for a 300-token prompt. A Celtic Cross synthesis is a 3000-token output document that requires the model to hold ten card meanings, their positions, their elemental interactions, natal chart data, and a stated intention simultaneously while generating eight coherent sections. The model is not incapable of this, but the probability of the output being generic, repetitive, or internally contradictory is higher at this model tier.
-
-The team is not aware of this trade-off because there is no documentation of the model selection rationale. The model is hardcoded once and the decision is invisible.
-
-**The hidden assumption that will not hold:** The assumption is that `gpt-4o-mini` can produce synthesis quality that satisfies the "could this apply to any other person on the platform" quality bar for a ten-card Celtic Cross. This assumption has not been tested against the quality bar. It may be correct. It may not. The failure mode is silent: the model produces plausible-sounding text that passes a casual review but fails the bar under close reading. Nobody has an alert for this.
+The new pip card entries will be written and tested in a non-retrograde-Mercury environment. The sprint will conclude. Three weeks later, Mercury goes retrograde, and every pip card with a Mercury entry among the new additions will snap to that text regardless of the actual dominant transit. Nobody will notice because the text is plausible and Mercury retrograde is a real thing. The silent wrong result will be the common result.
 
 ---
 
-## 6. The `userId` Optional Everywhere: Data Flows Without Authorization at Key Points
+## 3. The `condition: 'direct'` Match Logic Is Not What Its Name Implies
 
-In `handleTarotSingleSynthesis(payload, userId?: number)`, the `userId` parameter is optional. When it is absent, the function uses the client-supplied payload values for natal signs, transit summaries, and personal day. The server does not verify these client-supplied values.
-
-This means a client can send a modified synthesis payload — different natal signs, different transit summary — and the server will use the client-supplied values without question. A user can claim to be a Scorpio Sun when they are a Gemini Sun, and the synthesis will be tailored to a Scorpio Sun.
-
-Is this a practical attack vector? For most users, no. For a user who wants a reading that better fits their self-concept, yes. More practically: it means the server has no ground truth for quality control. If the client has a bug that corrupts the natal sign serialization, the server will synthesize a reading against corrupted data without any warning. The `resolveUserBirthContext(userId)` path, which re-derives data server-side, only runs when `userId` is present and the user has a birth context registered. For anonymous or partially registered users, the fallback is entirely client-trust.
-
-This is not a sprint-0024 problem to solve. But it is a fragility that every sprint that adds synthesis handlers makes slightly worse.
-
----
-
-## 7. What Everyone Is Excited About That They Shouldn't Be: Intention Threading
-
-The sprint vision has identified "intention threading" as the key depth gap. The proposal is to pass `userIntention` through the interpretation engine, the GPT prompts, and the Discuss context so that the reading is anchored to what the user actually came to explore.
-
-I looked at how `userIntention` currently flows through the system.
-
-In `handleTarotSingleSynthesis`, intention appears once at the very top of the prompt:
+For entries with `condition: 'direct'`, the matching logic is:
 
 ```typescript
-const intentionLine = payload.userIntention
-  ? `The person drew this card seeking clarity on: "${payload.userIntention}"`
-  : 'This is an open daily draw — no specific question was asked.'
-```
-
-It is a single line inserted at the top, before the card data, the sky data, the transit context. The model reads it and moves on. There is no instruction to return to this intention at any point in the synthesis. There is no instruction to evaluate whether the card addresses the intention or diverges from it. There is no instruction to close the synthesis by reflecting the intention back to the user.
-
-In the GPT prompt instructions for the single-card synthesis, the word "intention" appears exactly once — in that opening line. The four-paragraph instruction block does not reference intention at any point. Paragraphs 2, 3, and 4 are about natal chart, daily transits, and weekly transits. The model is not instructed to anchor these to the stated intention.
-
-Sprint 0024 plans to "thread intention explicitly." Threading requires more than inserting the intention string once at the top of a prompt and expecting a language model to honor it across four paragraphs. A model responding to `max_tokens: 900` with no explicit instruction to weave the intention through each section will optimize for completion coherence, not intention relevance. The intention will influence the first sentence and fade.
-
-**The fragility:** The team will add the intention to the engine context and re-insert it in additional prompt positions and declare the threading done. The output will be slightly more intention-relevant than before. Whether it meets the vision's bar — "traceable in more than one paragraph" — depends on prompt engineering precision that has not yet been specified. This is an output quality claim that cannot be verified programmatically.
-
----
-
-## 8. The Randomness Incoherence in the Celtic Cross
-
-At the top of `CelticCrossReading.tsx`, the card draw uses:
-
-```typescript
-function shuffleTarotDeck(): DataTarotCard[] {
-  const deck = [...ALL_TAROT_CARDS]
-  for (let index = deck.length - 1; index > 0; index--) {
-    const swapIndex = Math.floor(Math.random() * (index + 1))
-    // ...
-  }
-}
-
-function computeCardReversal(): boolean {
-  return Math.random() < 0.3
+if (
+  astroContext.dominantTransitPlanet === entry.planet &&
+  !astroContext.retrogradeplanets.includes(entry.planet)
+) {
+  return entry.emphasis
 }
 ```
 
-This is `Math.random()` — the browser's non-seeded PRNG. Compare this to `src/engine/tarot.ts` where `drawCards()` uses a deterministic LCG seeded with `userId + birthDate + localDate + spreadType`. The engine provides a reproducible, user-anchored draw. `CelticCrossReading.tsx` ignores the engine entirely and uses pure randomness.
+This fires only when the planet is both the dominant transit planet AND direct. "Direct" here does not mean the planet is active and moving forward — it means the planet is the single highest-priority active transit planet and not currently retrograde. A Mercury-direct entry for a card fires only when Mercury is the dominant transit planet. Mercury is priority 1 in the priority table. Mercury is almost never the dominant transit planet unless no other transit aspect is active.
 
-This means:
-- A Celtic Cross user who draws the same day twice gets different cards each time
-- The Celtic Cross cannot be replicated from a seed (breaking saved readings replay)
-- The "natal chart shapes your draw" narrative that the product communicates does not apply to the Celtic Cross
+The Magician has `condition: 'direct'` for Mercury. The Chariot has `condition: 'direct'` for Mercury retrograde's inverse. The Hermit has `condition: 'direct'` for Mercury direct. These entries are effectively dead letter in any chart where any other transit aspect is active, because Mercury-as-dominant requires the complete absence of active Pluto, Neptune, Uranus, Saturn, Jupiter, Mars, Sun, and Venus transits. This is rare.
 
-This is not a minor inconsistency. It is a philosophical incoherence. The single-card and three-card flows use the engine's seeded draw. The Celtic Cross uses dice. Users who do both in the same session are experiencing two different ontologies without knowing it.
-
-The saved reading schema in `types.ts` stores `drawnCards` with `cardId` and `reversed`, which allows replay. But if the reversal was assigned via `Math.random()`, replaying a saved reading cannot guarantee the same reversal states unless those states were saved at draw time. The schema saves them, so replay works — but the draw itself being unseed means the "personalized draw" marketing claim does not apply to the most premium spread in the product.
+The vision document for sprint 0027 explicitly adds `condition: 'direct'` entries to the vocabulary for new pip cards (Mercury direct for Two of Swords). Before writing such entries, the team should verify whether they will ever fire under realistic conditions. For lower-priority planets, `condition: 'direct'` is almost certainly a dead entry.
 
 ---
 
-## 9. The Error Classification That Creates Incorrect User Messaging
+## 4. The Single-Card Draw Falls Through to Generic Text for Most Users on Most Days
 
-In `CelticCrossReading.tsx`, the synthesis error handler at lines 527–542:
+The sprint's tertiary target acknowledges this: "For single card draws, the `position` is `null` and the function falls through to the non-position-aware generic line."
 
-```typescript
-if (err instanceof RateLimitError) {
-  setSynthesisError('rate-limited')
-} else if (err instanceof Error) {
-  if (err.message.includes('401') || err.message.includes('Unauthorized')) {
-    setSynthesisError('session-expired')
-  } else if (err.message.includes('timeout') || err.message.includes('TIMEOUT')) {
-    setSynthesisError('timeout')
-  } else {
-    setSynthesisError('unavailable')
-  }
-}
-```
+I want to name the full scope of what this means.
 
-The classification logic uses string matching on error messages. `err.message.includes('401')` is a fragility: if the error message format ever changes — if a new middleware wraps the error differently — the '401' check fails silently and the user sees "The synthesis is resting" instead of "Your session has ended." This misclassification sends the user to retry an endpoint that will reject them until they re-authenticate.
+In `buildTransitInfluence()`, the Level 2 fallback for position-aware affinity requires `register !== null`. The `getPositionRegister()` function returns `null` when the position id is not in `PAST_ROOT_POSITION_IDS` or `FUTURE_EMERGING_POSITION_IDS`. The single card position has `id: 'single'`, which is not in either set. So for single card draws, even when a position object is passed (from `SPREAD_POSITIONS`), the register is null, and the position-aware logic is bypassed.
 
-The string `'timeout'` will not be present if the AbortController fires and produces a `DOMException` with the message "signal is aborted without reason" or "The user aborted a request." The timeout classification will fail in exactly the scenario where a slow Celtic Cross synthesis times out — which is the most likely production failure mode given that `gpt-4o-mini` needs to produce 3000 tokens.
+The fix proposed by the sprint — "adding a minimal position context for the single card position" — would work. But consider the scope of what falls through: single card draws are described as "the most common draw type." For every user who draws a single daily card and does not have a Level 1 specific transit adaptation hit (which is every user who draws any of the 28 pip cards currently missing adaptations, plus any card under a transit planet without a specific entry), the transit note reads:
 
-**What breaks under stress:** A user waits through a 10-position reveal sequence, then waits through the constellation overlay, then waits 90 seconds for a synthesis that times out. The error fires. The timeout check misses because the error message format doesn't contain the string `'timeout'`. The user sees "The synthesis is resting" with a Retry button, retries, waits another 90 seconds, gets the same result. No error tells them the system has a timeout problem. No alert tells the team.
+"The current [Planet] transit amplifies this card's [Element] nature — [keyword0] and [keyword1] are heightened now."
+
+or
+
+"The current [Planet] transit introduces [element-adj] energy into this [Element] card — a call to integrate these opposing forces consciously."
+
+These are not descriptions. They are linguistic templates. They carry no information. Any user who draws a daily card and has an active Saturn transit receives a sentence about Saturn introducing "grounding energy" or "amplifying the card's Earth nature" — regardless of which of the 78 cards they drew, what position they are in, and what Saturn is actually doing in their chart.
+
+The sprint will reduce how often Level 2 is reached by filling Level 1 for the missing pip cards. It will not change the fact that when Level 2 fires, the output is formulaic. The tertiary fix for single-card draws is directionally correct and worth doing. But the Level 2 text itself is never examined in this sprint's scope.
 
 ---
 
-## 10. The `TarotContext.tsx` Type Definitions Have Not Been Updated
+## 5. The Reversed Meaning Standard Has an Unmeasurable Quality Bar
 
-The comment at line 4 of `src/context/TarotContext.tsx` reads:
+The sprint vision sets a specific quality standard: "The Two of Wands reversed is not just 'vision without movement' but specifically the person who re-plans the same journey to avoid the risk of taking it."
 
-```typescript
-// Placeholder types — replaced when src/engine/tarot.ts and src/data/tarot/spreadPositions.ts land
-```
+This is good. This is the right standard.
 
-These files have landed. `src/engine/tarot.ts` exists and exports its own `DrawnCard`, `InstantInterpretation`, `SpreadMode` types. But `TarotContext.tsx` still uses its own placeholder definitions:
+Now look at what is actually in the codebase for the pip card reversed meanings. The Two of Wands reversed: "The Two of Wands reversed speaks of vision without movement — a future that has been mapped and planned and re-planned but never committed to." The vision's example improvement is almost literally already in the existing text. The current text says "re-planned but never committed to." The vision says the target is "the person who re-plans the same journey to avoid the risk of taking it." The gap is a single clause.
 
-```typescript
-export interface DrawnCard {
-  id: string
-  name: string
-  suit: string | null
-  number: number | null
-}
-```
+I am not saying the existing reversed meanings are good enough. Some are genuinely short and non-specific. The Eight of Swords reversed is: "The Eight of Swords reversed signals the beginning of release — the blindfold slipping, the bonds being recognized as loose enough to escape." The vision example for this card is better: "the specific experience of realizing the blindfold was voluntary all along." That is a real improvement.
 
-This is a fraction of the actual `DrawnCard` shape. The context's `TarotState.drawnCards: DrawnCard[]` uses these stripped-down placeholder types. Components downstream of the context receive a different shape than the engine produces. This is why `TarotPage.tsx` imports separately from both:
+But the quality bar as stated — "must describe a psychology, not a negation" — is a standard that can be met by any text that avoids the word "blocked" and contains a human-sounding description. A developer writing these entries can satisfy the stated test while producing text that is psychologically vague, that could apply to many people in many situations, and that does not actually "name the particular arrested form of the archetype."
 
-```typescript
-import { TarotProvider, useTarot } from '../../context/TarotContext'
-import type { TarotAstroContext } from '../../context/TarotContext'
-// ...
-import type {
-  TarotCard,
-  TarotAstroContext as EngineCtx,
-  InstantInterpretation as EngineInterp,
-} from '../../engine/tarot'
-```
+There is no test for this. There is no reviewer. There is no canonical example of a failed reversal text that would help a developer recognize when their proposed improvement falls short. The sprint will declare the reversed meanings elevated when the entries are written. Whether the entries meet the "Six of Cups reversed describes what it looks like when someone is living in memory rather than moving through it" standard is a judgment that will not be made systematically.
 
-The as-aliasing (EngineCtx, EngineInterp) is a workaround for the name collision caused by the context's unreplaced placeholder types. The two type systems coexist by aliasing rather than unification.
-
-The comment saying "replaced when these files land" was written before the files landed. The files landed. The replacement did not happen. This is the footprint of a task that was marked done without verifying the cleanup.
+The failure mode is not bad writing. The failure mode is competent-but-shallow writing that passes a quick read and does not actually meet the standard. This is the most likely outcome for approximately half the reversed meanings that will be written under time pressure.
 
 ---
 
-## 11. The Data Layer Has No Defense Against Silent Truncation
+## 6. The Planet-Condition Matrix Is Sparse in Ways That Will Persist
 
-The `formatTransitSummary` function in `gptTarot.ts` slices arrays:
+The sprint vision defines the target coverage: "Two to three entries per card, each in the same voice and register as the existing Major Arcana entries." For 28 pip cards plus 2 Major Arcana, this means approximately 60 to 90 new entries.
 
-```typescript
-const topAspects = transitData.transitAspects.slice(0, periodLabel === 'Daily' ? 5 : 7)
-const ingresses = transitData.ingresses.slice(0, periodLabel === 'Daily' ? 2 : 4)
-```
+But the existing data has a pattern worth examining. Look at what planets are covered across the current 92 entries:
 
-The number 5 and 7 are hardcoded. If the transit engine returns 20 aspects, 15 are silently dropped. The GPT model sees only the first 5. If the most significant transit for this user's reading is aspect #8 — because aspects are ordered by something other than significance, such as calculation order — the model never sees it.
+- Saturn: covered for The Tower, Death, Hanged Man, Hermit, Wheel, Judgement, World, Emperor, Hierophant, Temperance, Devil, Ten of Wands, Ten of Pentacles, Four of Pentacles, and all 16 court cards.
+- Pluto: covered for Tower, Death, Judgement, Devil, Hanged Man, and court cards.
+- Uranus: covered for Tower, Star, Wheel, and court cards.
+- Neptune: covered for Moon, Hanged Man, High Priestess, Four of Cups.
+- Venus: covered for Lovers, Three of Swords (retrograde), Empress, Ace of Cups.
+- Mercury: covered for Hermit (both conditions), Hanged Man (retrograde), Moon (retrograde), Chariot (retrograde), Magician (both conditions).
+- Jupiter: covered for Star, Wheel, World, Temperance, Hierophant, Empress, Ace of Pentacles, Nine of Cups, Ten of Cups, Ten of Pentacles.
+- Mars: covered for Tower, Strength, Emperor, Chariot, Ace of Wands.
+- Sun: covered for Strength, Sun card.
 
-I looked at how `transitData.transitAspects` is ordered. The `calculateTransits` function in `src/engine/transits.ts` presumably orders aspects by orb or by some priority. But the transit summary slice takes the first N without any documentation of what "first" means in this ordering. Whether "first" is "most relevant" or "most recently calculated" or "alphabetical by planet name" is not documented in `gptTarot.ts`.
+The new pip entries are directed toward Saturn, Pluto, Uranus as the "reliable trio" plus Mars for Wands/Swords, Neptune for Cups, Venus for Pentacles. This is sound guidance.
 
-**The silent wrong result risk:** A user with Saturn square natal Sun (a major life transit, orb 0.5°) and Mercury trine natal Venus (a minor transit, orb 0.2°) may receive a synthesis that mentions Mercury-Venus and ignores Saturn-Sun — if Saturn-Sun happens to fall outside the top-5 slice. The reading would be plausible, internally coherent, and wrong.
+The fragility is what happens at the boundaries of this coverage. A user with an active Jupiter transit who draws the Eight of Swords — a card with no Jupiter entry and likely no upcoming Jupiter entry because Jupiter is not on the "reliable trio" list for Swords — will continue to fall through to Level 2. Jupiter is priority 5, meaning it will be the dominant planet whenever there is no active outer planet transit. That is a meaningful fraction of users. The sprint's framing of "Saturn/Pluto/Uranus is almost always active" is true at the population level but conceals the individual cases.
+
+More specifically: Mercury retrograde is not being added as a coverage target for most pip cards, yet the vision document calls out Mercury retrograde as specifically relevant for Two of Swords, Eight of Swords, and Seven of Cups. If these three cards get Mercury retrograde entries, and other pip cards do not, the coverage will be internally inconsistent — some cards respond intelligently to Mercury retrograde and most do not. A user who draws the Five of Swords during Mercury retrograde (decision reversed, communication misfire, deception surfacing) will receive a generic Level 2 element affinity note, while someone who draws the Eight of Swords gets a specific insight. Both cards are Swords. Both are highly relevant to Mercury retrograde's themes.
 
 ---
 
-## 12. What This Sprint Is Underestimating: The Prompt Engineering Is Not Engineering
+## 7. The `formatTransitSummary` Array Truncation Is Still Not Ordered by Significance
 
-The sprint vision states: "The GPT prompt voice is capable but not yet ruthless." The fix is described as "tightening" prompts to enforce "fewer, sharper sentences" and "concrete imagery over abstraction."
+I raised this in the sprint-0024 review as fragility #11. It remains.
 
-This framing understates the problem. Prompts are not configuration knobs. They are natural language instructions given to a probabilistic model. Tightening a prompt is a creative writing exercise with no ground truth for success, no unit tests, and no regression detection. The team will tighten the prompts, produce some test readings that seem better, and declare the work done. Whether the improvement is durable — whether it holds for a user with an unusual natal chart, a vague intention, or a spread heavy in court cards — cannot be determined without testing against a diverse set of real inputs.
+The `formatTransitSummary` function in `gptTarot.ts` slices `transitData.transitAspects` to the first 5 (daily) or 7 (weekly). The ordering of `transitData.transitAspects` is determined by `calculateTransits()` in the transit engine. I have not seen documentation confirming that this array is ordered by significance (tight orb + applying + outer planet) rather than by calculation order or planet alphabetization.
 
-The "could this apply to any other person on the platform" quality bar is a human judgment that requires human reviewers to apply it to real outputs across diverse inputs. This is not a sprint task. It is an ongoing editorial function. If the team treats it as a one-time prompt edit, the prompts will regress under the pressure of the next sprint that touches them.
+Sprint 0027 is deepening the interpretive data layer for the instant interpretation panel. The GPT synthesis — which runs after the instant interpretation and provides the deep personalized reading — still feeds from this transit summary. If the array is not ordered by astrological significance, the synthesis continues to receive a potentially misleading top-5 selection.
 
-I am not saying do not tighten the prompts. I am saying: build the infrastructure to know when they have been degraded. A small set of canonical test cases — specific natal charts, specific intentions, specific card draws — evaluated against the quality bar by a reviewer after every prompt change is not optional for a product whose primary value is interpretation quality.
+This is not a sprint-0027 task. But every sprint that deepens interpretation quality without addressing this creates a higher contrast: the instant interpretation panel will have beautifully specific transit adaptations, and the GPT synthesis paragraph will sometimes cite the wrong transit as dominant.
+
+---
+
+## 8. The `retrogradeplanets` Field Name Is a Typo That Has Been Institutionalized
+
+The `TarotAstroContext` interface defines `retrogradeplanets: string[]` — lowercase 'p' in 'planets,' in a field name that is used eleven times across the engine, tests, and context layer.
+
+The conventional TypeScript camelCase for this would be `retrogradePlanets`. The actual name is `retrogradeplanets`. This is harmless in isolation. But it is a signal about how the codebase names things under sprint pressure, and it will be copied by anyone who extends this interface. Every new field added to `TarotAstroContext` that touches retrograde status will need to decide whether to match this non-standard name or introduce an inconsistency. It is already in tests as `retrogradeplanets: ['Mercury']`. The test fixes the error in place.
+
+I raise this not as a blocking issue but as an indicator of how fast a sprint moves relative to how much it stabilizes. The field was named under pressure and the pressure has never paused long enough to rename it.
+
+---
+
+## 9. The Synthesis Handlers Have Three Parallel Implementations of the Same Modality Computation
+
+`gptTarot.ts` contains:
+- `computeDominantModality()` at line 88 (using `SIGN_MODALITIES_SERVER`)
+- `computeServerDominantModality()` at line 481 (using `SERVER_SIGN_MODALITIES`)
+
+These are two separate functions in the same file computing the same thing from two separate lookup tables. The comment on `computeServerDominantModality` says it is the "Server-side mirror of the canonical `formatTransitSummary`" — but the comment is wrong; it is the mirror of `computeDominantModality` in `src/engine/tarot.ts`. The first function (`computeDominantModality` at line 88) is used nowhere in the file. The second function (`computeServerDominantModality` at line 481) is used in all three synthesis handlers.
+
+This is dead code in a critical service file, and dead code has a cost: it creates the impression that the first function is an alternative path, causing future developers to wonder when to use which one. More concretely, if a sprint fixes a modality calculation bug in the canonical `src/engine/tarot.ts` function, the developer has to remember to propagate the fix to two places in `gptTarot.ts` rather than one. The documentation that says "kept in lockstep" applies to the server-client mirror. It does not address the duplicate within the server file itself.
+
+---
+
+## 10. What the Sprint Is Not Examining That It Should: The `condition: 'any'` Iteration Order Assumption
+
+The `buildTransitInfluence()` loop iterates through a card's adaptations in the order they appear in the `TRANSIT_ADAPTATIONS` array. For cards that will have multiple entries after this sprint — say, Saturn + Pluto + Uranus for each pip card — the order of entries determines which planet's text fires first when multiple transit conditions are simultaneously met.
+
+Consider a user with both Saturn active (dominant transit planet) and Pluto retrograde simultaneously. For a card with entries ordered: [Saturn, Pluto, Uranus]:
+
+1. Saturn entry: `condition: 'any'`, check `dominantTransitPlanet === 'Saturn'` — true. Return Saturn text.
+
+This is correct. Saturn fires because it is dominant.
+
+Now consider the same card with entries ordered: [Pluto, Saturn, Uranus] and the same sky (Saturn dominant, Pluto retrograde):
+
+1. Pluto entry: `condition: 'any'`, check `dominantTransitPlanet === 'Pluto'` (false) OR `retrogradeplanets.includes('Pluto')` (true, because Pluto is retrograde). Return Pluto text.
+
+The Pluto text fires even though Saturn is the dominant transit planet. The retrograde OR condition in the `'any'` handler means any planet that is retrograde will trigger its entry regardless of its priority.
+
+The new pip card entries will be written in a specified order. The sprint vision says nothing about entry ordering within a card's adaptation array. The developer writing these entries will order them by intuition — likely the order they are written, which tends to put Saturn first because Saturn is named first in the vision document. For most users, this will produce correct behavior. For users with multiple outer planets simultaneously retrograde — which is common, since outer planets are retrograde for months at a time — the order becomes the decision-maker, and the order is invisible to anyone reading the output.
+
+---
+
+## 11. The Saved Readings Architecture Has a Latent Fragility From This Sprint's Output
+
+When a user saves a reading, the reading captures `coreMeaning`, `transitInfluence`, and related fields as they were computed at draw time. Sprint 0027 will improve the `reversedMeaning` for 28 pip cards and add transit adaptations for those same cards.
+
+A user who saved a reading before sprint 0027 ships has a stored reading with the old reversed meaning and old (or absent) transit text. When they open that saved reading, they will see the old text — correct, because the reading was saved at that state. The UI displays saved readings using the stored text, not by recomputing.
+
+After sprint 0027 ships, a user who draws the same card under the same conditions will see significantly different text. This is expected and desired. But it creates an implicit quality gap between new readings and saved readings that will widen with each sprint that improves the data layer.
+
+This is not a bug. It is a design consequence. I name it because it means the "quality bar" being raised by this sprint applies only to future draws, not to the entire existing saved reading corpus. Users who return to their saved readings will see the pre-improvement text. Nobody will tell them that a better reading of the same cards now exists.
+
+---
+
+## 12. The OpenAI Model Hardcoding Has Still Not Been Made Configurable
+
+The `callOpenAI` function in `server/services/gpt.ts` hardcodes `model: 'gpt-4o-mini'`. I named this in sprint 0024 (point #5) specifically in the context of the 3000-token Celtic Cross synthesis. The issue has not been addressed.
+
+Sprint 0027 does not touch the synthesis handlers. But the transit adaptation texts being written this sprint will feed into those handlers. A well-crafted transit entry for the Eight of Swords under Saturn will be included in the GPT prompt payload as `card.transitInfluence`. The model that receives it is still `gpt-4o-mini`. Whether that model can synthesize the richer transit language into a deeper reading output is still untested and undocumented.
+
+I am not claiming `gpt-4o-mini` cannot do this. I am claiming that the team's ability to detect when it fails to is still zero. There is no test harness, no canonical sample, no comparison between model outputs for the same payload. The improvement in the data layer has no corresponding improvement in the quality detection infrastructure.
 
 ---
 
 ## Summary of Fragilities
 
-| # | Fragility | Current State | Risk Level |
-|---|-----------|---------------|------------|
-| 1 | Three parallel `TarotAstroContext` type definitions | Active in production | High — every transit wiring attempt touches the wrong type |
-| 2 | Celtic Cross uses local stub instead of real engine | Active in production | Critical — every Celtic reading is degraded |
-| 3 | Tarot draw counter vs. synthesis counter are separate systems | Active in production | Medium — cost asymmetry, potential exploit |
-| 4 | Celtic synthesis runs without live transits | Active in production | Critical — core depth claim is false |
-| 5 | `gpt-4o-mini` for 3000-token Celtic synthesis | Active in production | Medium — quality ceiling unknown |
-| 6 | `userId` optional in synthesis handlers — client-supplied data unverified | Active in production | Low-Medium |
-| 7 | Intention threading is one-line insertion, not structural threading | Not yet built | Medium — output quality claim will not be met |
-| 8 | Celtic Cross uses `Math.random()` instead of seeded engine draw | Active in production | Medium — philosophical incoherence |
-| 9 | Error classification uses brittle string matching | Active in production | High — timeout failures produce wrong user messaging |
-| 10 | `TarotContext.tsx` placeholder types never replaced | Active in production | High — future type work touches wrong definitions |
-| 11 | Transit summary truncated by fixed slice with no orb-priority ordering | Active in production | Medium — silent wrong results possible |
-| 12 | Prompt quality has no regression detection infrastructure | Structural gap | High — improvements cannot be verified as durable |
+| # | Fragility | Type | Risk Level |
+|---|-----------|------|------------|
+| 1 | Single-winner dominant planet selection discards highly relevant transits | Architecture | High — sprint's coverage claims are partially misleading |
+| 2 | Retrograde `condition: 'any'` fires regardless of priority, can override dominant planet | Logic bug | High — affects all cards during Mercury/Venus/Saturn retrograde seasons |
+| 3 | `condition: 'direct'` for low-priority planets is effectively dead letter | Coverage | Medium — entries will be written that rarely or never fire |
+| 4 | Single-card draws fall through to generic text when position register is null | Coverage | Medium — most common draw type often reaches Level 2 |
+| 5 | Reversed meaning quality bar is unmeasurable without a review function | Process | High — improvement will be declared without verification |
+| 6 | Planet coverage is internally inconsistent (Mercury retrograde selected for 3 cards, not systematically applied) | Coverage | Medium — creates noticeable quality gaps within the same suit |
+| 7 | `formatTransitSummary` truncation may not be orb/significance ordered | Data | Medium — GPT synthesis can be fed non-dominant transits |
+| 8 | `retrogradeplanets` typo institutionalized across 11 usages | Code quality | Low — accumulating inconsistency |
+| 9 | Dead code `computeDominantModality` in `gptTarot.ts` alongside active duplicate | Code quality | Low-Medium — divergence risk on future bug fixes |
+| 10 | Adaptation entry iteration order determines output under multi-retrograde skies | Architecture | Medium — invisible decision-making |
+| 11 | Improved data layer applies only to future draws; saved readings preserve pre-improvement text | UX | Low — expected behavior with unexamined user-facing implications |
+| 12 | OpenAI model hardcoded, no quality detection infrastructure for richer prompts | Infrastructure | Medium — improvements cannot be measured |
 
 ---
 
-## Final Observation
+## What This Sprint Is Actually Getting Right
 
-The team has a working tarot module. The mechanics are not "sound" in the sense of structurally correct — there are at least three places where the code does something other than what the team believes it does (items 2, 3, and 8 above). But the user experience works, the synthesis produces plausible output, and the failure modes are mostly soft.
+I want to be precise, because my previous reviews were focused on structural failures that warranted the harshness. This sprint is different.
 
-Sprint 0024 is asking the team to deepen interpretation quality against an implementation that has structural divergences the team does not know exist. The depth improvements will be applied on top of a stub that shadows the real engine. The transit wiring will populate a context type that is not consumed by the component that needs it. The intention threading will be added to a prompt structure that provides no mechanism to enforce it across multiple paragraphs.
+The work being done in sprint 0027 is the right work. Writing specific, card-keyed, planet-keyed transit adaptations for the 28 pip cards is the only honest way to close the coverage gap. There is no architectural shortcut. The reversed meaning rewrites, when done to the standard the vision sets, will make a real qualitative difference in what users receive. The sprint vision's quality bar — "if this entry reads like 'Saturn brings restriction to the Two of Wands' rather than naming the specific experience of sustained effort being tested at exactly the moment when commitment was just forming, it is not done" — is exactly the right bar.
 
-This is not a catastrophe. It is a distributed fragility — ten small things that each appear manageable, but whose combined effect is that the quality improvements sprint 0024 aims for will be partially or fully invisible to the user.
+The fragilities I am naming are not arguments against the sprint. They are arguments for understanding what the sprint's improvements will and will not achieve.
 
-Fix the three type universes first. Replace the Celtic Cross stub with the real engine. Seed the Celtic Cross draw deterministically. Then add depth.
+Specifically: after this sprint ships, a user who draws the Two of Wands under an active Saturn transit will receive a beautiful, specific transit note. That is a real improvement. What the sprint cannot control is whether that same user also has Pluto retrograde, in which case the Saturn entry may never fire. What the sprint cannot control is the quality of the reversed meaning under review pressure at entry 23 of 28. What the sprint cannot control is whether the GPT model that receives the richer transit payload produces a commensurately deeper synthesis.
 
-Antifragility is not built by adding features on top of a fragile foundation. It is built by making the foundation honest about what it actually does.
+The data layer improvement is real. The system that delivers that improvement to users is fragile in ways that the sprint has not addressed and perhaps should not attempt to address in a single sprint. Name those fragilities clearly so the next review does not find them listed as surprises.
+
+Robustness is not achieved by adding better data to a brittle delivery mechanism. It is achieved when the data quality and the delivery mechanism are improved in proportion.

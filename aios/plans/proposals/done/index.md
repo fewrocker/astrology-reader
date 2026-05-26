@@ -1,5 +1,16 @@
 # Done Proposals
 
+## Sprint 0027 — Completed
+
+| Proposal | Type | Delivered |
+|----------|------|-----------|
+| [issue-retrograde-condition-priority-override](issue-retrograde-condition-priority-override.md) | Issue Fix | merged sprint-0027 |
+| [code-retrogradeplanets-rename](code-retrogradeplanets-rename.md) | Code Enhancement | merged sprint-0027 |
+| [code-single-card-position-register](code-single-card-position-register.md) | Code Enhancement | merged sprint-0027 |
+| [code-transit-coverage-test](code-transit-coverage-test.md) | Code Enhancement | merged sprint-0027 |
+| [feat-pip-reversed-meaning-depth](feat-pip-reversed-meaning-depth.md) | Feature | merged sprint-0027 |
+| [feat-pip-transit-adaptations](feat-pip-transit-adaptations.md) | Feature | merged sprint-0027 |
+
 ## Sprint 0024 — Completed
 
 | Proposal | Type | Delivered |

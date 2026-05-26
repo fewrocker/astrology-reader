@@ -50,7 +50,7 @@ export interface TarotAstroContext {
   natalMarsHouse: number | null
 
   currentTransits: TransitAspect[]
-  retrogradeplanets: string[]
+  retrogradePlanets: string[]
   dominantTransitPlanet: string | null
 
   lunarPhaseName: string | null
@@ -521,7 +521,7 @@ export function buildTarotAstroContext(
   }
 
   let currentTransits: TransitAspect[] = []
-  let retrogradeplanets: string[] = []
+  let retrogradePlanets: string[] = []
   let dominantTransitPlanet: string | null = null
   let lunarPhaseName: string | null = null
   let lunarPhaseSymbol: string | null = null
@@ -530,7 +530,7 @@ export function buildTarotAstroContext(
     try {
       currentTransits = transits.transitAspects ?? []
 
-      retrogradeplanets = (transits.retrogrades ?? [])
+      retrogradePlanets = (transits.retrogrades ?? [])
         .filter(r => r.isRetro)
         .map(r => r.planet)
 
@@ -570,7 +570,7 @@ export function buildTarotAstroContext(
     natalNorthNodeHouse,
     natalMarsHouse,
     currentTransits,
-    retrogradeplanets,
+    retrogradePlanets,
     dominantTransitPlanet,
     lunarPhaseName,
     lunarPhaseSymbol,
@@ -682,18 +682,37 @@ function buildTransitInfluence(
   astroContext: TarotAstroContext,
   position: SpreadPosition | null,
 ): string {
-  // Level 1: specific transit adaptation lookup
+  // Level 1: specific transit adaptation lookup (two-pass)
+  // Pass 1: dominant-planet entries only — ensures dominantTransitPlanet always wins
+  // over a retrograde entry for a lower-priority planet, regardless of array order.
   const adaptations = TRANSIT_ADAPTATIONS[card.id]
   if (adaptations && adaptations.length > 0) {
     for (const entry of adaptations) {
+      if (astroContext.dominantTransitPlanet !== entry.planet) continue
       if (entry.condition === 'retrograde') {
-        if (astroContext.retrogradeplanets.includes(entry.planet)) {
+        if (astroContext.retrogradePlanets.includes(entry.planet)) {
+          return entry.emphasis
+        }
+      } else if (entry.condition === 'direct') {
+        if (!astroContext.retrogradePlanets.includes(entry.planet)) {
+          return entry.emphasis
+        }
+      } else {
+        // 'any' — dominant planet matched; return immediately
+        return entry.emphasis
+      }
+    }
+
+    // Pass 2: retrograde and element-affinity checks (no dominant-planet constraint)
+    for (const entry of adaptations) {
+      if (entry.condition === 'retrograde') {
+        if (astroContext.retrogradePlanets.includes(entry.planet)) {
           return entry.emphasis
         }
       } else if (entry.condition === 'direct') {
         if (
           astroContext.dominantTransitPlanet === entry.planet &&
-          !astroContext.retrogradeplanets.includes(entry.planet)
+          !astroContext.retrogradePlanets.includes(entry.planet)
         ) {
           return entry.emphasis
         }
@@ -701,7 +720,7 @@ function buildTransitInfluence(
         // 'any' — match if dominant or retrograde
         if (
           astroContext.dominantTransitPlanet === entry.planet ||
-          astroContext.retrogradeplanets.includes(entry.planet)
+          astroContext.retrogradePlanets.includes(entry.planet)
         ) {
           return entry.emphasis
         }
@@ -761,7 +780,7 @@ function buildAstroHeadline(
   const planet = astroContext.dominantTransitPlanet
   const kw = card.keywords[0] ?? 'its essence'
 
-  if (planet && astroContext.retrogradeplanets.includes(planet)) {
+  if (planet && astroContext.retrogradePlanets.includes(planet)) {
     return `${planet} retrograde turns ${card.name}'s ${kw} inward — review before moving forward.`
   }
 
@@ -875,8 +894,9 @@ export function computeInstantInterpretation(
     arcana: card.arcana,
     suit: card.suit ?? null,
     reversed,
-    positionLabel: position?.label ?? null,
-    positionMeaning: position?.meaning ?? null,
+    // Only expose position label/meaning for named spread positions — not single draws.
+    positionLabel: position?.id !== 'single' ? (position?.label ?? null) : null,
+    positionMeaning: position?.id !== 'single' ? (position?.meaning ?? null) : null,
     coreMeaning: positionAwareInterpretation.coreMeaning,
     symbolicTheme: positionAwareInterpretation.symbolicTheme,
     emotionalMeaning: positionAwareInterpretation.emotionalMeaning,
