@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ChartData } from '../../engine/types'
 import type { RateLimitInfo, TarotSingleSynthesisPayload } from '../../services/gptInterpretation'
 import { TarotProvider, useTarot } from '../../context/TarotContext'
@@ -29,6 +29,9 @@ import SingleCardReading from './SingleCardReading'
 import ThreeCardReading from './ThreeCardReading'
 import CelticCrossReading from './CelticCrossReading'
 import SavedReadingsPage from './SavedReadingsPage'
+import DeckShuffleAnimation from './DeckShuffleAnimation'
+import type { FocusArea } from './TarotIntentionScreen'
+import type { ReadingMode as ShuffleReadingMode } from './TarotModeSelector'
 
 function shuffleTarotDeck(): TarotCard[] {
   const deck = [...ALL_TAROT_CARDS] as TarotCard[]
@@ -273,11 +276,13 @@ function SingleReadingFlow({
   chartData,
   birthDate,
   userIntention,
+  ritualCardIndices,
   onBack,
 }: {
   chartData: ChartData
   birthDate: string
   userIntention: string
+  ritualCardIndices: number[]
   onBack: () => void
 }) {
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
@@ -295,6 +300,17 @@ function SingleReadingFlow({
     setSelectedDeckIndices([deckIndex])
     setDrawn({ card, reversed, interp })
   }
+
+  // Auto-pick the ritual-drawn card index on mount when ritual provided it
+  useEffect(() => {
+    if (ritualCardIndices.length > 0 && selectedDeckIndices.length === 0) {
+      const index = ritualCardIndices[0]
+      if (index !== undefined) {
+        handlePickCard(index)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const synthesisPayload: TarotSingleSynthesisPayload | null = drawn
     ? {
@@ -356,12 +372,14 @@ function ThreeReadingFlow({
   birthDate,
   userIntention,
   spreadMode,
+  ritualCardIndices,
   onBack,
 }: {
   chartData: ChartData
   birthDate: string
   userIntention: string
   spreadMode: SpreadMode
+  ritualCardIndices: number[]
   onBack: () => void
 }) {
   const engineCtx = useMemo(() => buildEngineCtx(chartData, birthDate), [chartData, birthDate])
@@ -387,6 +405,16 @@ function ThreeReadingFlow({
       interpretations: [...prev.interpretations, adaptThreeInterp(interpretation, card)],
     }))
   }
+
+  // Auto-pick all three ritual-drawn card indices on mount when ritual provided them
+  useEffect(() => {
+    if (ritualCardIndices.length > 0 && selectedDeckIndices.length === 0) {
+      for (const index of ritualCardIndices) {
+        handlePickCard(index)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const astroContext = useMemo(
     () => buildThreeAstroCtx(
@@ -415,6 +443,62 @@ function ThreeReadingFlow({
     />
   )
 }
+
+// ─── Shuffle Ritual Flow ──────────────────────────────────────────────────────
+
+/**
+ * Derive the FocusArea for DeckShuffleAnimation from the user's intention string.
+ * When the user selected a chip in TarotHomeView, the chip label is stored as the
+ * intention string. We map common chip labels back to FocusArea ids; everything
+ * else falls through to 'custom-question' or 'general'.
+ */
+function deriveFocusArea(intention: string): FocusArea {
+  const lower = intention.toLowerCase()
+  if (!intention.trim()) return 'general'
+  if (lower === 'love' || lower === 'love & relationships') return 'love-relationships'
+  if (lower === 'career' || lower === 'career & purpose') return 'career-purpose'
+  if (lower === 'growth') return 'growth'
+  if (lower === "today's energy" || lower === 'todaysenergy') return 'todays-energy'
+  return 'custom-question'
+}
+
+/**
+ * Map the TarotContext ReadingMode ('single' | 'three') to the
+ * DeckShuffleAnimation ReadingMode ('single' | 'three-card' | 'celtic-cross').
+ */
+function toShuffleReadingMode(mode: 'single' | 'three'): ShuffleReadingMode {
+  return mode === 'single' ? 'single' : 'three-card'
+}
+
+function ShuffleRitualFlow({
+  userIntention,
+  readingMode,
+  onRevealComplete,
+}: {
+  userIntention: string
+  readingMode: 'single' | 'three'
+  onRevealComplete: (indices: number[]) => void
+}) {
+  const cardCount = readingMode === 'single' ? 1 : 3
+  const focusArea = deriveFocusArea(userIntention)
+  const shuffleMode = toShuffleReadingMode(readingMode)
+
+  return (
+    <DeckShuffleAnimation
+      intention={userIntention}
+      focusArea={focusArea}
+      readingMode={shuffleMode}
+      cardCount={cardCount}
+      onCardSelected={() => {
+        // No-op: parent learns about the card via onRevealComplete
+      }}
+      onRevealComplete={state => {
+        onRevealComplete(state.drawnCardIndices)
+      }}
+    />
+  )
+}
+
 
 // ─── Inner component (inside TarotProvider) ───────────────────────────────────
 
@@ -447,12 +531,29 @@ function TarotPageInner({
     case 'home':
       return <TarotHomeView onExit={onExitTarot} onOpenUpgrade={onOpenUpgrade} />
 
+    case 'shuffle-ritual': {
+      // readingMode is set by TarotHomeView before navigating here
+      const ritualMode = state.readingMode === 'three' ? 'three' : 'single'
+      return (
+        <ShuffleRitualFlow
+          userIntention={state.userIntention}
+          readingMode={ritualMode}
+          onRevealComplete={indices => {
+            dispatch({ type: 'SET_RITUAL_CARD_INDICES', indices })
+            const targetView = ritualMode === 'three' ? 'three-reading' : 'single-reading'
+            dispatch({ type: 'NAVIGATE_TAROT', subView: targetView })
+          }}
+        />
+      )
+    }
+
     case 'single-reading':
       return (
         <SingleReadingFlow
           chartData={chartData}
           birthDate={birthDate}
           userIntention={state.userIntention}
+          ritualCardIndices={state.ritualCardIndices}
           onBack={onBackToHome}
         />
       )
@@ -464,6 +565,7 @@ function TarotPageInner({
           birthDate={birthDate}
           userIntention={state.userIntention}
           spreadMode={state.spreadMode?.id as SpreadMode ?? 'past-present-future'}
+          ritualCardIndices={state.ritualCardIndices}
           onBack={onBackToHome}
         />
       )

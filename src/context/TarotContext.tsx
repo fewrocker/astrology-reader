@@ -23,6 +23,7 @@ export interface SpreadMode {
 
 export type TarotSubView =
   | 'home'
+  | 'shuffle-ritual'
   | 'single-reading'
   | 'three-reading'
   | 'celtic-reading'
@@ -43,6 +44,8 @@ export interface TarotState {
   gptSynthesisError: string | null
   savedReadingIds: string[]
   currentReadingId: string | null
+  // Card indices drawn during the shuffle ritual — fed into the reading flow
+  ritualCardIndices: number[]
 }
 
 export type TarotAction =
@@ -57,6 +60,7 @@ export type TarotAction =
   | { type: 'SET_GPT_SYNTHESIS_ERROR'; error: string }
   | { type: 'SAVE_READING'; readingId: string }
   | { type: 'RESET_READING' }
+  | { type: 'SET_RITUAL_CARD_INDICES'; indices: number[] }
 
 const initialTarotState: TarotState = {
   subView: 'home',
@@ -71,6 +75,7 @@ const initialTarotState: TarotState = {
   gptSynthesisError: null,
   savedReadingIds: [],
   currentReadingId: null,
+  ritualCardIndices: [],
 }
 
 function tarotReducer(state: TarotState, action: TarotAction): TarotState {
@@ -101,6 +106,8 @@ function tarotReducer(state: TarotState, action: TarotAction): TarotState {
           ? state.savedReadingIds
           : [...state.savedReadingIds, action.readingId],
       }
+    case 'SET_RITUAL_CARD_INDICES':
+      return { ...state, ritualCardIndices: action.indices }
     case 'RESET_READING':
       return {
         ...state,
@@ -113,6 +120,7 @@ function tarotReducer(state: TarotState, action: TarotAction): TarotState {
         readingMode: null,
         spreadMode: null,
         userIntention: '',
+        ritualCardIndices: [],
       }
     default:
       return state
