@@ -99,6 +99,7 @@ function SingleReadingFlow({
         natalSunSign: engineCtx.natalSunSign ?? '',
         natalMoonSign: engineCtx.natalMoonSign ?? '',
         natalAscSign: engineCtx.natalAscendantSign ?? '',
+        natalDominantModality: engineCtx.natalDominantModality,
         natalMoonHouse: engineCtx.natalMoonHouse,
         natalVenusHouse: engineCtx.natalVenusHouse,
         natalNorthNodeHouse: engineCtx.natalNorthNodeHouse,

@@ -857,6 +857,7 @@ export default function ThreeCardReading({
       natalSunSign: astroContext.natalSunSign ?? '',
       natalMoonSign: astroContext.natalMoonSign ?? '',
       natalAscSign: astroContext.natalAscendantSign ?? '',
+      natalDominantModality: astroContext.natalDominantModality,
       natalMoonHouse: astroContext.natalMoonHouse,
       natalVenusHouse: astroContext.natalVenusHouse,
       natalNorthNodeHouse: astroContext.natalNorthNodeHouse,

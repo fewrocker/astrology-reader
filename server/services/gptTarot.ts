@@ -235,6 +235,7 @@ export interface TarotSingleSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -260,6 +261,7 @@ export interface TarotThreeSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
   natalNorthNodeHouse: number | null
@@ -282,6 +284,7 @@ export interface TarotCelticSynthesisPayload {
   natalSunSign: string
   natalMoonSign: string
   natalAscSign: string
+  natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null
   natalMoonPhase: string | null
   natalMoonHouse: number | null
   natalVenusHouse: number | null
@@ -384,6 +387,44 @@ export function computeCelticStructuralSignals(cards: TarotCardPayload[]): Celti
     courtCardCount,
     hasFoolOrWorld,
     crossingPairDignity,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Server-side dominant modality computation
+// Mirrors computeDominantModality in src/engine/tarot.ts — kept here because
+// the server and client live in separate TypeScript compilation contexts.
+// Any logic change must be applied to both copies in lockstep.
+// ---------------------------------------------------------------------------
+
+const SERVER_SIGN_MODALITIES: Record<string, 'Cardinal' | 'Fixed' | 'Mutable'> = {
+  Aries: 'Cardinal', Taurus: 'Fixed', Gemini: 'Mutable', Cancer: 'Cardinal',
+  Leo: 'Fixed', Virgo: 'Mutable', Libra: 'Cardinal', Scorpio: 'Fixed',
+  Sagittarius: 'Mutable', Capricorn: 'Cardinal', Aquarius: 'Fixed', Pisces: 'Mutable',
+}
+
+function computeServerDominantModality(
+  natalChart: { planets: Array<{ name: string; sign: string }>; angles?: { ascendant?: { sign?: string } } },
+): 'Cardinal' | 'Fixed' | 'Mutable' | null {
+  try {
+    const counts: Record<'Cardinal' | 'Fixed' | 'Mutable', number> = {
+      Cardinal: 0, Fixed: 0, Mutable: 0,
+    }
+    const ascSign = natalChart.angles?.ascendant?.sign
+    for (const planet of natalChart.planets) {
+      const mod = SERVER_SIGN_MODALITIES[planet.sign]
+      if (!mod) continue
+      const weight = (planet.name === 'Sun' || planet.name === 'Moon') ? 2 : 1
+      counts[mod] += weight
+    }
+    if (ascSign && SERVER_SIGN_MODALITIES[ascSign]) {
+      counts[SERVER_SIGN_MODALITIES[ascSign]] += 2
+    }
+    const max = Math.max(...Object.values(counts))
+    const top = (Object.keys(counts) as ('Cardinal' | 'Fixed' | 'Mutable')[]).filter(m => counts[m] === max)
+    return top.length === 1 ? top[0] : null
+  } catch {
+    return null
   }
 }
 
@@ -518,6 +559,7 @@ export async function handleTarotSingleSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -535,6 +577,7 @@ export async function handleTarotSingleSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeServerDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -558,7 +601,7 @@ export async function handleTarotSingleSynthesis(
     : 'This is an open daily draw — no specific question was asked.'
 
   const intentionAnchor = payload.userIntention
-    ? `The person's stated intention is: "${payload.userIntention}". Return to this intention explicitly when naming the card's central tension (paragraph 1) and when writing the reflection question — the question must feel like it could only arise from this card combined with this exact intention. If no intention is stated, anchor the reflection question instead to the most charged or surprising element of this card under today's sky.`
+    ? `The person's stated intention is: "${payload.userIntention}". This intention is the ground every paragraph is writing toward — not a label to mention and move past. Return to it operatively in paragraph 1 (name how the card's central tension illuminates or complicates what they came to ask) and in the reflection question (which must be answerable only in the context of this card and this intention together). The test: if the intention were swapped for a different question, would the paragraph need to be rewritten? If not, it is not threaded — it is footnoted.`
     : 'No intention was stated. Anchor your reflection question to the most charged or surprising element of this card under today\'s astrological context — do not write a generic tarot question.'
 
   const positionLine = payload.position
@@ -570,6 +613,15 @@ export async function handleTarotSingleSynthesis(
     : ''
 
   const reversalText = card.reversed ? 'reversed (upright-down — off-axis energy, not negated)' : 'upright'
+
+  // Modality description for the natal bridge paragraph
+  const modalityNote = natalDominantModality
+    ? `Dominant modality: ${natalDominantModality} — ${
+        natalDominantModality === 'Cardinal' ? 'this person initiates; they meet force by moving toward it'
+        : natalDominantModality === 'Fixed' ? 'this person holds; they meet force by standing their ground or enduring'
+        : 'this person adapts; they meet force by reframing or moving with it'
+      }`
+    : ''
 
   const prompt = `${intentionLine}
 
@@ -590,6 +642,7 @@ Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${o
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
+${modalityNote}
 Personal Day: ${authorizedPersonalDay}
 Personal Year: ${payload.personalYear}
 Moon: ${payload.moonPhaseName} in ${currentMoonSign}
@@ -611,7 +664,7 @@ Write a complete single-card synthesis in exactly 4 short paragraphs plus 1 fina
 
 Paragraph 1: Start with the card interpretation itself. Lead with the card's symbolic and psychological meaning in the context of the person's intention — name how this card speaks directly to what they came to explore. This paragraph must name the living tension, threshold, or opportunity in the card and explicitly connect it to the stated intention (or to the most charged astrological signal if no intention was given).
 
-Paragraph 2: Connect the card to the natal chart. Mention at least one natal placement and explain why this specific card — its symbolism, element, arcana, and reversal if present — resonates with this person's birth pattern specifically. Use the Sun, Moon, Ascendant, Personal Day, Personal Year, and advance signal only when they genuinely sharpen the reading.
+Paragraph 2: Connect the card to the natal chart. The test for this paragraph: if a different card had been drawn, would this paragraph need to be rewritten? If not, it is not doing the work. Name what this specific card — its element, archetype, reversed or upright orientation — does when it meets this person's particular natal configuration. If the card deals with change, disruption, resistance, or movement, use the dominant modality (${natalDominantModality ?? 'unknown'}) to show how this person characteristically meets that kind of force — and what that means for how this card lands. A reversed card should name what the card's central principle feels like when it operates as blocked, internalized, or working beneath the surface in the context of this natal pattern. Use Sun, Moon, Ascendant, or house placements only when the connection is direct and unmistakable — not to decorate the reading, but to name the specific collision between this card's symbolic field and this person's birth architecture.
 
 Paragraph 3: Connect the card to the daily transits. Use the Daily Transit Context above concretely, but every transit point you mention must be explicitly tied back to the card. Do not write a standalone daily transit reading. Show how the most relevant transit planets, aspects, retrogrades, sign changes, or Moon movement activate, complicate, sharpen, or echo the card's symbolic message today.
 
@@ -645,6 +698,7 @@ export async function handleTarotThreeSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
   let natalNorthNodeHouse = payload.natalNorthNodeHouse
@@ -663,6 +717,7 @@ export async function handleTarotThreeSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeServerDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -700,7 +755,7 @@ export async function handleTarotThreeSynthesis(
     : 'Open reading — no specific intention stated.'
 
   const intentionAnchor = payload.userIntention
-    ? `This person's stated intention — "${payload.userIntention}" — must appear by name in at least two distinct sections of the reading, not only here. You must return to it explicitly when naming the central tension (MAIN_TENSION section) and when writing the practical guidance (ADVICE section). When writing the REFLECTION_PROMPTS, verify that each question could only arise from this exact combination of cards and this exact intention. Do not write questions that would be equally valid for a different person's reading.`
+    ? `This person's stated intention — "${payload.userIntention}" — is the ground every section of this reading is writing toward, not a label to note and move past. The floor is: it must appear operatively in at least two distinct sections — meaning each appearance shows the cards changing or complicating the person's understanding of their own question, not merely referencing it. In MAIN_TENSION, show how the tension the cards reveal directly implicates what they came to ask. In ADVICE, show what this card's guidance means specifically for their stated question — not generally. In the REFLECTION_PROMPTS, each question must be answerable only given this exact combination of cards and this exact intention. Generic intention references ("in relation to your question about...") are not operative; they are footnotes. The test: if the intention were replaced with a different question, would the sentence need to be rewritten? If not, it is not threaded.`
     : `No intention was stated. Do not treat this as license for generic language. Instead, identify the most charged or surprising element of this spread and treat it as the implicit center of inquiry. Name it in the MAIN_THEME section and return to it in the ADVICE section. The REFLECTION_PROMPTS must feel specific to this constellation — as if no other spread could have generated them.`
 
   const signalLines: string[] = []
@@ -733,7 +788,7 @@ export async function handleTarotThreeSynthesis(
   signalLines.push(pd23.description)
 
   // Build pairing instruction for the opening sentence (spec 2, 3, 4)
-  let pairingInstruction = `CRITICAL: Before addressing card 3 (${cards[2]?.name ?? 'third card'}), you MUST include one explicit statement about what cards 1 (${cards[0]?.name ?? ''}) and 2 (${cards[1]?.name ?? ''}) are saying TOGETHER as a pair. This pairing statement must draw on the pre-computed elemental dignity and position roles above.`
+  let pairingInstruction = `CRITICAL — OPENING_SENTENCE: The opening sentence must show what cards 1 (${cards[0]?.name ?? ''}) and 2 (${cards[1]?.name ?? ''}) are doing to each other before it names card 3's role. "Incorporate" is not enough — the sentence must name the tension, unified image, or quality of encounter that the pairing generates, not label it. A sentence that lists the two cards with their elements and calls them "opposing" or "harmonious" has labeled the pairing, not shown it. The test: does the opening sentence convey something that would be different if card 2 had been a different card? If not, the pairing has not been used — it has been named. Draw on the pre-computed elemental dignity (${pd12.dignity}) and both position roles to name what this specific pairing produces.`
   if (pd12.courtDynamic) {
     pairingInstruction += ` Both cards 1 and 2 are court cards — name their relational dynamic (whether they face, oppose, or mirror each other) as part of the opening constellation framing.`
   }
@@ -743,6 +798,15 @@ export async function handleTarotThreeSynthesis(
   if (signals.allMajorArcana) {
     pairingInstruction += ` All three cards are Major Arcana — the pairing between cards 1 and 2 is archetypal, not elemental-practical; describe the symbolic image or cosmic tension they form together.`
   }
+
+  // Modality description for the astrology synthesis paragraph
+  const modalityNote = natalDominantModality
+    ? `Natal dominant modality: ${natalDominantModality} — ${
+        natalDominantModality === 'Cardinal' ? 'this person initiates; they meet force by moving toward it'
+        : natalDominantModality === 'Fixed' ? 'this person holds; they meet force by standing their ground or enduring'
+        : 'this person adapts; they meet force by reframing or moving with it'
+      }`
+    : ''
 
   const prompt = `${intentionLine}
 
@@ -758,6 +822,7 @@ Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${o
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
+${modalityNote}
 Personal Day: ${authorizedPersonalDay}
 Personal Year: ${authorizedPersonalYear}
 Moon: ${payload.moonPhaseName} in ${currentMoonSign}
@@ -777,7 +842,7 @@ ${pairingInstruction}
 
 INSTRUCTION: You must return the reading using the exact labeled sections below so the app can render them. Do not add any extra headings.
 
-OPENING_SENTENCE: One sentence only. Name all three cards together as a single symbolic statement — the constellation they form, not a list. This sentence must incorporate the pairing of cards 1 and 2 (their elemental dignity, relational dynamic, or archetypal dialogue) before naming card 3's role.
+OPENING_SENTENCE: One sentence only. Name all three cards together as a single symbolic statement — the constellation they form, not a list. This sentence must show what the pairing of cards 1 and 2 (their elemental dignity, relational dynamic, or archetypal encounter) is generating before naming card 3's role. The pairing must be active in the sentence, not labeled.
 
 MAIN_THEME: One short paragraph on the living theme of the whole spread, using the exact logic of this spread type rather than treating it as a generic three-card pull.${payload.userIntention ? ` Return to the person's intention ("${payload.userIntention}") in this paragraph.` : ''}
 
@@ -791,9 +856,9 @@ ADVICE: ${spreadPromptConfig.adviceInstruction.replace(/^ADVICE:\s*/, '')}${payl
 
 PSYCHOLOGICAL_PATTERN: ${spreadPromptConfig.psychologicalInstruction.replace(/^PSYCHOLOGICAL_PATTERN:\s*/, '')}
 
-ASTROLOGY_SYNTHESIS: One short paragraph that keeps the three-card constellation central while connecting it to the natal chart, Daily Transit Context, and Weekly Transit Context. Do not drift into a standalone astrology reading. Explain how the current sky activates this exact spread, and explicitly connect at least one daily transit feature and one weekly transit feature back to the cards. Any transit or natal placement you mention must be tied to a specific card in the same or immediately adjacent sentence.
+ASTROLOGY_SYNTHESIS: One short paragraph that keeps the three-card constellation central while connecting it to the natal chart, Daily Transit Context, and Weekly Transit Context. Do not drift into a standalone astrology reading. Explain how the current sky activates this exact spread, and explicitly connect at least one daily transit feature and one weekly transit feature back to the cards. Any transit or natal placement you mention must be tied to a specific card in the same or immediately adjacent sentence. When any card in this spread deals with change, disruption, resistance, or movement, use the dominant modality (${natalDominantModality ?? 'unknown'}) to show how this person characteristically meets that quality of force — and what that means for how the card lands.
 
-TIMING: ${spreadPromptConfig.timingInstruction.replace(/^TIMING:\s*/, '')}
+TIMING: ${spreadPromptConfig.timingInstruction.replace(/^TIMING:\s*/, '')}${payload.userIntention ? ` Close the TIMING paragraph with a sentence that ends on the person's specific question — what the timing development means for what they came to explore, not for the reading in general.` : ''}
 
 REFLECTION_PROMPTS:
 - First reflection question
@@ -829,6 +894,7 @@ export async function handleTarotCelticSynthesis(
   let natalSunSign = payload.natalSunSign
   let natalMoonSign = payload.natalMoonSign
   let natalAscSign = payload.natalAscSign
+  let natalDominantModality = payload.natalDominantModality
   let natalMoonPhase = payload.natalMoonPhase
   let natalMoonHouse = payload.natalMoonHouse
   let natalVenusHouse = payload.natalVenusHouse
@@ -849,6 +915,7 @@ export async function handleTarotCelticSynthesis(
       natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
       natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
       natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+      natalDominantModality = computeServerDominantModality(natalChart)
       // Re-derive house placements from server-computed chart (overrides client-supplied values)
       const moonP = natalChart.planets.find(p => p.name === 'Moon')
       const venusP = natalChart.planets.find(p => p.name === 'Venus')
@@ -884,7 +951,7 @@ export async function handleTarotCelticSynthesis(
     : 'This is an open Celtic Cross — no specific question was stated.'
 
   const intentionAnchor = payload.userIntention
-    ? `The person's intention — "${payload.userIntention}" — must appear by name in at least two distinct sections of your synthesis. Return to it explicitly when describing The Central Cross (what the heart of the spread says about their question) and when writing the Practical Integration invitations. When writing the Reflection Prompts, verify that each question could only arise from this specific constellation and this specific intention.`
+    ? `The person's intention — "${payload.userIntention}" — is the operative lens every section of this synthesis is looking through, not a reference label. The floor is that it must appear meaningfully in at least two distinct sections — where "meaningfully" means each appearance shows the cards complicating, deepening, or changing what the person understands about their own question, not merely repeating the intention's words. In The Central Cross, show what the heart of the spread says that directly implicates what they came to ask. In Practical Integration, each invitation must connect to their stated question — not to the reading in general. In the Reflection Prompts, each question must be answerable only given this specific constellation and this specific intention. The test: if the intention were replaced with a different question, would the sentence need to be rewritten? If not, the intention is being footnoted, not threaded.`
     : `No intention was stated. Identify the most charged or surprising element of this ten-card spread and name it in The Constellation section as the implicit center of inquiry. Do not use generic language that could apply to any reading.`
 
   // Crossing pair pairing instruction (spec 7)
@@ -938,6 +1005,7 @@ Sun in ${natalSunSign}, Moon in ${natalMoonSign}${natalMoonHouse ? ` in your ${o
 ${natalVenusHouse ? `Venus in your ${ordinalHouse(natalVenusHouse)} house` : ''}
 ${natalNorthNodeHouse ? `North Node in your ${ordinalHouse(natalNorthNodeHouse)} house` : ''}
 ${natalMarsHouse ? `Mars in your ${ordinalHouse(natalMarsHouse)} house` : ''}
+${natalDominantModality ? `Dominant modality: ${natalDominantModality} — ${natalDominantModality === 'Cardinal' ? 'this person initiates; they meet force by moving toward it' : natalDominantModality === 'Fixed' ? 'this person holds; they meet force by standing their ground or enduring' : 'this person adapts; they meet force by reframing or moving with it'}` : ''}
 ${natalMoonPhase ? `Natal Moon Phase: ${natalMoonPhase}` : ''}
 Life Path: ${authorizedLifePath}
 Personal Year: ${authorizedPersonalYear}, Personal Day: ${authorizedPersonalDay}
@@ -963,7 +1031,7 @@ ${elementFieldInstruction}
 ## Structure Your Synthesis in These Named Sections
 
 **The Constellation**
-Write this section LAST — it is the most important paragraph in the entire document. Edit it hardest. Read all ten cards together as a single symbolic field — not position by position, but as a complete pattern: what this spread, taken as a whole, reveals about where this person stands in the arc of their life.${payload.userIntention ? ` Anchor this paragraph to the person's stated intention: "${payload.userIntention}".` : ''} This paragraph must not be filler, not a rephrasing of other sections — it must say the one thing the whole spread is saying.
+Write this section LAST — it is the most important paragraph in the entire document. Edit it hardest. Read all ten cards together as a single symbolic field — not position by position, but as a complete pattern: what this spread, taken as a whole, reveals about where this person stands in the arc of their life.${payload.userIntention ? ` Anchor this paragraph to the person's stated intention: "${payload.userIntention}".` : ''} STRUCTURAL PROHIBITION: Nothing that has already been named in any other section — in any form — belongs here. If you find yourself completing a thought begun in The Central Cross, or restating a dynamic named in Psychological Dynamics, or summarizing what the other sections said: stop. That is summary, not Constellation. This paragraph begins where the other sections end. It must name the one thing the whole spread is saying that no individual section has yet named — the insight latent in the pattern as a whole, visible only from this distance. A reader who could remove The Constellation and insert it at the end of Psychological Dynamics without any loss has written summary. A reader whose Constellation makes the person re-read The Roots and the Horizon because they now see what those cards were pointing at — that has succeeded.
 
 **The Central Cross**
 ${crossingInstruction}
@@ -982,10 +1050,10 @@ Position 9 (hopes/fears — one card naming both) and position 10 (outcome). Wha
 The dominant psychological pattern this ten-card constellation reveals — a single named quality or dynamic running through the entire reading like a thread.${signals.courtCardCount >= 2 ? ` Name the collective dynamic of the ${signals.courtCardCount} court cards present — the relational cast or inner council this reading convenes.` : ''}
 
 **Astrology Resonance**
-Where do the natal chart and current sky echo the spread's symbolic themes? Be specific — name the sign, transit planet, or aspect that directly amplifies a specific card's meaning. Any transit or natal placement you mention must be explicitly tied to a specific card in the same or immediately adjacent sentence. Do not write standalone astrology observations.${dailyTransitSummary ? ' Connect at least one daily transit feature and one weekly transit feature to specific cards.' : ''}
+Where do the natal chart and current sky echo the spread's symbolic themes? Be specific — name the sign, transit planet, or aspect that directly amplifies a specific card's meaning. Any transit or natal placement you mention must be explicitly tied to a specific card in the same or immediately adjacent sentence. Do not write standalone astrology observations.${dailyTransitSummary ? ' Connect at least one daily transit feature and one weekly transit feature to specific cards.' : ''} When any card in this spread deals with change, disruption, resistance, or movement, use the dominant modality (${natalDominantModality ?? 'unknown'}) to name how this person characteristically meets that quality of force — and what it means for how the card lands for them specifically. A Fixed-dominant person receives a Tower differently than a Cardinal or Mutable person does — the modality makes the card personal, not just archetypal.
 
 **Practical Integration**
-Not prescriptive steps. Invitations: what does this constellation invite this person to move toward, release, or hold differently?${payload.userIntention ? ` These invitations must refer to the person's intention: "${payload.userIntention}".` : ''}
+Not prescriptive steps. Invitations: what does this constellation invite this person to move toward, release, or hold differently?${payload.userIntention ? ` These invitations must connect to the person's specific question about "${payload.userIntention}" — not to the reading in general.` : ''}
 
 **Reflection Prompts**
 Three distinct reflection questions, numbered 1–3. Before writing them, verify internally that each question could only have arisen from this specific constellation, this specific intention, and this specific sky. Revise any question that would be equally valid for a different person's reading. Generic tarot questions are prohibited unless grounded in direct reference to the specific card that raised them.
@@ -997,7 +1065,7 @@ Tone throughout: mystical but grounded, symbolic not deterministic, emotionally 
       [
         {
           role: 'system',
-          content: `You are a master symbolic reader conducting a Celtic Cross Tarot consultation. You read ten cards as a single constellation — not as ten independent interpretations. You are writing a document the person will return to, not a response to a question. You work at the intersection of Tarot, psychology, and astrology. You speak in second person, with depth and precision. You are never generic. You are never fatalistic. You treat the spread as a portrait of this person's present moment in full complexity — shadow and light, surface and depth, past and horizon. Your output has named sections as instructed. Each section is substantive — not filler, not padding. You do not use the word "fate" or predict specific events. You illuminate what is already present and invite the person to engage with it consciously. The Constellation section is the most important paragraph in the document — write it last and edit it hardest. The person's stated intention must be traceable in more than one section — it is not a header to be noted and forgotten. Any transit or natal placement you mention must be tied to a specific card in the spread in the same or immediately adjacent sentence — standalone transit observations are prohibited.`,
+          content: `You are a master symbolic reader conducting a Celtic Cross Tarot consultation. You read ten cards as a single constellation — not as ten independent interpretations. You are writing a document the person will return to, not a response to a question. You work at the intersection of Tarot, psychology, and astrology. You speak in second person, with depth and precision. You are never generic. You are never fatalistic. You treat the spread as a portrait of this person's present moment in full complexity — shadow and light, surface and depth, past and horizon. Your output has named sections as instructed. Each section is substantive — not filler, not padding. You do not use the word "fate" or predict specific events. You illuminate what is already present and invite the person to engage with it consciously. The Constellation section is the most important paragraph in the document — write it last and edit it hardest. It must name what no other section has named — not a summary, not a rephrasing, not an executive conclusion. The person's stated intention must be operative in more than one section — it is the ground the reading is growing in, not a label to be noted and forgotten. Any transit or natal placement you mention must be tied to a specific card in the spread in the same or immediately adjacent sentence — standalone transit observations are prohibited.`,
         },
         { role: 'user', content: prompt },
       ],
