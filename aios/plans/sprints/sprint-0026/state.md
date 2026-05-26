@@ -8,7 +8,7 @@
 
 | Task | Slug | Status |
 |------|------|--------|
-| task-0001 | sprint-0026-task-0001-issue-natal-dominant-modality-gap | pending |
+| task-0001 | sprint-0026-task-0001-issue-natal-dominant-modality-gap | completed |
 | task-0002 | sprint-0026-task-0002-code-court-card-transit-adaptations | pending |
 | task-0003 | sprint-0026-task-0003-code-reversed-meanings-depth | completed |
 | task-0004 | sprint-0026-task-0004-code-synthesis-prompt-specificity | pending |
