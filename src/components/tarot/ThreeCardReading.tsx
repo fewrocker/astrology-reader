@@ -836,7 +836,7 @@ export default function ThreeCardReading({
         const retryable = !(err instanceof RateLimitError) && !String(err).includes('400')
         setSynthesisState(retryable ? 'error-retryable' : 'error-permanent')
       })
-  }, [astroContext, drawnCards, instantInterpretations, placementComplete, spreadMode, spreadPositions, userIntention])
+  }, [astroContext, drawnCards, placementComplete, spreadMode, spreadPositions, userIntention])
 
   // Cleanup abort on unmount
   useEffect(() => {
