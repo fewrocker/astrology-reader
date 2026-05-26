@@ -137,6 +137,59 @@ describe('Tarot card data completeness', () => {
     ).toHaveLength(0)
   })
 
+  it('all pip cards have Saturn and Pluto transit adaptations', () => {
+    const suits = ['wands', 'cups', 'swords', 'pentacles'] as const
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
+    const missing: string[] = []
+    for (const suit of suits) {
+      for (const number of numbers) {
+        const id = `${number}-of-${suit}`
+        const entries = TRANSIT_ADAPTATIONS.filter(e => e.cardId === id)
+        const hasSaturn = entries.some(e => e.planet === 'Saturn')
+        const hasPluto = entries.some(e => e.planet === 'Pluto')
+        if (!hasSaturn) missing.push(`${id} missing Saturn`)
+        if (!hasPluto) missing.push(`${id} missing Pluto`)
+      }
+    }
+    expect(missing, missing.join(', ')).toHaveLength(0)
+  })
+
+  it('Wands and Swords pip cards have Mars transit adaptations', () => {
+    const suits = ['wands', 'swords'] as const
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
+    const missing: string[] = []
+    for (const suit of suits) {
+      for (const number of numbers) {
+        const id = `${number}-of-${suit}`
+        const entries = TRANSIT_ADAPTATIONS.filter(e => e.cardId === id)
+        if (!entries.some(e => e.planet === 'Mars')) missing.push(id)
+      }
+    }
+    expect(missing, missing.join(', ')).toHaveLength(0)
+  })
+
+  it('Cups pip cards have Neptune transit adaptations', () => {
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
+    const missing: string[] = []
+    for (const number of numbers) {
+      const id = `${number}-of-cups`
+      const entries = TRANSIT_ADAPTATIONS.filter(e => e.cardId === id)
+      if (!entries.some(e => e.planet === 'Neptune')) missing.push(id)
+    }
+    expect(missing, missing.join(', ')).toHaveLength(0)
+  })
+
+  it('Pentacles pip cards have Venus transit adaptations', () => {
+    const numbers = ['two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'] as const
+    const missing: string[] = []
+    for (const number of numbers) {
+      const id = `${number}-of-pentacles`
+      const entries = TRANSIT_ADAPTATIONS.filter(e => e.cardId === id)
+      if (!entries.some(e => e.planet === 'Venus')) missing.push(id)
+    }
+    expect(missing, missing.join(', ')).toHaveLength(0)
+  })
+
   it('astro connections covers exactly 78 cards', () => {
     expect(Object.keys(CARD_ASTRO_CONNECTIONS)).toHaveLength(78)
   })
