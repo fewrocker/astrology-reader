@@ -12,5 +12,5 @@
 | task-0002 | sprint-0028-task-0002-code-dominant-transit-orb-weighting | done |
 | task-0003 | sprint-0028-task-0003-code-gpt-tarot-dead-code-cleanup | done |
 | task-0004 | sprint-0028-task-0004-code-transit-adaptation-contract-test | done |
-| task-0005 | sprint-0028-task-0005-feat-natal-card-correspondence | pending |
-| task-0006 | sprint-0028-task-0006-feat-three-card-constellation-preview | pending |
+| task-0005 | sprint-0028-task-0005-feat-natal-card-correspondence | done |
+| task-0006 | sprint-0028-task-0006-feat-three-card-constellation-preview | done |
