@@ -650,6 +650,690 @@ export const TRANSIT_ADAPTATIONS: TransitAdaptation[] = [
     condition: 'any',
     emphasis: 'Saturn meets the Page of Pentacles at the moment when genuine beginner\'s attention must be formalized into a committed practice. The Page studies with total focus — the pentacle held up before them, examined with the patience of someone who knows they are at the beginning of something that matters. Saturn is the force that takes that earnest beginning and makes it real by demanding that the commitment be sustained past the point of initial enthusiasm, through difficulty, through the long middle section where skill is being built but mastery has not yet arrived. This is not a harsh transit for the Page of Pentacles; it is the necessary one — the formalization of the learning into something that will actually develop into what the Page is studying it for.',
   },
+
+  // ─── Major Arcana — The Fool ──────────────────────────────────────────────
+
+  // The Fool
+  {
+    cardId: 'the-fool',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn does not usually appear at the cliff\'s edge as an ally — this is the planet of caution, of consequence, of the long accounting — and yet here it is with The Fool, and the message it carries is not the one you might expect. Saturn is not asking whether the leap is wise. It is asking whether you understand that the longer you stand here holding the possibility without committing to it, the more the possibility costs you — in aliveness, in the slow erosion of the self that is still waiting to exist. Saturn\'s presence with The Fool is not the voice that says wait. It is the voice that says you have been waiting. The conditions will not improve into certainty. The ground behind you is not safer than the sky in front of you; it just feels more familiar. At some point the responsible thing is the leap.',
+  },
+  {
+    cardId: 'the-fool',
+    planet: 'Uranus',
+    condition: 'any',
+    emphasis: 'Uranus is The Fool\'s ruling planet, and when Uranus is the dominant transit meeting this card, the alignment is not coincidence — it is the most complete possible expression of what both forces actually are. The Fool is the archetype of the leap into unguaranteed possibility; Uranus is the planet whose entire register is sudden liberation, the disruption that opens rather than closes. When these two meet in a reading, the sky is not merely commenting on the card: the sky is confirming it. What has been building toward departure is ready to depart. What has been felt as recklessness may be the most accurate perception you have had in months. The Fool under Uranus is not a warning about impulse — it is a recognition that the leap is genuine, that the freedom it leads toward is real, and that the timing is now rather than when it feels safer.',
+  },
+
+  // Justice
+  {
+    cardId: 'justice',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Justice and Saturn speak the same language, which is the language of consequence without sentiment. When Saturn transits this card, what has been set in motion is arriving at its natural reckoning — not as punishment, not as reward, but as the impersonal completion of a chain of cause and effect that does not require anyone\'s permission to conclude. The scales Justice holds are not being tilted by Saturn; they are being held very, very still. Whatever has been put on them — the decisions made, the obligations honored or evaded, the truths told or kept — is now being weighed without the softening that hope or self-deception usually provides. Saturn with Justice is not harsh: it is simply honest in a way that does not accommodate negotiation. The accounting that arrives now is the one you already knew was coming.',
+  },
+  {
+    cardId: 'justice',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Justice under Venus asks a question the scales are not always asked: has the accounting been honest about what you actually want? The balance Justice represents is not merely factual — it requires knowing what is genuinely being weighed, and Venus brings the complication that desire is one of the weights. When Venus transits Justice, the clarity the card demands extends to the domain of value and preference: not only what is fair in the abstract but what you actually care about, what you would choose if you were not performing balance rather than practicing it. The person whose scales tip in Venus\'s direction knows something the purely rational arbiter does not — that an honest reckoning must include honest desire, and that a fairness built entirely on suppressing what is genuinely wanted is not fairness but self-denial wearing the clothes of virtue.',
+  },
+
+  // ─── Pip Cards — Swords ───────────────────────────────────────────────────
+
+  // Two of Swords
+  {
+    cardId: 'two-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the blindfolded figure at the shore and does not remove the blindfold. It asks instead how long ago the decision was made to put it on — because the Two of Swords\' stalemate is not an accident of circumstance; it is a chosen state, and Saturn is now applying its signature demand to the choosing. The two swords crossed over the chest are a posture of protection, but protection from what? From having to know. Saturn wants to know precisely what would be true if the crossed swords were lowered — what decision would have to be made, what truth would have to be acknowledged — and it is asking this question with the patience of a planet that has nowhere to be and no interest in whether the answer is comfortable.',
+  },
+  {
+    cardId: 'two-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto does not approach the Two of Swords\' stalemate from the level of the decision being avoided — it descends to the level of why the blindfold was put on in the first place. The person at the shore with crossed swords is not simply undecided; they are protecting something, and Pluto wants to know what. The excavation here is not about which option to choose between the two equally weighted paths — that is the surface of the stalemate. Pluto is asking what the decision would cost at the root level: what version of the self would have to be given up if one path were finally chosen, what the paralysis has been protecting, whether the real fear is not the wrong choice but the loss of the person who still has both options available.',
+  },
+  {
+    cardId: 'two-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars meets the blindfolded figure at the shore and offers the one thing the Two of Swords most resists: momentum. The stalemate this card represents is built on the premise that stillness is safer than movement — that crossing the swords and closing the eyes is a holding pattern rather than a choice. Mars does not accept holding patterns. The energy now pressing against the Two of Swords\' careful paralysis is precisely the force that the paralysis was designed to hold at bay: the charge, the decision, the consequence of finally moving. Mars does not require the decision to be wise. It requires it to be made.',
+  },
+  {
+    cardId: 'two-of-swords',
+    planet: 'Mercury',
+    condition: 'retrograde',
+    emphasis: 'Mercury retrograde lands in the Two of Swords\' landscape and deepens the fog the blindfold was already generating. The mind that had already chosen not to receive new information is now in a transit that is actively obscuring the clarity needed to decide — signals are mixed, communications are distorted, and the options that seemed roughly equivalent may now appear even more impossible to distinguish between. The danger here is not that Mercury retrograde makes the decision harder. The danger is that it makes the postponement more comfortable. The fog feels like evidence that the time is not right, when it is actually just confirmation that the stalemate\'s avoidance strategy has found a temporary external ally.',
+  },
+
+  // Three of Swords
+  {
+    cardId: 'three-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Three of Swords\' pierced heart and does not offer comfort. It offers something harder and more useful: the recognition that the wound is real, that what caused it was real, and that the accounting of it cannot be finessed into something more manageable without losing its truth. The three swords in the heart are precise — not metaphorical, not exaggerated — and Saturn demands that the grief be met at the same level of precision. This is not extended suffering; it is the specific naming of what was lost, what was broken, and what the damage actually was. Saturn does not linger at heartbreak for cruelty. It lingers because only what is fully named can be fully processed, and what is not fully processed will return to ask again.',
+  },
+  {
+    cardId: 'three-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Three of Swords\' storm and asks not merely whether you are grieving but what the grief is revealing about what was actually at stake. The swords in the heart are painful precisely because what they pierce mattered — and Pluto is less interested in the pain itself than in what the pain is unearthing. Beneath the acute heartbreak of the Three, Pluto finds older material: the earlier wound that gave this wound its particular depth, the pattern of loss that this loss is the latest iteration of, the core belief about love or trust or safety that the current heartbreak is now testing all the way down. The Three of Swords under Pluto is not an instruction to suffer more; it is an invitation to use the already-open wound to see what had been buried beneath it.',
+  },
+  {
+    cardId: 'three-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars brings to the Three of Swords the particular energy of the truth that was spoken too sharply — or the one that should have been spoken and wasn\'t. The heartbreak this card marks often arrives through words: the thing said that cannot be unsaid, the thing withheld so long it became a wound by its absence. Mars accelerates this. Whatever has been building between what is known and what is said is now at the pressure point where silence becomes more costly than speech. The pain in the Three of Swords under Mars is real, but it is also clarifying — the swords are blunt about what mattered, and Mars makes it impossible to pretend otherwise.',
+  },
+
+  // Four of Swords
+  {
+    cardId: 'four-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn and the Four of Swords are in full agreement that the rest is not optional — but they arrive at that agreement from different directions. The knight on the tomb has withdrawn from the field because the field demanded everything and gave back not enough, and the rest that follows is not laziness but the body and mind\'s insistence on recovery before re-engagement. Saturn\'s version of this same message is less gentle: the rest is being required because something was pushed past its sustainable limit, and the enforced pause is the price of overextension. Both Saturn and the Four are saying the same thing to the person who is still trying to fight from the prone position: the field will wait. The enemy will wait. What cannot wait is the recuperation.',
+  },
+  {
+    cardId: 'four-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto does not usually descend into the Four of Swords\' contemplative quiet — and yet when it does, the stillness becomes something more than recuperation. The knight in effigy on the tomb is in a posture between life and death, between engagement and release, and Pluto is the planet most comfortable at exactly that threshold. What Pluto brings to the Four of Swords\' enforced withdrawal is the question of what died in the last engagement — not the battle itself, but what the battle revealed about who you were fighting as and whether that person is who you want to resume being when the rest is complete. The swords on the wall are not decorations; they are the life that was set down. Pluto wants to know which ones you will pick back up.',
+  },
+  {
+    cardId: 'four-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars presses against the Four of Swords\' enforced quiet with the urgency of a planet that does not believe in pausing. The tension between Mars\'s drive to re-engage and the Four\'s insistence on stillness is not a contradiction — it is the card\'s most productive possible context. The knight in the tomb is not resting because the battle is over; the battle is ongoing, and the rest is strategic. Mars honors strategy. What Mars is asking of the Four of Swords is not that the recuperation be abandoned — it is that the recuperation be purposeful, that the stillness be used to sharpen what will be brought back to the field rather than to avoid the fact that the field is waiting.',
+  },
+
+  // Five of Swords
+  {
+    cardId: 'five-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Five of Swords\' hollow victory and does the one thing the smirking figure did not want to face: it counts the cost. The swords collected from the departing figures have a price that the winning did not reveal at the time, and Saturn is now presenting the ledger. What was damaged in the winning of this battle — what relationship, what reputation, what version of yourself — and was the winning worth what was paid? Saturn with the Five of Swords is not punishment; it is accounting. The enforced reckoning of what a victory that sacrificed too much actually produced, and whether the pattern that led here is one worth repeating or one worth understanding well enough to retire.',
+  },
+  {
+    cardId: 'five-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto reaches below the Five of Swords\' surface conflict to the root of why winning was necessary enough to justify the cost. The figure who collects the swords after the others have walked away is not simply competitive — there is something more specific being served by the victory, something that had to prove itself, something that could not afford to lose. Pluto is not interested in who won or what was won. It is interested in why the win mattered so much, in what early experience gave the need to prevail over others its particular urgency, in whether what was being defended in this battle is actually worth the cost that defending it has required. The battle is over. Pluto is asking who fought it and what for.',
+  },
+  {
+    cardId: 'five-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Five of Swords in full support of the conflict — and this is precisely the problem. Mars does not distinguish between battles worth fighting and battles that will cost more than they can possibly return. The energy available now is genuinely high, the drive to win is fully supported, and the Five of Swords is the card asking whether this particular battle deserves that drive. Mars at the Five of Swords is the combination of maximum force and minimum wisdom: the charge is imminent, the ground is questionable, and the figure gathering swords over defeated opponents is about to discover whether the planet that got them there will also be present when the cost of the victory is calculated.',
+  },
+
+  // Six of Swords
+  {
+    cardId: 'six-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn meets the Six of Swords at the crossing and makes it slower, heavier, and more real. The figure and child in the boat are leaving something — the choppy water, the situation that was too much — and Saturn\'s presence at this crossing is the weight of everything being brought along. The swords standing in the bow are not left behind; they travel with the crossing, and Saturn knows it. The Six of Swords under Saturn is not the promise of an easy new beginning; it is the recognition that the passage is real, the leaving is irreversible, and the cargo of what has been lived through is coming too. Saturn does not ask that the crossing not be made. It asks that it be made honestly — without pretending the water behind you was not what it was, and without expecting that calmer water means the swords will have disappeared.',
+  },
+  {
+    cardId: 'six-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto asks what is being left behind in the Six of Swords\' crossing — and then asks what cannot be left behind no matter how far the boat travels. The passage from turbulent water to calmer shores is real, and Pluto does not dispute the necessity of the departure. But the swords in the bow of the boat are not decorative, and Pluto is the planet that knows the difference between what has been outrun and what has been genuinely moved through. The crossing under Pluto is an invitation to examine which of the swords standing upright in the hull belong to the life being left, and which belong to the self that is doing the leaving. Those will need to be addressed in the calmer water as surely as they were generated in the storm.',
+  },
+  {
+    cardId: 'six-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Six of Swords\' gradual crossing and wants it done faster. The patient boatman, the quiet passage, the slow transit from difficulty to the promise of calmer water — none of this aligns with what Mars brings to a situation, which is urgency, drive, and the conviction that the pace should match the need. The friction here is real: the Six of Swords is a card of gradual healing that cannot be forced without breaking something in the crossing, and Mars is pressing for arrival before the passage has had time to do what passages do. What Mars can contribute to the Six of Swords is the willingness to actually leave rather than hovering at the departure point — the courage to fully commit to the crossing, even if Mars must then be convinced to let the boatman set the pace.',
+  },
+
+  // Seven of Swords
+  {
+    cardId: 'seven-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Seven of Swords\' solo operation and begins to count what the strategy is costing. The figure creeping away from the camp has been clever — genuinely clever — but Saturn applies its accounting to cleverness without sentiment. What has been avoided through the compartmentalization? What relationships have been operating on partial information? What does the person operating outside sanctioned channels actually owe to the people they are operating away from — and when does Saturn\'s ledger come due? The Seven of Swords under Saturn is not the discovery of the deception; it is the moment when the deception\'s structural cost becomes visible to the person running it, when the cleverness reveals itself as a loan with compound interest that has been accumulating unseen.',
+  },
+  {
+    cardId: 'seven-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto does not care about the swords being carried or the ones left behind. It cares about why the operation has to be solo — why vulnerability or collaboration or honesty would have cost too much to risk in this situation, and what that cost tells you about the underlying power dynamics that have made secrecy feel like the only viable strategy. The Seven of Swords under Pluto is the excavation of the conditions that produced the solo approach: the experiences of betrayal or exposure that made the private strategy feel necessary, the power differential that made the direct approach seem too dangerous, the belief about who can be trusted that has organized the compartmentalization. Pluto is not judging the cleverness. It is asking what the cleverness was protecting against, and whether that protection is still necessary.',
+  },
+  {
+    cardId: 'seven-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Seven of Swords\' careful private strategy with the bluntness the strategy was specifically designed to avoid. The figure creeping away from the camp with five swords is operating on the premise that the direct approach would have failed — that negotiation or confrontation would have cost more than the solo operation costs. Mars disputes this. Not because Mars is strategic, but because Mars believes in the confrontation as a clarifying act: the argument, the direct claim, the disclosed intention. The energy now available makes the indirect approach feel small, and what Mars is pressing the Seven of Swords to consider is whether the strategy that felt necessary was actually protecting something, or whether it was simply a way of avoiding the riskier but more honest engagement.',
+  },
+
+  // Eight of Swords
+  {
+    cardId: 'eight-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn meets the Eight of Swords\' blindfolded figure and asks the question no one else has thought to ask: when was the decision made to stay? The bounds are loose, the feet are free, the swords are not pressing in — and yet the figure stands surrounded rather than walking away, and Saturn wants to know how long ago the standing in place was chosen over the leaving. Not to condemn the staying, but to bring it into clear view as a choice rather than a circumstance. Saturn with the Eight of Swords is not about the difficulty of the self-imposed limits — it is about the moment of honest recognition that something is being maintained here, that the cage was built by someone, and that the someone is the person standing in the middle of it. What would it cost to walk out? Saturn requires the honest answer.',
+  },
+  {
+    cardId: 'eight-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto excavates the Eight of Swords from the bottom up — not asking whether the cage is real but asking what function it was built to serve. The blindfold is not an accident; the bonds, however loose, were tied by someone; the eight swords are standing in a circle rather than lying abandoned. Pluto wants to know what the person in the center was protecting when the cage was first constructed: what overwhelm or threat or responsibility was being kept at bay by the posture of total constraint, what freedom was being refused because the terror of the open ground was more specific than the discomfort of the enclosure. The Eight of Swords under Pluto does not open the cage by force. It illuminates the moment the cage was chosen, so that the choosing can finally be named and the question of whether the original protection is still necessary can be honestly answered.',
+  },
+  {
+    cardId: 'eight-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Eight of Swords\' enclosure with the simplest possible message: the bonds are loose. Walk. The planet that does not believe in staying in a place that can be left has no patience for the careful psychological architecture of the self-built cage, and its pressure on the Eight of Swords is not gentle. Mars does not excavate the reasons for the staying or account for the history of the blindfold — it registers only that the feet are unbound and the direction of out is available. What Mars makes possible at the Eight of Swords is the moment of sudden movement after long paralysis: not the fully understood liberation but the first step, taken before the analysis is complete, in the direction of the gap between the swords.',
+  },
+  {
+    cardId: 'eight-of-swords',
+    planet: 'Mercury',
+    condition: 'retrograde',
+    emphasis: 'Mercury retrograde arrives at the Eight of Swords\' already-disrupted mental landscape and reinforces the very architecture it is built from: the loops, the confusion, the distorted signals that make the cage feel more hermetically sealed than it is. The Eight\'s captivity is constructed from belief and perception, and Mercury retrograde is the transit that works at the level of perception — scrambling signals, revisiting old information, cycling through conclusions already reached without resolving them differently. The risk here is that the retrograde\'s natural tendency to confuse is confirming the Eight\'s false conclusion that the walls are solid and the exit is elsewhere. The specific invitation is to notice which thoughts are new and which are loops — and to treat the loops as evidence of the mind\'s construction rather than as new information about the limits of the situation.',
+  },
+
+  // Nine of Swords
+  {
+    cardId: 'nine-of-swords',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Nine of Swords\' night mind and asks what proportion of what is being feared has actually happened. The figure sitting upright in the dark with nine swords on the wall is in the grip of the mind that is never more dangerous than when it is unsupervised in the small hours, and Saturn — the planet of what is actually real, of what can actually be measured and accounted for — arrives to distinguish between the genuine threat and the proliferating catastrophe-narrative. Saturn does not dismiss the anxiety of the Nine of Swords. It asks it to be specific. Not "everything is wrong" but "what, exactly, is wrong, and what part of what I am experiencing at 3 a.m. is actually the situation versus the mind\'s amplification of it?" Specificity is Saturn\'s cure for what the Nine generates.',
+  },
+  {
+    cardId: 'nine-of-swords',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto descends into the Nine of Swords\' nightmare and asks the question the anxiety has been circling without naming: what, at root, is actually being feared? The nine swords on the wall, the figure\'s hands over their face, the night sky without relief — these are the surface of a terror that has been running in the background long before this particular dread took its current form. Pluto arrives not to end the nightmare but to identify its source material — the foundational fear that the current anxiety has attached itself to, the old story about safety or unworthiness or abandonment that the 3 a.m. mind is re-enacting in a new costume. When the root fear can be named and looked at directly, the nine swords typically lose something of their capacity to multiply in the dark.',
+  },
+  {
+    cardId: 'nine-of-swords',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Nine of Swords and offers something the card rarely receives: the impulse toward action rather than rumination. The figure sitting upright in the dark with their hands over their face is caught in the mind\'s most self-sustaining loop — fear generating thoughts generating more fear, in the particular spiral that thrives on passivity. Mars does not solve what the Nine of Swords is suffering, but it provides the energy to interrupt the loop: to get up, to move, to externalize what has been feeding on internal attention. The act does not have to be large. It has to be actual — something that belongs to the world outside the spinning mind, something that Mars\'s energy can touch. The anxiety of the Nine of Swords is not healed by action alone, but it cannot survive it unchanged.',
+  },
+
+  // ─── Pip Cards — Cups ────────────────────────────────────────────────────
+
+  // Two of Cups
+  {
+    cardId: 'two-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Two of Cups\' moment of mutual recognition and asks whether what has been recognized is real or what two people wish each other to be. The caduceus between the figures in the image is the symbol of balanced exchange — and Saturn is now applying its signature requirement to that balance: not the balance of initial feeling, which is always vivid and always genuine, but the balance that persists when the encounter has been tested by time and difficulty and the ordinary disappointment of finding that the person seen so clearly at the moment of recognition is also, eventually, a person. Saturn at the Two of Cups is not skepticism about the connection. It is the question of whether the connection is built on something that can hold its own weight beyond the moment of first seeing.',
+  },
+  {
+    cardId: 'two-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Two of Cups\' exchange and asks what is actually being offered when two people extend their cups toward each other. The mutual recognition this card marks is real — but Pluto operates below the level of what is consciously being offered, in the layer where the need beneath the connection lives. What does this particular person recognize in this other particular person, and what is that recognition actually about? The resonance between two cups can be genuine love or it can be the recognition of a familiar dynamic, a mirroring of something old, an encounter with someone who carries the specific charge of an unresolved pattern. Pluto at the Two of Cups is not dissolving the connection; it is asking whether the recognition is being seen with full honesty or with the pleasant distortion that new connection almost always provides.',
+  },
+  {
+    cardId: 'two-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune deepens the Two of Cups\' recognition into something that feels larger than two people — the resonance between the two figures shimmering with significance, the exchange feeling sacred, the encounter carrying the quality of having been arranged by something beyond ordinary circumstance. This amplification is real and not to be dismissed; Neptune is not generating false emotion here. The question Neptune brings to the Two of Cups is the distinction between what is genuinely felt and what is being projected onto the encounter because the encounter is new and the feeling is strong. The caduceus between the figures is a symbol of genuine exchange — and Neptune at the Two of Cups asks that the exchange remain honest as the feeling intensifies.',
+  },
+
+  // Three of Cups
+  {
+    cardId: 'three-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Three of Cups\' celebration and does not stop the dance — but it asks what is being celebrated and whether the community dancing has the depth to sustain what the celebration implies. The three women with their cups raised are genuinely joyful, and Saturn does not dispute the joy. It asks whether the harvest being celebrated is real — whether the abundance being shared was actually earned and built together, or whether the festival has arrived before the work is complete. Saturn at the Three of Cups is the question of whether the community that gathers to celebrate has also gathered to build, to support, to sustain each other through the parts of common life that do not make for festive images. Celebration that has community beneath it is the Three of Cups at its fullest. Celebration that substitutes for community is Saturn\'s concern.',
+  },
+  {
+    cardId: 'three-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Three of Cups\' joyful circle and looks beneath the dancing for the power dynamics the celebration is organized around. The three women raise their cups in genuine festivity, but community has its shadow — the belonging that defines by exclusion, the celebration that binds some and marginalizes others, the intimacy of the circle that leaves someone outside it. Pluto at the Three of Cups is not dismantling the community; it is asking that the community become honest about who is in the circle and whether that circle is as open and genuinely connected as the raised cups suggest. The harvest festival is real. Pluto is asking what it cost to produce, and who paid that cost without being invited to the celebration.',
+  },
+  {
+    cardId: 'three-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune amplifies the Three of Cups\' shared joy into something transcendent — the dance becomes ritual, the celebration takes on a quality of sacred gathering, the feeling between the three figures shimmer with the particular sweetness of people who sense something larger than themselves in their being together. Neptune\'s presence at the Three of Cups is the most beautiful possible version of this card: genuine community infused with spiritual feeling, the sense that joy shared in this specific company is not accidental but somehow necessary and blessed. The invitation is to inhabit this quality fully without immediately asking where it leads — Neptune at the Three of Cups is one of the few combinations where the dissolution of analytical distance is actually the most intelligent response available.',
+  },
+
+  // Four of Cups
+  {
+    cardId: 'four-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Four of Cups\' withdrawal and asks how long the figure has been sitting under that tree with arms crossed against what arrives. The contemplative inward turn of the Four is legitimate — the soul has genuine need for periods of turning away from offer and noise — but Saturn requires that the turning away have a purpose and a duration rather than becoming a permanent posture. The fourth cup extended from the cloud goes unnoticed not because the figure is not ready but because the habit of not-receiving has become so established that it operates below the level of choice. Saturn at the Four of Cups is the gentle insistence that the withdrawal be examined rather than simply continued: what is being heard in the inwardness, and is there a date at which the crossing of the arms will be uncrossed?',
+  },
+  {
+    cardId: 'four-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto descends below the Four of Cups\' contemplative surface and asks what the withdrawal was originally protecting against. The figure cross-armed under the tree is not simply bored or dissatisfied — something happened that made turning away feel necessary, and Pluto wants to know what. The three cups on the ground were set down rather than held; the extended cup from the cloud goes unseen; and the pattern of not-receiving that the card represents has a history that the card itself does not show. Pluto at the Four of Cups is the excavation of the emotional event or pattern that taught the figure that what arrives extended from outside is not to be trusted — and whether what was learned then is still the appropriate guide to what is being offered now.',
+  },
+
+  // Five of Cups
+  {
+    cardId: 'five-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn stands at the Five of Cups with the cloaked figure and makes grief precise. Three cups are spilled — not four, not all of them — and two stand upright behind the figure who cannot yet turn to see them. Saturn is not the voice that says look at the bright side; it is the voice that says name what was lost with the specificity the loss deserves, and also name what remains with the same specificity. The grieving figure\'s back to the two standing cups is not wrong — the loss is real and requires full attention before the turning can be genuine rather than premature. Saturn at the Five of Cups is the demand for complete mourning before incomplete recovery, and also the quiet insistence that the two cups standing behind you are real and will still be there when the grief has run its honest course.',
+  },
+  {
+    cardId: 'five-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Five of Cups\' spilled cups and asks not merely about this loss but about the pattern of loss — what this grief is adding to, what earlier spillage this one echoes, what the cloaked figure has been building toward or against that this moment of loss is part of. The three cups on the ground are specific and real, but Pluto operates at the level of the geological — the long formation that produced the current eruption rather than the eruption itself. At the Five of Cups, Pluto is the voice beneath the grief asking: what does this loss reveal about what you have believed love or connection or belonging will always eventually do? The current heartbreak is fresh; Pluto is reaching toward the original one.',
+  },
+  {
+    cardId: 'five-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune deepens the Five of Cups\' grief into something that dissolves the ordinary boundary between personal loss and something larger, more diffuse, harder to name. The cloaked figure staring at spilled cups already carries their loss in water imagery — and Neptune is the planet that belongs to water\'s most formless depths, the place where individual sorrow opens into a shared human awareness of impermanence and dissolution. Neptune at the Five of Cups can make grief feel oceanic, boundless, out of proportion to the specific loss — and this is both the gift and the difficulty. The gift is that the depth of feeling connects to something real about being alive in a world where nothing is permanent. The difficulty is that Neptune makes it genuinely hard to distinguish between genuine mourning and its dissolution into something that can be sustained indefinitely without resolution.',
+  },
+
+  // Six of Cups
+  {
+    cardId: 'six-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Six of Cups\' scene of sweetness and memory and asks a specific question: is the past being visited or is it being lived in? The boy offering the cup of flowers to the girl is a beautiful image, and what it represents — the innocent exchange of the earlier self, the uncomplicated affection of simpler times — is a genuinely nourishing thing to reconnect with. Saturn is not against the visit. It is asking whether the visit has duration, whether the sweetness of the past is being drawn on as a resource for the present or used as a substitute for it. Saturn at the Six of Cups marks the moment when nostalgia becomes a question of where, exactly, you are choosing to live — and whether the safety of that earlier time is a comfort you deserve or a delay you are using.',
+  },
+  {
+    cardId: 'six-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Six of Cups\' nostalgia and looks beneath the sweetness for what the return to the past is actually a return to. Memory is never neutral, and Pluto is the planet that knows what the golden retrieval of childhood or simpler times is organized around — what was safe then that is not safe now, what was lost in the growing up that the nostalgic return is quietly trying to recover, what the sweetness of the offered cup is actually carrying beyond the flowers. Pluto at the Six of Cups is not the destruction of the sweetness; it is the honest question of whether the pull toward the past is a genuine retrieval of something still available, or a way of living in a version of the self that has already outgrown the cups it once held.',
+  },
+  {
+    cardId: 'six-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune arrives at the Six of Cups and amplifies the already-luminous quality of memory into something that shimmers with longing and beauty. The scene of the boy and the girl with the cup of flowers becomes, under Neptune, almost mythic — the innocence of the original exchange takes on the quality of something sacred, something from a time before complexity, a contact with a purer version of love or connection that ordinary adult life has layered over. Neptune\'s gift at the Six of Cups is access to the genuine emotional nourishment that memory provides when it is approached with reverence. Neptune\'s risk is the dissolution of the present into the past: the world as it is now becoming unreal and unsatisfying compared to the shimmer of what it once was.',
+  },
+
+  // Seven of Cups
+  {
+    cardId: 'seven-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Seven of Cups\' cloud-borne proliferation of visions and begins, methodically, to ask which of them is real. The seven cups floating in the sky each hold something compelling — treasure, castles, serpents, wreaths — and they share one crucial quality: none of them has yet been tested by the ground. Saturn is the planet of ground. Its question at the Seven of Cups is not which vision is most appealing but which vision is actually operational — which of the seven dreams has the substance to survive contact with material reality, which can be built rather than merely beheld. Saturn does not extinguish the Seven\'s imagination. It asks imagination to submit one of its offerings to the requirement of being real, so that the proliferation of equally vivid fantasies can finally resolve into something that exists beyond the clouds.',
+  },
+  {
+    cardId: 'seven-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Seven of Cups\' vast array of untested visions and asks which one the person standing before the clouds is actually most afraid to choose — because that fear is the location of the genuine desire. The proliferation of possibility in the Seven of Cups often has a specific function: when every option is equally vivid and equally unreal, no option can be chosen, which means no option can fail. Pluto cuts through this arrangement not by eliminating the fantasies but by asking what would be at stake if one of them were made real. The power dynamics of the Seven of Cups are the power dynamics of the person who keeps all options open precisely to avoid the vulnerability of committing to any of them. Pluto wants to know which cup is the one that genuinely matters enough to risk being disappointed by.',
+  },
+  {
+    cardId: 'seven-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune arrives at the Seven of Cups and adds water to clouds — intensifying the dreamlike quality of the card\'s floating visions until the boundary between imagination and reality becomes genuinely difficult to navigate. The seven cups in the sky already represent the mind\'s capacity to make possibility feel more vivid than actuality, and Neptune\'s transit deepens this: what is desired shimmers with almost unbearable beauty, what is feared takes on a quality of genuine menace, and the figure standing before the proliferation of visions finds themselves operating in a register where the emotional truth of each option feels more real than any practical assessment could be. Neptune at the Seven of Cups is both the most vivid imaginative opening available and the most complete dissolving of the discernment needed to act on what is imagined.',
+  },
+  {
+    cardId: 'seven-of-cups',
+    planet: 'Mercury',
+    condition: 'retrograde',
+    emphasis: 'Mercury retrograde arrives at the Seven of Cups and begins cycling through the already-proliferating options without resolving any of them into clarity. The card\'s natural territory is the imagination that has outrun discernment — and Mercury retrograde is the transit that specializes in revisiting, reconsidering, and circling without conclusion. Each option that seemed to be narrowing returns to full vividness; each decision that was nearly made dissolves back into open question; the mind that was moving toward one of the seven cups finds itself back at the beginning of the deliberation, now with the added complication of Mercury\'s scrambled signals and the retrograde\'s preference for what was rather than what could be. The specific risk here is that the retrograde\'s tendency to revisit old options makes the person standing before the cups believe they are making progress when they are actually repeating the loop.',
+  },
+
+  // Eight of Cups
+  {
+    cardId: 'eight-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn accompanies the Eight of Cups\' figure up the mountain path and confirms that what is being left was sufficient — the eight cups are arranged neatly, none of them broken, all of them full — and the leaving is not from failure or ingratitude but from the recognition that sufficiency is not the same as what the soul requires. This is Saturn at its most generous: not demanding that what has been enough be treated as insufficient, but acknowledging that the inner requirement that is driving the departure under the eclipsed moon is real and serious and deserves to be honored rather than managed. The figure walking away from the eight cups is not abandoning something; they are moving toward something that has not yet declared its form. Saturn says: the leaving is the responsible thing.',
+  },
+  {
+    cardId: 'eight-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Eight of Cups\' departure scene and asks what is actually driving the figure up the mountain. The eight cups left behind were full — not broken, not stolen from — and the departure in the dark of an eclipsed moon is the choice of someone who knows that what they are leaving was once genuinely wanted. Pluto wants to know what has changed: what has been excavated in the living of the life those cups represent that has revealed it as not enough, what has been surfaced by Pluto\'s transit through the earlier emotional territory that has produced this specific moment of brave, quiet departure. The Eight of Cups under Pluto is not the end of a chapter — it is the completion of a transformation that began long before the figure turned and walked away. The leaving is the last visible act of something that has been happening underground for a long time.',
+  },
+  {
+    cardId: 'eight-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune accompanies the Eight of Cups\' figure into the water-lit dark and makes the destination feel genuinely possible even though it has no name. The eclipsed moon, the mountain path, the cups left without ceremony — all of this already belongs to the dreamlike register that Neptune inhabits, and the departure the Eight of Cups marks is one that Neptune has been quietly preparing through the accumulation of inner signals: dreams pointing elsewhere, the feeling of looking at one\'s own life from a slight distance, the growing sense that what is real and what is lived have stopped quite coinciding. Neptune at the Eight of Cups is the transit that makes the spiritual dimension of a brave departure legible — the recognition that the soul\'s requirement is as real as any material necessity, and that following it in the dark is not recklessness but a particular kind of faithfulness.',
+  },
+
+  // Nine of Cups
+  {
+    cardId: 'nine-of-cups',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Nine of Cups\' moment of satisfied completion and asks whether the wish that came true was the right one. The figure sits before the arranged cups with crossed arms and an expression of genuine contentment — and Saturn is not here to disturb that contentment but to make sure it has been actually inhabited rather than immediately converted into the next wish. The Nine of Cups under Saturn is the invitation to stay with the completion long enough to know what it was actually for: what was learned in the getting, what the pursuit cost, and whether the satisfaction being felt right now deserves to be fully received before the next horizon is scanned. Saturn at the Nine is not delay — it is the insistence that what has been achieved be genuinely known before it is superseded.',
+  },
+  {
+    cardId: 'nine-of-cups',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Nine of Cups\' fulfilled wish and looks beneath the satisfied expression for what the fulfillment has revealed about what was actually being sought. The wish card is often more complex than it appears: the outer fulfillment has arrived, and the feeling of completion is real — but Pluto descends below the satisfaction to ask whether the wish that was granted was the wish at the surface or the wish beneath it, the stated desire or the older, less nameable longing that the stated desire was the socially acceptable version of. The Nine of Cups under Pluto is the beginning of wisdom about what the heart actually wants, as distinct from what it has been trained to want — and the completion of the outer wish is the moment when that distinction becomes most available to honest examination.',
+  },
+  {
+    cardId: 'nine-of-cups',
+    planet: 'Neptune',
+    condition: 'any',
+    emphasis: 'Neptune arrives at the Nine of Cups\' wish-fulfillment and dissolves the boundary between the personal satisfaction and something that shimmers with larger meaning. The figure\'s contentment under Neptune takes on a quality of grace rather than achievement — not merely the getting of what was wanted but a sense that the wanting and the getting were themselves part of something that exceeded the individual\'s management. Neptune at the Nine of Cups is the transit that makes abundance feel sacred rather than merely comfortable: the wish come true as a moment of genuine contact with the generosity of life rather than a personal victory. The invitation is to receive this quality fully without immediately wondering whether it can be sustained, since Neptune dissolves both the anxiety about its duration and the clear sense of what one deserves to hold.',
+  },
+
+  // ─── Pip Cards — Wands ───────────────────────────────────────────────────
+
+  // Two of Wands
+  {
+    cardId: 'two-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'The person who has been holding the map so long that Saturn is now asking whether they are willing to become someone who walks rather than plans. The Two of Wands stands at the parapet with the world in their hand — and what Saturn is making visible is that this position, this beautiful viewing position with the horizon before you and the wand firm in your grip, has become its own form of comfort. The vision has been so thoroughly experienced as vision that departing from it would mean losing the only version of the journey that has never disappointed. Saturn is not cruel about this. It simply makes the gap between planning and commitment uncomfortable in a way that the planning stage can no longer absorb. The question it is asking is not when you will go. It is whether you have already decided that the view is the destination.',
+  },
+  {
+    cardId: 'two-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Two of Wands\' parapet figure and asks what the world being held in the hand is actually a map of — whether the horizon being surveyed so carefully is the destination the person at the parapet genuinely wants, or the destination that makes sense from where they currently stand. The held globe of the Two of Wands is beautiful but Pluto is less interested in its beauty than in its accuracy. What is being planned here, and what is the plan actually serving — the genuine desire, or the version of desire that is safe enough to visualize without the terror of arrival? Pluto at the Two of Wands is the excavation of the real destination beneath the surveyed one, the commitment beneath the commitment that is comfortable to hold.',
+  },
+  {
+    cardId: 'two-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Two of Wands\' parapet and has no interest in the map. The figure with the world in their hand has been planning long enough; Mars is the force that converts the held vision into the first step of the journey. There is nothing wrong with the Two of Wands\' position — the surveying, the preparation, the sense of where you are going — but Mars is the transit that makes the staying feel more impossible than the going. The wand in the figure\'s hand is already lit; Mars is what makes holding it stationary feel like waste. The decision to leave the parapet does not require any more information than what the figure already has. Mars is simply making that fact harder to ignore.',
+  },
+
+  // Three of Wands
+  {
+    cardId: 'three-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Three of Wands\' horizon-watching and makes the wait structural. The figure whose ships have already sailed stands at the cliff with three wands rooted behind them, and Saturn\'s presence at this particular waiting position asks whether what has been launched was built on a foundation solid enough to return with what was hoped for. The Three of Wands under Saturn is the patience that cannot be performed — the actual faith of someone who has done the work and put the investment into the world and must now wait without pulling it back, without second-guessing the departure, without scanning the horizon so anxiously that the watching becomes a form of interference. Saturn at the Three asks: do you trust what you built enough to let it do its work while you wait on the cliff?',
+  },
+  {
+    cardId: 'three-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Three of Wands\' outward watching and turns the gaze inward. The ships are out; the investment is made; the horizon holds what has been set in motion. Pluto is not interested in what returns from the horizon — it is interested in what the waiting reveals about the person standing at the cliff. What did you launch and why? The enterprise that the Three of Wands has sent into the world carries the values and desires of the person who sent it, and Pluto\'s transit at this waiting stage is the excavation of those values: whether what was launched was a genuine expression of what matters most, or whether the venture out onto the horizon was itself a way of exporting something rather than confronting it directly.',
+  },
+  {
+    cardId: 'three-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Three of Wands\' patient horizon-watching and chafes against the waiting. The figure at the cliff has done what Mars respects — launched, committed, sent the ships out — but now the work is patience rather than charge, and Mars is not patient. The tension at the Three of Wands under Mars is productive: the drive that Mars provides is real and available, and the challenge is to direct it toward the preparation for what returns rather than toward the anxious retrieval of what has been launched. Mars at the Three of Wands is the energy that, if properly aimed, converts the waiting period into a period of readying — making the harbor better, making yourself ready for what is sailing toward you — rather than allowing it to become the energy that prematurely recalls the ships.',
+  },
+
+  // Four of Wands
+  {
+    cardId: 'four-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Four of Wands\' flower-hung canopy and asks whether the celebration has been earned. The card marks the genuine pause to acknowledge what has been accomplished — the dancers beneath the wands-garland are celebrating a real milestone — and Saturn\'s question is not skepticism about the joy but a requirement that the joy be grounded in honest accounting. Has what is being celebrated been genuinely built, or has the celebration arrived slightly ahead of the completion? Saturn at the Four of Wands is also the voice that says: pause here long enough to actually feel what has been done before the next stage begins. The celebration that the Four represents is not an indulgence; under Saturn, it is the responsible act of acknowledging completed work before additional work is loaded onto the structure.',
+  },
+  {
+    cardId: 'four-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Four of Wands\' communal gathering and asks what is actually being celebrated — and who is included in the celebrating. The canopy hung with flowers and the dancing figures are beautiful, and the milestone the Four marks is real; but Pluto looks beneath the festive surface for the power structure of the gathering, the history of what produced the milestone, and whether the people dancing beneath the garland are the ones whose effort built it. Pluto at the Four of Wands is not the destruction of the celebration. It is the insistence that celebrations be honest about what they are marking: the genuine recognition of real achievement, or the performance of harmony over a ground that has more complexity than the festivities allow.',
+  },
+  {
+    cardId: 'four-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Four of Wands\' celebratory pause and finds it briefly insufficient — the drive is still high, the fire is still burning, and the pause between one stage of effort and the next is not Mars\'s natural habitat. Yet the Four of Wands under Mars is one of the deck\'s most vivid invitations to bring full-throated energy to the act of celebration itself. Mars is not always the force that pushes past the pause; sometimes it is the force that makes the celebration genuine rather than perfunctory — the bonfire rather than the quiet moment of self-congratulation, the dancing rather than the brief pause before the next goal is announced. Mars at the Four of Wands asks: celebrate with the same force you bring to the work.',
+  },
+
+  // Five of Wands
+  {
+    cardId: 'five-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Five of Wands\' competitive scramble and asks which of the competing figures is actually fighting for something that matters. The five-way struggle of clashing wands has a quality of productive friction — the sparring before consensus, the argument before the shared direction emerges — but Saturn wants to know whether this particular contest is sharpening anyone or merely consuming energy in a direction that produces no usable result. Saturn at the Five of Wands is the question of whether the competition has a purpose or has become self-sustaining: whether the wands are being raised against something genuinely worth contending with, or whether the contest has become the point in itself, and what was originally at stake has been lost in the noise of the contest.',
+  },
+  {
+    cardId: 'five-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Five of Wands\' apparent chaos of competing wands and looks beneath the surface struggle for the power dynamics being worked out beneath the noise. The five figures are not simply arguing or competing — something is being decided about who has authority here, whose vision will prevail, whose fire gets to define the direction of what comes next. Pluto at the Five of Wands is the excavation of what the contest is actually for: the unspoken question of who leads, the underlying conflict about value and priority that the surface-level sparring is conducting by proxy. The creative friction of five wands in the air can produce genuine synthesis — but only after Pluto\'s question has been honestly answered: who has power here, and is the distribution of that power one everyone involved has agreed to?',
+  },
+  {
+    cardId: 'five-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars meets the Five of Wands\' multi-directional conflict and everything accelerates. The five figures whose wands are already raised find the contest sharpening — the drive to prevail is fully activated, the competitive fire is at maximum, and the sparring that was already charged is now at genuine intensity. Mars at the Five of Wands is not automatically destructive; it depends entirely on what the contest is for and whether the people engaged in it can distinguish between productive friction and genuine damage. The energy Mars brings to the Five is the same energy that, directed well, produces breakthrough — the argument that finally establishes who leads, the contest that reveals who is actually prepared. What Mars cannot do is make that distinction on its own. That remains the work of whoever is holding the wands.',
+  },
+
+  // Six of Wands
+  {
+    cardId: 'six-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Six of Wands\' public triumph and asks whether the victory being recognized is built on something that will sustain its own weight after the crowd\'s attention moves on. The rider on the white horse with the laurel wreath has earned recognition — the Six of Wands marks genuine achievement — but Saturn wants to know whether the achievement is a foundation or a peak, whether the recognition is acknowledgment of work that continues or applause for a performance that has now concluded. Saturn at the Six of Wands is not the deflation of the triumph; it is the question of what the triumph is built into. What is the recognition a beginning of? What work does the earned position now make possible, and is there a structure beneath the achievement that will still be standing when the crowd disperses?',
+  },
+  {
+    cardId: 'six-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Six of Wands\' public recognition and asks what the victory cost the people who are not in the image. The rider on the white horse moves through the crowd — and Pluto is interested in the crowd: in who is celebrating and why, in what was displaced or displaced by the victory, in whether the recognition being received is as clean as the laurel wreath suggests. Pluto at the Six of Wands is also the question of what the public success is doing to the person at the center of it — whether the recognition is being metabolized into genuine confidence or whether it is already beginning to create the pressure to repeat it, to perform it, to maintain the position that the victory established. Victory leaves its own shadow, and Pluto arrives to make sure the shadow is seen.',
+  },
+  {
+    cardId: 'six-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars accompanies the Six of Wands\' triumph with full-throated endorsement — the charge that won the victory is still present, the energy of the achievement has not yet dissipated, and Mars ensures that the recognition being received carries the full force of what it represents. The rider on the white horse moving through the waving crowd under Mars is operating at maximum confidence and drive — this is the combination that produces genuine forward momentum rather than resting on achieved ground. Mars at the Six of Wands says: the victory is real, the recognition is earned, and the fire that produced it is still burning. The question Mars carries is always what the energy is aimed at next — in this case, whether the triumph opens a larger ambition or whether it serves as a destination.',
+  },
+
+  // Seven of Wands
+  {
+    cardId: 'seven-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Seven of Wands\' high ground and asks the question that the embattled figure cannot afford to consider mid-fight: is the position being defended actually worth defending? The figure with the raised wand defending their elevation against six pressing upward from below is in a posture of genuine determination — but Saturn requires that the determination be applied to honest assessment as much as to the defense itself. What has been built, claimed, or earned that requires this level of sustained defense? Saturn at the Seven of Wands is not the voice that says yield — it is the voice that says make sure you know why you are standing here, because the cost of holding ground that is not worth holding is exactly the same as the cost of holding ground that is.',
+  },
+  {
+    cardId: 'seven-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Seven of Wands\' siege and asks what power the position being defended actually represents. The figure on the high ground with the raised wand is defending something — a status, a view, a claim to lead — and Pluto is interested in the history of how that position was achieved, what it cost, and what it means to the person holding it that the defense has become necessary. Is the position being defended because it is genuinely valuable, or because losing it would threaten an identity that has been organized around holding it? Pluto at the Seven of Wands is the excavation of the difference between standing your ground for genuine reasons and standing it out of the terror of what you would be if you did not.',
+  },
+  {
+    cardId: 'seven-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars arrives at the Seven of Wands\' defensive stand and raises the energy of the defense to maximum intensity. The figure on the high ground already has the advantage of elevation — Mars now adds the full force of the fighting spirit that the six pressing wands from below are going to meet. This is Mars in its most natural territory: the contest, the defense of earned ground, the willingness to stand and face rather than retreat. Mars at the Seven of Wands is not the question of whether to defend — it is the full activation of the capacity to defend, with the reminder that the drive Mars brings must be paired with clarity about what is being protected and why, otherwise the intensity of the stand can tip from determination into aggression that damages the position it was meant to secure.',
+  },
+
+  // Eight of Wands
+  {
+    cardId: 'eight-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Eight of Wands\' eight flying arrows and asks whether the direction has been chosen or merely found by release. The acceleration the Eight represents is genuine — communications moving, decisions landing, the long wait giving way to forward momentum — but Saturn wants to know whether the trajectory has been confirmed before the wands were fully in flight. The Eight of Wands under Saturn is the transit that makes the rapid movement productive rather than just fast: the demand that the acceleration serve a direction that was consciously chosen, that the messages being sent say what they need to say, that the decisions landing are landing in the right place. Saturn does not slow the Eight down. It asks whether eight wands aimed this specifically are all aimed at the same destination.',
+  },
+  {
+    cardId: 'eight-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Eight of Wands\' swift motion and asks what the acceleration is moving away from as much as what it is moving toward. The eight wands in flight carry an urgency that Pluto finds interesting — not the velocity itself but the question of what has been building long enough to release all eight simultaneously, what pressure has finally exceeded the container that was holding it, what the sudden forward movement represents at the level of underlying force rather than surface speed. Pluto at the Eight of Wands is not the slowing of the transit period\'s momentum; it is the recognition that the energy now released was gathered over a long period, and that what it arrives at will have a significance that the velocity alone does not fully account for.',
+  },
+  {
+    cardId: 'eight-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars meets the Eight of Wands\' already-moving momentum and becomes its purest amplifier. The eight wands flying through open sky in perfect alignment are already expressing the maximum kinetic energy available in the Wands suit — and Mars, the planet of directed fire and forward charge, arrives at this transit not to redirect but to confirm: this is the right direction, the right pace, the right moment to stop deliberating and let the wands fly. Mars at the Eight of Wands is the combination that actually produces the breakthrough rather than merely building toward it. The message that has been held back gets sent. The decision that has been postponed gets made. The action that was waiting for sufficient conditions discovers that the conditions it was waiting for are these.',
+  },
+
+  // Nine of Wands
+  {
+    cardId: 'nine-of-wands',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Nine of Wands\' battle-worn figure and tells the truth about what is being asked of them — and the truth is that what is being asked of them is past what one person should have to carry this long alone. The figure with the bandaged head and the eight wands behind them is not failing; they are persisting through something that has exceeded its reasonable duration, and Saturn\'s arrival here is not the demand to persist further. It is the demand for honest accounting: what has been carried, for how long, and whether the structure beneath the persistence is one that can be sustained through the finish or whether the finish requires a different kind of support than the figure has been willing to ask for. Saturn at the Nine is not the final blow. It is the voice that says: the load can be shared without the sharing meaning failure.',
+  },
+  {
+    cardId: 'nine-of-wands',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Nine of Wands\' exhausted stand and asks what has made the persistence necessary for this long. The bandaged figure guarding eight standing wands has been through something — and Pluto is interested in not merely the endurance but the deep story beneath it: the reason the figure is still here, still standing, still defending, when the cost has been this high. Is the resilience a genuine virtue or has it become compulsion — the inability to stop not because the battle requires it but because stopping would require a reckoning with what has been sacrificed in the staying? Pluto at the Nine of Wands is the most difficult question this card has been asked: whether the last stand is the final act of genuine commitment, or a way of not having to confront what will need to be felt when the battle is over.',
+  },
+  {
+    cardId: 'nine-of-wands',
+    planet: 'Mars',
+    condition: 'any',
+    emphasis: 'Mars meets the Nine of Wands\' depleted figure and offers something the figure most needs and least expected: confirmation that the fire is still burning. The battle-worn person standing before eight rooted wands with a bandaged head and one wand in hand has been running on the last of what they have — and Mars is not the arrival of new reserves so much as the recognition that the fire that has been burning this long does not require fresh fuel to complete what it started. Mars at the Nine of Wands is not the cavalry. It is the moment when the exhausted figure realizes they have more in them than they thought — not because the battle got easier, but because Mars has made the distance between here and the finish line feel shorter than the distance they have already covered.',
+  },
+
+  // ─── Pip Cards — Pentacles ───────────────────────────────────────────────
+
+  // Two of Pentacles
+  {
+    cardId: 'two-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Two of Pentacles\' infinite-loop juggling act and begins asking what each loop is actually for. The figure managing multiple financial or practical responsibilities with the particular grace of someone who has made instability into a skill is impressive — but Saturn is the planet that distinguishes between sustainable complexity and impressive-looking unsustainability. What is being juggled, and which of the revolving priorities is actually load-bearing? Saturn at the Two of Pentacles is the demand that the juggling be examined rather than merely continued: what would the structure of your material life look like if it were designed for actual stability rather than for the demonstration that you can manage it all?',
+  },
+  {
+    cardId: 'two-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Two of Pentacles\' managed chaos and asks what the constant juggling is protecting against. The figure dancing with pentacles aloft, ships in rough seas behind them, has made the management of multiple demands into something that looks almost playful — but Pluto is interested in the question beneath the management: what would happen if the juggling stopped? Is the constant motion a genuine expression of someone who thrives in complexity, or is it a way of staying too busy to sit with something that the stillness would require facing? Pluto at the Two of Pentacles asks the juggler: what are you most afraid would demand attention if one of the balls were set down?',
+  },
+  {
+    cardId: 'two-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Two of Pentacles and asks what of genuine value is being lost in the management of all of it. The juggling figure has everything in motion — but Venus is interested in what is not in motion, what is not being held, what enjoyment or beauty or real material pleasure is going un-received because the hands are too full of management to hold anything that is simply good. Venus at the Two of Pentacles is the question of what you would actually enjoy if you stopped optimizing and started inhabiting — what the material life you are managing is supposed to be enabling, and whether it is currently enabling any of it.',
+  },
+
+  // Three of Pentacles
+  {
+    cardId: 'three-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Three of Pentacles\' collaborative craftsmanship and asks whether what is being built together will last. The apprentice working on the cathedral arch while the figures with plans consult nearby has one of the most Saturn-aligned activities available to a person: the serious, skilled work of building something with real structural integrity. Saturn at the Three of Pentacles is not a critique — it is a confirmation that the work being done in collaborative, careful, skilled community is exactly the kind of work that Saturn most endorses. The question Saturn brings is simply whether the collaboration has the discipline to see the work through to the quality it deserves, rather than settling for something good enough when the standard the work is being held to is excellent.',
+  },
+  {
+    cardId: 'three-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Three of Pentacles\' collaborative working environment and asks about the power dynamics beneath the shared plan. The apprentice and the two consulting figures appear to be working together toward a shared vision — but Pluto notices who holds the plans and who holds the tools, who is doing the work and who is directing it, whether the collaboration is genuinely horizontal or whether the appearance of shared purpose obscures a more hierarchical arrangement that no one has explicitly agreed to. Pluto at the Three of Pentacles is not the destruction of the collaboration; it is the demand that the collaboration be honest — about who has power, whose vision is actually being built, and whether everyone at the work site has been fully told what they are building and for whom.',
+  },
+  {
+    cardId: 'three-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Three of Pentacles\' collaborative craft and illuminates the particular beauty of work done well in genuine company. The apprentice building the cathedral arch alongside people whose skill complements their own is participating in one of the most Venus-resonant activities available in the material world: the creation of something lasting and beautiful through combined effort, where the work itself carries the quality of real care. Venus at the Three of Pentacles asks whether the current collaborative work is being done with the level of aesthetic attention and genuine investment that it deserves — whether the craft being practiced together has the quality of something being made with love rather than merely executed.',
+  },
+
+  // Four of Pentacles
+  {
+    cardId: 'four-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Four of Pentacles\' crowned figure and excavates what the grip is actually protecting. The person with a pentacle balanced on their crown, one under each foot, and another clutched to their chest is holding on with every available surface — and Pluto wants to know what experience generated the belief that loss requires this level of total prevention. What was taken once that made the holding-everything strategy feel necessary? What original insecurity gave the Four\'s posture its particular quality of total control? Pluto at the Four of Pentacles is not the forced opening of the hands; it is the excavation of the fear beneath the grip, the honest accounting of what has been organized out of a life in order to maintain the security that the four pentacles represent.',
+  },
+  {
+    cardId: 'four-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Four of Pentacles\' tightly held material world and asks what pleasure is being prevented by the grip. The crowned figure with pentacles balanced on crown and feet and chest is going nowhere, experiencing nothing, because the management of possession has consumed the energy that was supposed to enable enjoyment. Venus is the planet of pleasure, beauty, and genuine sensory engagement with the material world — and the Four of Pentacles under Venus is the image of a person who has acquired the conditions for pleasure and cannot access any of it because their hands are too full of holding. Venus asks: what would you have to let go of in order to actually enjoy what you have been so careful to protect?',
+  },
+
+  // Five of Pentacles
+  {
+    cardId: 'five-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Five of Pentacles\' cold figures trudging past the lit window and makes the hardship specific and addressable. The two figures in the snow are not simply suffering — they are in a particular kind of material and spiritual poverty that Saturn recognizes as the consequence of accumulated choices, circumstances, and patterns, not as punishment but as the precise result of causes that can be named. Saturn at the Five of Pentacles is the most realistic version of the transit: the acknowledgment that the difficulty is real, that its sources can be identified, that the resources visible through the window are actual rather than symbolic, and that the shame preventing the figures from looking up is the most expensive thing they are currently carrying.',
+  },
+  {
+    cardId: 'five-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Five of Pentacles\' winter scene and asks what the hardship is teaching at the root level — what the material difficulty is revealing about what the people in the snow most deeply believe about their right to be warm, to be helped, to be included in the warmth visible through the window above them. The Five\'s poverty is not only financial; it is the poverty of people who have not yet made the connection between the warmth available and the permission to receive it. Pluto at the Five of Pentacles excavates that permission structure: the belief that hardship is deserved, that the window is for other people, that asking for help is admission of a failure too fundamental to be forgiven. The root of the cold is not the weather.',
+  },
+  {
+    cardId: 'five-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Five of Pentacles\' deprivation scene with the specific reminder that the stained glass window above the trudging figures is lit and warm, and that beauty and abundance are not absent from the world the Five inhabits — only from the attention of those too focused on their own cold to look up. Venus at the Five of Pentacles is the transit that makes visible what has been materially and sensually available but not received: the resources, the warmth, the genuine physical comfort that exists in proximity to the hardship but cannot be reached while the heads are bowed and the movement is only forward through the snow. Venus asks: what would it cost to stop, to look up, to notice what is actually being offered?',
+  },
+
+  // Six of Pentacles
+  {
+    cardId: 'six-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Six of Pentacles\' scales and asks whether the distribution is honest. The merchant weighing coins with the balance in one hand and giving with the other is performing an act of material justice — but Saturn wants to know whether the scales are accurate: whether what is being given reflects what is genuinely owed, whether the recipients on the ground are receiving what they actually need or what the giver has decided they deserve. Saturn at the Six of Pentacles is the demand for structural honesty in the flow of resources: not the charity of the comfortable giving to the needy as an expression of their own virtue, but the genuine accounting of what is owed across the power differential that the image makes visible.',
+  },
+  {
+    cardId: 'six-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Six of Pentacles and looks at the power embedded in the act of giving. The merchant holds the scales — the scales of material justice — and the two kneeling figures receive what is distributed. This is not simply generosity; this is the power of material abundance made visible, and Pluto is always interested in who holds the measuring instrument. The Six of Pentacles under Pluto asks whether the generosity being practiced is free of the need to maintain the power differential it ostensibly exists to reduce — whether giving is genuinely aimed at the recipients\' material flourishing or at the preservation of the giver\'s position as the one who gives. The most transformative version of the Six under Pluto is the generosity that aims toward its own elimination: giving that enables the recipients to eventually hold the scales themselves.',
+  },
+  {
+    cardId: 'six-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Six of Pentacles\' material exchange and illuminates the genuine beauty of resources flowing freely between people who understand that abundance expands when it is shared. The merchant\'s scales under Venus become not the instrument of precise accounting but the symbol of genuine reciprocity — what moves between the giver and receiver is not merely money but something that carries the quality of care, of recognition, of genuine wish for the other\'s flourishing. Venus at the Six of Pentacles is the transit that makes generosity feel like love expressed in material form: the knowledge that what is given freely multiplies, and that the most beautiful thing that can be done with material abundance is to let it become a vehicle for genuine connection.',
+  },
+
+  // Seven of Pentacles
+  {
+    cardId: 'seven-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Seven of Pentacles\' farmer leaning on the hoe and makes the patience structural. The person surveying the vineyard loaded with seven pentacles is already practicing the most Saturn-aligned virtue available in the material world: the willingness to do the long work, to plant at the right time, to tend without harvesting prematurely. Saturn at the Seven of Pentacles is the confirmation that the long-term investment is sound — but also the reminder that the patience cannot be performed, it must be genuine. The farmer who is going through the motions of waiting while internally preparing to pull up the plants is not practicing the patience the Seven requires. Saturn wants to know: do you actually trust the investment you have made, or are you managing your anxiety about it under the appearance of calm?',
+  },
+  {
+    cardId: 'seven-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Seven of Pentacles\' long waiting and asks what is actually being cultivated. The farmer surveying the vineyard sees seven pentacles on the vine, but Pluto is more interested in what is growing in the farmer themselves during the years of tending — what the slow work is doing to the person doing it, whether the patience of the long game is producing genuine wisdom or merely the habit of deferred gratification that has become its own end. Pluto at the Seven of Pentacles is the question of whether the investment being sustained is in service of a genuine life or in service of the identity of someone who endures, who waits, who is responsible — and whether the harvest, when it comes, will be received by a person who is alive to enjoy it.',
+  },
+  {
+    cardId: 'seven-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Seven of Pentacles\' assessment moment — the farmer pausing between the work and the harvest — and makes visible the beauty that is already present in the vineyard, not only the beauty that will arrive at the harvest. The seven pentacles already growing, the lushness of what has been carefully tended, the quality of a life that includes this particular kind of patient attention to living things: Venus at the Seven of Pentacles is the invitation to receive the pleasure of the work itself rather than deferring all enjoyment to the outcome. The harvest matters, and Venus does not dismiss it. But Venus asks: have you allowed yourself to actually take in the beauty of what you are in the middle of building, as you are building it?',
+  },
+
+  // Eight of Pentacles
+  {
+    cardId: 'eight-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn meets the Eight of Pentacles at the workbench and nods. The craftsman working intently on another pentacle — six mounted beside them, the distant town not their concern — is practicing exactly what Saturn most endorses: the deliberate, sustained development of genuine skill through patient repetition, the willingness to do the work today without the guarantee of recognition tomorrow. Saturn at the Eight of Pentacles is the transit that confirms that the dedicated practice is building something real, that the repetition is not wasted, that the discipline being applied to the craft now will compound into mastery that Saturn is fully prepared to recognize when it arrives. The question Saturn carries to the craftsman is simply: are you building the skill because you love the work, or because you are waiting for the work to produce something that will release you from needing to love it?',
+  },
+  {
+    cardId: 'eight-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Eight of Pentacles\' dedicated craftsman and asks what the mastery is for. The repeated making of pentacles, the intentional practice, the focused effort of someone who has committed to this work — Pluto is not questioning the dedication. It is asking whether the deep application to craft is in service of something genuinely meaningful, or whether the work has become a way of being safely absorbed in something that requires the full attention of the person doing it, leaving no space for questions that the full attention would otherwise have to engage. Pluto at the Eight of Pentacles is the craftsman looking up from the workbench — not in distraction but in the specific moment of asking: what is this mastery building toward, and is that destination worth the sustained sacrifice the work requires?',
+  },
+  {
+    cardId: 'eight-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Eight of Pentacles\' workbench and asks whether the craft is being made with love. The craftsman working on pentacle after pentacle has the quality of someone who is building skill through repetition — and Venus is interested in whether the repetition is alive or mechanical, whether the work that is being done with such focused attention is work that genuinely matters to the person doing it or work that has been assigned its importance from outside. Venus at the Eight of Pentacles is the quality of craftsmanship that comes from genuine care: the piece made with attention because the maker loves what they are making, not only because they love mastery. The pentacles mounted beside the craftsman are more beautiful when the hands that made them wanted to make them.',
+  },
+
+  // Nine of Pentacles
+  {
+    cardId: 'nine-of-pentacles',
+    planet: 'Saturn',
+    condition: 'any',
+    emphasis: 'Saturn arrives at the Nine of Pentacles\' lush garden and the figure of earned self-sufficiency and asks one of its most gracious questions: what did this cost, and do you know? The figure in the garden with the falcon on their gloved hand has built something genuinely real — the material abundance is not borrowed or projected, the independence is actual — and Saturn\'s acknowledgment at the Nine is not skepticism but the specific recognition of someone who has done the long work and arrived. What Saturn asks at the Nine of Pentacles is whether the person standing in their earned garden knows the full price of what was built: what relationships, what experiences, what phases of life were passed through to arrive at this particular form of flourishing. Saturn is not asking for gratitude. It is asking for complete accounting, which is its form of respect.',
+  },
+  {
+    cardId: 'nine-of-pentacles',
+    planet: 'Pluto',
+    condition: 'any',
+    emphasis: 'Pluto arrives at the Nine of Pentacles\' elegant self-sufficiency and asks whether the person in the garden is fully alive inside the abundance they have created. The Nine is a card of genuine accomplishment — the figure with the falcon in the perfectly tended garden is exactly who they appear to be: someone who has built material independence through real skill and sustained effort. But Pluto operates below the level of the accomplished exterior, in the layer where the question is not whether the garden is real but whether the person tending it is inhabiting their own life completely. What has been organized out of the life in order to create and maintain this abundance? What connection or vulnerability or wildness has been traded for the falconer\'s composure? Pluto at the Nine asks whether the earned independence has become a beautiful and very comfortable form of isolation.',
+  },
+  {
+    cardId: 'nine-of-pentacles',
+    planet: 'Venus',
+    condition: 'any',
+    emphasis: 'Venus arrives at the Nine of Pentacles and is entirely at home. The lush garden, the falcon, the elegant self-possession of the figure who stands in their own abundance — this is Venus expressed through material earth at its most beautiful and complete. Venus at the Nine of Pentacles is not a question so much as a confirmation: what has been built here is genuinely lovely, the abundance is real, and the particular pleasure of someone who has earned their own beautiful life deserves to be fully received rather than immediately converted into the next goal. The invitation here is as close to pure as the material world can offer: to inhabit the garden you made, with the animal you trained, in the abundance you earned, and to let it be enough — because it is.',
+  },
 ]
 
 // Engine compatibility: group adaptations by cardId for O(1) lookup
