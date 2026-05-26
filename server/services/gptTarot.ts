@@ -945,33 +945,37 @@ export async function handleTarotCelticSynthesis(
   let currentMoonSign = payload.moonSign
 
   if (userId) {
-    const ctx = resolveUserBirthContext(userId)
-    if (ctx) {
-      const targetDate = new Date(payload.localDate)
-      authorizedPersonalDay = calculatePersonalDay(ctx.birthDate, targetDate)
-      authorizedPersonalYear = calculatePersonalYear(ctx.birthDate)
-      authorizedLifePath = calculateLifePath(ctx.birthDate)
-      const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
-      natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
-      natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
-      natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
-      natalDominantModality = computeDominantModality(natalChart)
-      // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
-      chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
-      // Re-derive house placements from server-computed chart (overrides client-supplied values)
-      const moonP = natalChart.planets.find(p => p.name === 'Moon')
-      const venusP = natalChart.planets.find(p => p.name === 'Venus')
-      const nnP = natalChart.planets.find(p => p.name === 'NorthNode')
-      const marsP = natalChart.planets.find(p => p.name === 'Mars')
-      natalMoonHouse = moonP?.house && moonP.house >= 1 && moonP.house <= 12 ? moonP.house : null
-      natalVenusHouse = venusP?.house && venusP.house >= 1 && venusP.house <= 12 ? venusP.house : null
-      natalNorthNodeHouse = nnP?.house && nnP.house >= 1 && nnP.house <= 12 ? nnP.house : null
-      natalMarsHouse = marsP?.house && marsP.house >= 1 && marsP.house <= 12 ? marsP.house : null
-      const dailyTransitData = calculateTransits(natalChart, 'daily')
-      const weeklyTransitData = calculateTransits(natalChart, 'weekly')
-      dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
-      weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
-      currentMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? payload.moonSign
+    try {
+      const ctx = resolveUserBirthContext(userId)
+      if (ctx) {
+        const targetDate = new Date(payload.localDate)
+        authorizedPersonalDay = calculatePersonalDay(ctx.birthDate, targetDate)
+        authorizedPersonalYear = calculatePersonalYear(ctx.birthDate)
+        authorizedLifePath = calculateLifePath(ctx.birthDate)
+        const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
+        natalSunSign = natalChart.planets.find(p => p.name === 'Sun')?.sign ?? payload.natalSunSign
+        natalMoonSign = natalChart.planets.find(p => p.name === 'Moon')?.sign ?? payload.natalMoonSign
+        natalAscSign = natalChart.angles?.ascendant?.sign ?? payload.natalAscSign
+        natalDominantModality = computeDominantModality(natalChart)
+        // Re-derive chart ruler from server-authoritative ascendant sign (overrides client-supplied value)
+        chartRulerPlanet = deriveChartRuler(natalChart.angles?.ascendant?.sign ?? null)
+        // Re-derive house placements from server-computed chart (overrides client-supplied values)
+        const moonP = natalChart.planets.find(p => p.name === 'Moon')
+        const venusP = natalChart.planets.find(p => p.name === 'Venus')
+        const nnP = natalChart.planets.find(p => p.name === 'NorthNode')
+        const marsP = natalChart.planets.find(p => p.name === 'Mars')
+        natalMoonHouse = moonP?.house && moonP.house >= 1 && moonP.house <= 12 ? moonP.house : null
+        natalVenusHouse = venusP?.house && venusP.house >= 1 && venusP.house <= 12 ? venusP.house : null
+        natalNorthNodeHouse = nnP?.house && nnP.house >= 1 && nnP.house <= 12 ? nnP.house : null
+        natalMarsHouse = marsP?.house && marsP.house >= 1 && marsP.house <= 12 ? marsP.house : null
+        const dailyTransitData = calculateTransits(natalChart, 'daily')
+        const weeklyTransitData = calculateTransits(natalChart, 'weekly')
+        dailyTransitSummary = formatTransitSummary(dailyTransitData, 'Daily')
+        weeklyTransitSummary = formatTransitSummary(weeklyTransitData, 'Weekly')
+        currentMoonSign = dailyTransitData.currentPlanets.find(planet => planet.name === 'Moon')?.sign ?? payload.moonSign
+      }
+    } catch (err) {
+      console.error('[celtic-synthesis] calculateChart failed for userId', userId, '— falling through to payload values', err)
     }
   }
 
@@ -981,7 +985,7 @@ export async function handleTarotCelticSynthesis(
   const signals: CelticStructuralSignals = payload.signals ?? computeCelticStructuralSignals(cards)
 
   const cardLines = cards.slice(0, 10).map((card, i) => {
-    const pos = positions[i]
+    const pos = positions[i] ?? { label: `Position ${i + 1}`, meaning: '' }
     const reversalText = card.reversed ? ' (reversed)' : ' (upright)'
     return `${i + 1}. ${pos.label} — ${card.name}${reversalText}
    ${card.symbolicTheme}. ${card.coreMeaning}
