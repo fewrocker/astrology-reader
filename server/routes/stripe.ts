@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express'
 import express from 'express'
 import type Stripe from 'stripe'
-import stripeClient, { PRICE_IDS, getTierFromPriceId, createCheckoutSession } from '../services/stripe.js'
+import stripeClient, { PRICE_IDS, getTierFromPriceId, createCheckoutSession, isStripeConfigured } from '../services/stripe.js'
 import { getDb } from '../db.js'
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js'
 import { invalidateUserRateLimit } from '../middleware/gptRateLimit.js'
@@ -13,6 +13,11 @@ const router = Router()
 // Uses express.raw() scoped to this handler for Stripe signature verification.
 
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req: Request, res: Response): Promise<void> => {
+  if (!isStripeConfigured) {
+    res.status(503).json({ error: 'Stripe not configured' })
+    return
+  }
+
   const sig = req.headers['stripe-signature'] as string
 
   let event: Stripe.Event
@@ -118,6 +123,11 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req: R
 // ─── Create checkout session ──────────────────────────────────────────────────
 
 router.post('/create-checkout-session', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  if (!isStripeConfigured) {
+    res.status(503).json({ error: 'Stripe not configured' })
+    return
+  }
+
   const { priceId } = req.body as { priceId?: string }
   const userId = (req as AuthenticatedRequest).userId
 

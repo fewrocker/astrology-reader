@@ -75,7 +75,16 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Security headers (helmet) — must come before all routes
-app.use(helmet());
+// Disable upgrade-insecure-requests: this site runs over plain HTTP internally,
+// so that directive would cause Chrome to fail loading same-origin assets over HTTPS.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      'upgrade-insecure-requests': null,
+    },
+  },
+}));
 
 // Gzip compression for API responses — must come before routes
 // Note: express.static handles its own compression independently
@@ -120,10 +129,17 @@ app.use('/api/readings', readingsRouter);
 
 // Serve compiled frontend in production (dist/ lives one level above server/)
 const distDir = path.resolve(__dirname, '../dist');
-app.use(express.static(distDir));
+// Content-hashed assets: 1-year immutable cache (filename changes when content changes)
+app.use('/assets', express.static(path.join(distDir, 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
+// Other static files (favicon, og-image, etc.) — short cache, no index.html from here
+app.use(express.static(distDir, { maxAge: 0, index: false }));
 
-// SPA fallback for non-API GET requests
+// SPA fallback: always serve fresh index.html so asset filename changes take effect immediately
 app.get(/^(?!\/api).*/, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(distDir, 'index.html'));
 });
 

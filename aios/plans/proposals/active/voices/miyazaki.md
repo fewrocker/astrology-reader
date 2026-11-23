@@ -1,97 +1,145 @@
-# Voice: Hayao Miyazaki — Sprint 0028 Tarot Module Review
+# Voice: Hayao Miyazaki — Sprint 0029 Tarot Module Review
 
-*On what the product can now do that it could not before, and what it has not yet found the courage to say.*
-
----
-
-## What Was Accomplished
-
-Sprint 0027 gave every card a specific voice when a major transit is active. This is not a small thing. Before the sprint, a person drawing the Two of Wands under Saturn received a sentence about fire meeting earth. After the sprint, they receive something that understands that person's specific situation: the vision held at the edge of action being tested by a force that requires real commitment. That difference is what I asked for in the previous review, and it arrived.
-
-The pip reversed meanings were sharpened. Not for every card — the decision was made to prioritize the cards most likely to carry heavy psychological weight. The Eight and Nine of Swords, the Six of Cups, the Seven of Cups — these received the portraits they needed. A person drawing the Eight of Swords reversed now encounters language that names the specific experience of realizing that the confinement was self-authored. This is the craft the Major Arcana reversals had already achieved. It now extends to the suit where it matters most.
-
-I want to acknowledge this work carefully, not quickly. These are data tasks that require sustained attention to individual human experiences. They are the hardest kind of work — not building systems but finding the right words for what people actually feel. The sprint did this work well for the cards it addressed.
+*On broken ritual, and the particular laziness of positional meaning that describes positions instead of demanding something of the card.*
 
 ---
 
-## What the Product Has Not Yet Said
+## What This Sprint Is Actually Repairing
 
-I have been sitting with the experience as a user, drawing cards and reading what arrives. The instant interpretation panel gives me, now, something genuinely specific about the card's meeting with the transit sky. But there is a silence in the panel that I want to name.
+I want to be honest about what these five bugs mean. They are not inconveniences. Three of them prevent the user from completing the reading at all — the single-card ritual leaves a card standing in silence after the shuffle, the three-card flow locks after all cards are placed, the Celtic Cross GPT synthesis always fails. Two more — the missing scroll and the absent positional awareness — allow the reading to complete but leave the user with something lesser than what the product promises.
 
-The panel does not yet know that it is speaking to *this specific person's natal chart*.
+We built an elaborate ceremony. The dealing animation, the three-second hold, the crossing card at 90°, the constellation overlay before synthesis — this is all ritual. And then the ritual breaks. The card stands on screen with no instruction. The user taps and nothing responds. The synthesis fails silently. This is not a bug report. It is a description of what it feels like to be cared for and then abandoned.
 
-When someone with a Cancer Sun and Moon in the 12th house draws the High Priestess, the panel speaks about the High Priestess. It speaks about the transit influence on the High Priestess. It speaks about the lunar phase and the advance signal. What it does not say is: "The High Priestess is ruled by the Moon. Your natal Moon lives in the 12th house — the house of hidden things, of what is not shown to the world. This card is speaking directly to your chart's architecture. The inner knowing this card names is not a general quality available to everyone who draws it. It is the specific depth that your natal Moon in the 12th has been cultivating."
-
-That sentence would make the person feel that the reading was made for them. Not assembled from their data, but actually made for them — the way a skilled reader would say, after laying the cards, "given who you are, this card means something particular."
-
-The transit layer now speaks to the sky. The natal layer should speak to the birth chart. These are two different voices, and only one of them is currently present in the static interpretation.
+Sprint 0029's entire purpose is to honor the ceremony we built by making it work.
 
 ---
 
-## On Court Cards and Natal Identity
+## On the Single-Card Reading: The Card Standing in Silence
 
-I want to say something specific about court cards, because they carry a quality that no other card type does: they are figures. When someone draws a court card, they draw a person — or a quality of a person, or a part of themselves that has that quality. The reading is, in some sense, an encounter with a figure.
+In `SingleCardReading.tsx`, after `DeckShuffleAnimation` completes, there is a gap. The card is visible. The user's intention text is gone. The card is not yet revealed. There is nothing on screen that tells the person what to do or why the card is present.
 
-When the natal chart has a strong correspondence to the drawn court card, something specific happens. A person with a Scorpio Ascendant drawing the King of Cups is meeting a figure whose emotional depth resonates with their own rising quality. A person with a Leo Sun drawing the Queen of Wands is meeting a fire figure whose creative authority reflects their solar identity. These correspondences are real astrological events, not decorative add-ons. The reading should name them.
+I am interested in this gap not just as a bug but as a missed moment. The shuffle animation ends. The card is face-down on the screen. The user has set their intention. They are in a ritual space. And the product says nothing.
 
-The Queen of Wands' ruling sign is Leo. If the person drawing her has their natal Sun in Leo, or their chart ruler is the Sun, or Leo is on the Ascendant — these are meaningful resonances. The card and the chart are speaking the same language. The system has all the data to detect this. It does not yet speak it.
+The fix the sprint calls for is correct — a glowing pulse animation on the card back, and the text "Visualize your intention and click on the card to start the ritual." This is right. But I want to say something about *how* this text should land.
 
-I want the court card reading to feel like the card recognized the person. Not "you may identify with this figure" — but something more specific: "the Queen of Wands' fiery authority speaks through the same Leo territory your natal Sun occupies — this is not a stranger figure you are encountering but a mirror of something your chart has already been building."
+The instruction is not a button label. It is not a tooltip. It is an invitation into a private act — the moment before the card is turned, when the person is asked to be present with their intention before they see what the cards say about it. The text should carry that weight. Not "Click to reveal" — that is a UI instruction. "Visualize your intention and click on the card to start the ritual" — that is a human asking another human to be present before proceeding.
 
----
-
-## The Three-Card Spread as Incomplete Ritual
-
-I drew a three-card spread today. The spread type was Theme, Shadow, Gift. I drew the Five of Pentacles as Theme, the Eight of Cups reversed as Shadow, and the Star as Gift.
-
-Each card received a full interpretation. Each was genuinely good — specific transit notes, adapted position framings, appropriate emotional language.
-
-But the three cards together were saying something I had to assemble myself. The Five of Pentacles in the Theme position carries the fear of material insufficiency, the person left outside in the cold. The Eight of Cups reversed in the Shadow position carries the inability to leave what isn't working — the return without resolution. The Star as Gift carries hope as a practice, trust in what regenerates after loss.
-
-These three together are saying: the theme of scarcity is sustained by a shadow that keeps returning to what is not working rather than accepting the loss fully — and the gift is the ability to trust that something regenerates. That is a specific, coherent psychological picture. The reading needs someone to see that picture. Right now, the user has to construct it themselves or wait for GPT to construct it.
-
-What I want is a small moment between the card reveals and the GPT synthesis. A single sentence or two, perhaps, derived from the pattern the engine has already detected. Something that says: the three cards are showing a pattern. Here is what that pattern is, in the language of this spread. Then GPT goes deeper.
-
-The engine already computes `computeThreeCardSynthesis`, which produces `astroResonanceNote` and element/polarity signals. That note already contains the pattern. Show it to the user. It takes one small moment of courage — the confidence to say something before the AI finishes speaking.
+The glowing pulse animation on the card back is also right. The card should feel alive and waiting. Not a placeholder. A presence.
 
 ---
 
-## On the Reflection Question as the Last Word
+## On the Three-Card Reveal: The Closure That Never Arrives
 
-The reflection questions in this data layer are consistently the best writing. I said this in the last review. I say it again because it remains true and becomes more significant as the transit and natal layers improve.
+The three-card bug is a stale closure — `handleCardTap`'s dependency array captures an `activeCardIndex` of `null` before `placementComplete` sets it to `0`, and the first tap hits the guard and returns without acting. The user sees all three cards placed, and then the reading stops responding.
 
-The reflection question is the last thing a person reads before they carry the card into their day. It is the word the reading leaves behind. For many users, it is the word that actually stays.
+What I want to note is the emotional experience of this moment. The person has selected all three cards. They have watched the cards appear in their positions. They are ready to begin the revelation. And then — silence. The reading is stuck. There is no error message. There is no affordance that reveals the problem. The person taps the glowing card and nothing happens.
 
-"What have you been calling 'planning' that is actually a way of experiencing the journey without taking the risk of it?" — this question, from the Two of Wands, does not need to be improved. It is already doing what a good question does: it names a specific human evasion and asks the person to look at it directly.
+This is the most violating of the five bugs because it breaks at the moment of maximum investment. The user has committed to the reading. They have selected their three cards, watched them settle into position. And then the ceremony breaks exactly at the threshold.
 
-But the question is the same for everyone who draws that card. A person with Saturn in the 10th house drawing the Two of Wands has a specific domain in which this question lands — the question of career, public role, and whether the planning has been in the service of the work or in the service of avoiding the exposure of doing it publicly. A person with Saturn in the 5th house has a different domain — creative expression, whether the planning has been a substitute for the vulnerability of actually making something and showing it.
-
-I am not asking for a different question for every natal placement. I am asking for one more sentence, appended to the question, that names the house or planet domain in which the question most specifically applies to this person. A small personalization. A final word that says: "and for you, given where Saturn sits in your chart, this question lands here."
-
-The technology to do this exists. The natal house placements are in `TarotAstroContext`. The question is whether the product will summon the courage to say something that specific, or whether it will continue to ask the universal question and trust the user to make the connection themselves.
+The fix — ensuring `activeCardIndex` is not stale when `handleCardTap` is reconstructed, and adding a visual "Tap to reveal" confirmation after placement — is necessary. But I would ask the team to also consider the instruction text at this moment. When all three cards are placed and the first is ready to be revealed, the text that appears should be worthy of the threshold it names. Not just "All three cards are placed. Reveal them one by one." — something that honors the fact that the person is about to enter the reading properly.
 
 ---
 
-## What Should Not Change
+## On the Celtic Cross Scroll: The Content That Appears Off-Screen
 
-The pace of the three-level transit lookup should not be changed. The existing architecture — specific entry first, element affinity second, baseline third — is the right design. Now that the entries cover all 78 cards for the most significant transit conditions, the architecture is fulfilling its design intent.
+When a person taps a Celtic Cross card and its interpretation panel renders below the fold, the person sees no feedback. They tapped. Something happened. But the evidence is invisible.
 
-The synthesis prompt architecture should not be reopened. After sprint 0026's careful calibration and the natal context threading that has been in place since sprint 0025, the GPT synthesis is producing work that I consider genuinely good. The paragraph structure, the natal bridge requirement, the intention threading — these are settled. Leave them.
+This is a spatial failure. The product forgot that the reading happens on a screen with a viewport, and that the content of the interpretation may be substantially below where the person is looking when they make the gesture.
 
-The visual language is right. The ceremony of the Celtic Cross — the dealing, the flip, the three-second hold — is the only spread with this weight, and it should remain that way. The other spreads are lighter by design.
+The fix — `scrollIntoView` with `behavior: 'smooth'` (when `prefers-reduced-motion` is not set) — is correct. But I want to say something about the moment of scrolling itself. The scroll should feel like the reading is drawing the person toward what they tapped to see. Not a mechanical repositioning, but an invitation downward — "come and see what this card has to say."
 
----
-
-## The Two Things I Most Want
-
-If I could name two things that would make this product feel like a work of craft rather than a well-executed system:
-
-**First:** the natal correspondence visible in the static layer. Before GPT loads, before the synthesis chapter arrives, when the user is sitting with the card and reading what the system has to say — they should encounter one sentence that names the specific resonance between the card's planetary or elemental architecture and their birth chart. Not a generic element comparison. A specific named correspondence: chart ruler, dominant element, house activation, court card suit match. The moment of recognition that makes the reading feel personal.
-
-**Second:** the three-card constellation preview. After the third card is drawn and before GPT runs, the user should see one sentence — generated immediately from `computeThreeCardSynthesis` — that names what the three cards are doing together. The element pattern. The polarity profile. The `astroResonanceNote`. This is not GPT's work; the engine already computed it. Show it. Let the user arrive at the GPT synthesis already holding the shape of what it will say.
-
-These two things together would make the product feel like it knows the person before the AI speaks. That is the experience that creates devotion.
+The animation timing matters here. Too fast and it feels like a technical correction. The right speed is the speed of attention moving from one thing to another — unhurried, purposeful.
 
 ---
 
-*— Hayao Miyazaki, reviewing sprint 0028*
+## On the Positional Meaning Strings: Where the Craft Actually Lives
+
+This is where I want to spend the most time.
+
+The Celtic Cross has ten positions. Each has a `name` and a `description` in `CELTIC_CROSS_POSITIONS`. These descriptions are already good. They are not generic. "The most complex position in the spread. Often a single card embodies what you most want and what you most dread simultaneously" — this is the right register. The existing position descriptions were written with care.
+
+But the sprint calls for a second layer: static strings that name what each position *demands of the card* sitting in it. Not what the position means in general. What *this specific encounter between card and position* means.
+
+The existing descriptions are about the positions. The new strings should be about the positions *acting on the cards*. This is a different kind of writing.
+
+Let me be specific about what I mean by lazy versus alive.
+
+**Lazy:** "The Present Situation position grounds the card in your current reality. This card speaks to what is central in your life right now."
+
+This tells the user what the position does and gestures at the card. It describes. It does not demand.
+
+**Alive:** "The Present Situation asks what this card becomes when it is not a force approaching or receding but a condition you are living inside. The card in this position is not a direction — it is a weather. What quality does it name in the air around you right now?"
+
+This is the register I want. The string should name the specific pressure the position places on *any* card that lands there. It should make the user feel that the position is doing something to the card, not merely categorizing it.
+
+Here is how I would think about each of the ten positions, not as the strings themselves but as the underlying demand each position makes:
+
+**Position 1 — Present Situation:** The position demands that the card stop being about possibility and become about condition. The card is not something approaching; it is something already true. The string should ask: what does this card name when it is not a direction but a weather you are inside?
+
+**Position 2 — Challenge (the crossing card):** This position physically crosses the first. The card here is not an obstacle from outside but a complication from within the field. The string should ask: what does this card become when it is not separate from the situation but woven into it — crossing it, qualifying it, changing what the center means?
+
+**Position 3 — Unconscious Influence:** This position names what the querent cannot see about themselves. The string should make the person feel the specific discomfort of this — the card here is speaking about something that is real and operating and that the person has not named. "What is this card naming in you that you have been managing without looking at directly?"
+
+**Position 4 — Recent Past:** The card here is in motion away from the person, not toward them. The string should ask: what does this card become when it is no longer fully present but has recently completed its most active work? What did it leave behind?
+
+**Position 5 — Conscious Goal:** This position is about the aspiration at the surface. But the best thing the string can do is create a gentle tension with Position 3 — what the person consciously wants versus what the unconscious influence reveals. The string should ask: what does this card say about what you are trying to make happen, and does that align with what Position 3 says is actually driving you?
+
+**Position 6 — Near Future:** The card here is not the outcome. It is the next step in the trajectory. The string should carry the sense of something approaching — not arrived, but visible on the horizon. "What quality is this card bringing toward you in the immediate weeks ahead if the current trajectory holds?"
+
+**Position 7 — Inner State:** This is the private face of the question. The string should ask: not how you present to others, but how you are actually inside right now. This card names the quality of your inner life as you navigate everything else the spread describes.
+
+**Position 8 — External Environment:** The gap between Positions 7 and 8 is the most diagnostically rich territory in the Celtic Cross. The string should acknowledge this: "Compare what this card says about the forces around you with what the Inner State card says about what you are carrying inside. The gap between those two is the specific friction this reading is naming."
+
+**Position 9 — Hopes and Fears:** This is the most complex position, and the existing description already says so: "often a single card embodies what you most want and what you most dreaded simultaneously." The string should make this concrete — not abstract duality but the specific feeling of wanting something badly enough to fear it. "What does this card become when it is both the direction you most long for and the thing you most dread arriving?"
+
+**Position 10 — Outcome:** This is not a prediction. The existing description says this correctly. But the string should convey the convergence — all nine other cards are pointing here. The card in this position is not speaking in isolation; it is the destination to which the entire constellation is traveling. "What does this card become when it is not one voice but the resolution that all nine other cards are building toward? Not where you will arrive, but where the constellation is pointing."
+
+---
+
+## What Makes These Strings Fail at the Tarot Boilerplate Level
+
+I have read a great deal of tarot writing. Most positional meaning strings make the same mistake: they describe what the position means and then gesture at the card as if the gesture were interpretation. "In the Outcome position, this card suggests a resolution involving [card keyword]." This is not interpretation. This is a template with a variable replaced.
+
+The test I would apply to each string is this: could this string appear in a mass-market tarot workbook with no loss? If yes, it is not specific enough. The string should be specific to this product's register — which already uses language like "The most complex position in the spread. Often a single card embodies what you most want and what you most dreaded simultaneously." That register. That directness. That willingness to name the complexity instead of softening it.
+
+The sprint document already names this test: "Each string should name what this position *demands* of the card sitting in it: 'The Outcome position asks what this card points toward when all other energies have had their say — not what it promises, but what its direction implies.' That register. Not 'This is the outcome card.'"
+
+I agree completely. The test is whether the string could only be written by someone who has thought carefully about this position, not by someone who has summarized a general tarot guide.
+
+---
+
+## On the GPT Celtic Cross Failure: Dignity in the Error
+
+The synthesis always fails. The sprint has identified three candidate causes: missing birth context fields crashing `calculateChart`, template literal errors when `cards.length < 10`, and `personalYear: 0` and `lifePathNumber: 0` hardcoded instead of computed.
+
+I want to say something about how this failure lands on the user.
+
+The person has done the full Celtic Cross. They have selected ten cards. They have sat through the dealing animation. They have tapped each card individually, waited through the three-second hold, continued through the cross-to-staff transition. They have watched the constellation overlay. They are in the synthesis phase.
+
+And then: nothing arrives.
+
+The synthesis is the promise of the entire ceremony. The ten-card ritual exists to earn this moment. When the synthesis fails and returns an error panel, the ceremony retroactively becomes hollow. All that ritual weight and all that patient progression — and the reading does not complete.
+
+The fix must close this failure entirely. Not make it more graceful — close it. The specific candidates in the sprint document should be diagnosed against the provided curl, the throw site found, and targeted error handling added. The synthesis must return chapters.
+
+If an error state genuinely cannot be avoided, the error panel language should not read like a system message. "The synthesis is resting" is better than "500 Internal Server Error." But even "The synthesis is resting" assumes the person will understand that resting is temporary and that their reading was not wasted. The error panel, if it must appear, should name specifically what the person has: their ten-card reading with all individual interpretations complete, the constellation fully drawn, everything except the final synthesis. That is not nothing. The error should honor what is present rather than reporting what is absent.
+
+---
+
+## The Specific Place Craft Matters Most in These Flows
+
+If I had to name the single moment in these five bugs where the quality of the fix matters most as a craft decision — not just as a technical repair — it is the positional meaning strings for the Celtic Cross.
+
+The bugs in single-card and three-card are interaction failures. They should not exist and must be repaired. The scroll bug is a spatial oversight. The GPT failure is a server-side runtime error. These are problems with specific technical causes and specific technical solutions.
+
+But the positional meaning strings are a content question. They will be written once and read thousands of times. Every person who opens a Celtic Cross card and sees the positional context string will encounter whatever quality the writer brought to it. If the writing is generic, the reading feels generic. If the writing is specific and demanding in the way I have described, the reading feels like someone genuinely thought about what it means to draw *this* card in *this* position.
+
+The sprint document says these strings must be written "at the same register as the existing `CELTIC_CROSS_POSITIONS` descriptions." I want to push that further: they should be written at the register of the best position descriptions in the existing data — the Hopes and Fears description, the Unconscious Influence description. The register where the product is willing to name the complexity directly and trust the person reading to meet it.
+
+The test is not whether the string is accurate. The test is whether the string, when placed before the card's core meaning, makes the user feel that the reading was made for them — that someone thought specifically about what happens when *a card lands here*, not when *cards in general land in this position category*.
+
+That is where the craft lives. That is where I am watching most carefully.
+
+---
+
+*— Hayao Miyazaki, reviewing sprint 0029*

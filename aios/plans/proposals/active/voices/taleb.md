@@ -1,126 +1,185 @@
-# Taleb's Risk Review — Sprint 0028: After Full Transit Coverage
+# Taleb's Risk Review — Sprint 0029: Five Bug Fixes and the Hidden Sixth
 *Nassim Nicholas Taleb. May 2026.*
 
 ---
 
 ## Opening Observation
 
-Sprint 0027 shipped what it promised. 101 new transit adaptation entries. The two-pass retrograde priority fix. The `retrogradePlanets` rename. The single-card position register fix. The per-pip-card coverage assertion test.
+Sprint 0028 built depth on top of a broken foundation. Four of three reading modes are broken in production. The vision document lists five confirmed bugs, two of which block forward progress entirely. The infrastructure — 193 transit adaptation entries, natal resonance notes, constellation preview, orb-weighted dominant transit selection — is excellent. The user experience is broken.
 
-These are genuine improvements. The priority-override bug I named — retrograde `condition: 'any'` entries overriding the dominant planet — was the most critical fragility I identified, and it was fixed via the two-pass approach in `buildTransitInfluence`. I note this because it is the correct response to a named systemic fragility.
+This is the correct moment to stop and look carefully. Not at what the five bugs are — the vision document describes them precisely — but at what the bugs reveal about the system's hidden fragilities. When five production failures accumulate across the core interaction loop of the product's most premium feature, the question is not just "what broke" but "what assumptions were never tested."
 
-Now let me examine what remains.
-
----
-
-## 1. The Dominant Transit Planet Selection Remains a Single-Winner Architecture
-
-I named this in sprint 0027 as the most important fragility. It was not addressed — correctly, because it was out of scope and the data layer work was the priority. It remains the most important architectural fragility in the system.
-
-To restate precisely: `buildTarotAstroContext` computes `dominantTransitPlanet` as the highest-priority planet by `PLANET_PRIORITY`. Orb, applying/separating status, and transit type are not factored. A Pluto trine at 4° separating will suppress a Saturn opposition at 0.3° applying, even though the Saturn transit is the astrologically significant one for that person on that day.
-
-With 193 entries now covering all 78 cards, the practical impact has grown. Before this sprint, the coverage gap meant that for 30 cards, no Level 1 entry would fire regardless of which planet was dominant. The priority override problem was masked by the absence of entries. Now that entries exist for every card and every major planet condition, the question of which planet fires becomes the decisive quality factor. A user with Pluto nominally dominant due to a wide, separating transit will receive Pluto entries for every card they draw — even when Saturn, Venus, or Mars has a much tighter, more personally activated transit.
-
-The `TransitAspect` type already carries `orb` and `applying`. The fix requires modifying the dominance scoring in `buildTarotAstroContext`, not the data layer. This is a one-function change: compute a weighted score for each transit planet (`planetPriority × orbRecency × applyingBonus`) and select the highest scorer rather than the highest static priority. The change would make the delivered transit note more likely to correspond to what is actually most significant in the user's sky.
-
-This is the most structurally important improvement available to the system right now. The data quality that sprint 0027 added cannot be fully realized until the selection logic is improved.
+Let me describe what I see in the code as it stands, specific to sprint 0029's domain.
 
 ---
 
-## 2. The Pre-existing Failing Test Has Been Deferred Two Sprints
+## 1. The Hardcoded Zeros That Silently Corrupt Every Unauthenticated Synthesis
 
-The changelog for sprint 0027 noted: "1 pre-existing failure: `adapts the instant interpretation text to the actual spread position` — pre-dates this sprint."
+In `src/components/tarot/CelticCrossReading.tsx`, `buildCelticSynthesisPayload` sends:
 
-This test has been failing since before sprint 0027. It tests whether `computeInstantInterpretation` correctly adapts text for different spread positions — `situation` vs `advice`. This is production behavior. The test exists because someone correctly identified that position adaptation is a meaningful quality gate. The test is failing because of a single missing import: `SPREAD_POSITIONS` is imported as a type but not as a value.
+```typescript
+personalYear: 0,
+lifePathNumber: 0,
+```
 
-Two sprints have passed. The fix is one line. The risk of deferring further: as more code touches position adaptation (the single-card fix in sprint 0027 is precisely this area), the chance that a regression goes undetected increases. A broken test is an absent safety net.
+These are not null. They are not undefined. They are the integer zero. The server receives them and, if `userId` is present and `resolveUserBirthContext` returns a valid birth context, overwrites them via `calculatePersonalYear` and `calculateLifePath`. If `userId` is absent — that is, for every unauthenticated user — the server uses the zeros directly and writes them into the GPT prompt. The prompt then reads: `Life Path: 0`, `Personal Year: 0`.
 
-I will not soft-pedal this: deferring a trivially fixable broken test in a production codebase is a process failure. The test should be fixed in the next sprint, alongside whatever else is being shipped.
+Life path numbers run 1 through 9 (with master numbers 11, 22, 33). A life path of 0 is not a valid numerology value. A personal year of 0 is not a valid numerology value. Zero looks like a valid integer to the server. The server passes it to GPT without complaint. GPT receives numerology context that is factually wrong for every unauthenticated user and responds in ways that cannot be predicted or audited.
 
----
+The vision document names this as a defect but frames it as "not the cause of the GPT failure." That framing obscures the actual severity: this bug silently poisons the synthesis for all users without birth data on file. The GPT failure (Bug 5) is a crash that produces an error panel. The hardcoded zeros are a correctness failure that produces a reading — it just produces the wrong reading, invisibly.
 
-## 3. The Coverage Test's Success Is Now the Standard; Regressions Need a Harder Guard
-
-The sprint-0027 coverage test (`all pip cards (Two through Nine) have at least one transit adaptation entry`) now passes. This is the minimum contract: at least one entry per pip card.
-
-The test does not assert entry quality. It does not assert that Saturn, Pluto, and the suit-appropriate planet are all covered per card. A future developer could add one Mercury entry to a pip card that currently has Saturn + Pluto + Mars entries, and if Saturn + Pluto + Mars entries were accidentally deleted, the test would still pass because Mercury is present.
-
-The test is a floor, not a ceiling. After a sprint that wrote 101 entries with careful planet-per-suit logic (Saturn + Pluto + Mars for Wands/Swords, Saturn + Pluto + Neptune for Cups, Saturn + Pluto + Venus for Pentacles), that logic should be encoded in a test. Something like: "All Wands pip cards have at least one Saturn entry, one Pluto entry, and one Mars entry." If someone removes a card's Saturn entry during a refactor, the test catches it.
-
-This is the difference between a floor test and a contract test. The floor test was the right first step. The contract test is what preserves the investment.
+The correct fix is to pass `null` rather than `0` for any numerology value the client cannot compute. The server already handles null gracefully; `authorizedLifePath` and `authorizedPersonalYear` would fall through to `payload.lifePathNumber` and `payload.personalYear`, which would be null, and the prompt would render those lines as empty rather than as `0`. This is unambiguously better than rendering `Life Path: 0`.
 
 ---
 
-## 4. The `formatTransitSummary` Truncation Ordering Is Still Not Documented
+## 2. The `positions[i]` Access Without a Null Guard
 
-I raised this in sprint 0027 (point #7) as the fragility where `transitData.transitAspects.slice(0, 5)` may not be ordered by astrological significance. It remains unaddressed.
+In `handleTarotCelticSynthesis` in `server/services/gptTarot.ts` at lines 983–989:
 
-The GPT synthesis handlers receive the transit summary as a pre-formatted string. The quality of the synthesis paragraph 3 ("connect the card to the daily transits") depends on whether the top-5 transit aspects in the summary are the 5 most relevant aspects. If the array happens to be ordered by planet alphabetization or by calculation sequence rather than by orb or significance, the synthesis receives a misleading selection.
+```typescript
+const cardLines = cards.slice(0, 10).map((card, i) => {
+  const pos = positions[i]
+  const reversalText = card.reversed ? ' (reversed)' : ' (upright)'
+  return `${i + 1}. ${pos.label} — ${card.name}${reversalText}
+```
 
-This fragility has compounded rather than diminished as the prompt architecture has been refined. Sprint 0026 added specific instructions to paragraph 3: "Use the Daily Transit Context above concretely, but every transit point you mention must be explicitly tied back to the card." The instruction correctly requires GPT to tie the transit context to the card. But if the transit context lists Mercury conjunct natal Venus as the first aspect and Jupiter trine natal Moon as the second — when actually Saturn opposing natal Sun is orb 0.3° applying and should be most prominent — the synthesis will discuss Venus-Mercury and Jupiter-Moon while the most significant transit for that person is absent from the top of the list.
+If `positions` has fewer than 10 entries, `pos` is `undefined`, and `pos.label` throws `TypeError: Cannot read properties of undefined`. This throw propagates uncaught to the route handler, which returns a 500. The vision document identifies this as a candidate cause of Bug 5 and assumes the payload is always well-formed. That assumption is load-bearing and untested.
 
-The fix is in the transit engine, not the tarot engine: `calculateTransits` should sort `transitAspects` by a significance score before returning. The significance score is straightforward: higher for outer planets, higher for tighter orbs, higher for applying vs separating. This is a transit engine task, not a tarot data task. But it affects tarot quality.
+The payload comes from `buildCelticSynthesisPayload` in the client, which maps `CELTIC_CROSS_POSITIONS` to exactly 10 entries. If the `CELTIC_CROSS_POSITIONS` array is ever modified — if a future sprint adds a position, removes one, or slices it incorrectly — the client will send fewer than 10 positions and the server will crash. There is no test asserting that `buildCelticSynthesisPayload` produces exactly 10 positions. There is no test asserting that the server handles a positions array shorter than the cards array.
 
----
-
-## 5. The Natal Correspondence Layer's Absence Creates an Asymmetric Quality Gap
-
-Sprint 0027 delivered specific transit adaptations for every card. The transit layer now speaks with precision. The natal layer — the connection between the card and the user's birth chart — still does not have a parallel specific layer.
-
-The current `buildElementResonanceNote` produces comparisons of card element to natal dominant element. These are generic: "your Fire nature meets this Fire card." The GPT synthesis paragraph 2 is where specific natal connections appear, because the prompt explicitly instructs the model to cite chart ruler, house placements, and modality. But paragraph 2 arrives only after the network call completes.
-
-The asymmetry: transit specificity is available immediately, in the static layer, before GPT loads. Natal specificity is available only after GPT loads. A user who opens the interpretation panel and reads the "In Your Sky Now" section sees a specific, card-keyed transit note. They do not see a specific, card-keyed natal note. The natal context exists in the engine — chart ruler, dominant element, house placements — but no function maps it to card-specific resonance language.
-
-This is not a defect in transit coverage. It is the next quality frontier. The infrastructure for natal specificity is in place: `TarotAstroContext` carries the natal data, `TarotCard` carries the ruling planet and element, `ASTRO_CONNECTIONS` carries per-card planetary associations. A function that detects and surfaces the three or four most meaningful natal-card correspondences would close this gap without touching the GPT layer.
-
-The fragility here is not technical but motivational: the transit layer was built in response to a clear coverage test. The natal correspondence layer has no coverage test, no floor assertion, and therefore no sprint priority. It exists only as a quality observation. It will remain absent until it is given a measurable target.
+The guard is one line: `const pos = positions[i] ?? { label: `Position ${i + 1}`, meaning: '' }`. This eliminates the crash path without changing behavior in the normal case.
 
 ---
 
-## 6. The Dead Code in gptTarot.ts Persists
+## 3. `calculateChart` Is Called Without Error Handling in the Server Auth Block
 
-Two sprints. Still there. `computeDominantModality` at line 88 and `computeServerDominantModality` at line 481 in `gptTarot.ts` are two functions computing the same thing from two lookup tables in the same file. Only one is called. The other is dead.
+In `handleTarotCelticSynthesis` (and identically in `handleTarotSingleSynthesis` and `handleTarotThreeSynthesis`), when `userId` is present and `resolveUserBirthContext` returns a non-null context:
 
-I continue to name this because dead code in a file that handles GPT synthesis for a production feature is a maintenance liability. The file is complex enough that dead functions with plausible names create uncertainty. Future developers will not know which function is canonical. When a modality computation bug is fixed, both functions will need to be updated — except the developer may not realize the dead function exists.
+```typescript
+const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
+```
 
-This is a one-sprint cleanup task. It should be done.
+This call is inside `if (ctx) { ... }` but there is no try/catch wrapping it. If `calculateChart` throws — because of an unusual birth date, an edge-case geographic coordinate, or any internal computation failure — the error propagates to the route handler and returns a 500 with no retry, no fallback, and no graceful degradation to the client-supplied natal data.
 
----
+`calculateChart` is an astronomical computation engine operating over real-valued coordinates and historical dates. Whether it can throw on valid-looking inputs that trigger internal edge cases is not something the tarot test suite answers. The behavior of `calculateChart` under edge inputs is not tested in `src/engine/__tests__/tarot.test.ts`. The pattern of defensive wrapping — `try { ... } catch { return null }` — is already used in `computeDominantElement` and `computeDominantModality` in `src/engine/tarot.ts`, for precisely this reason. The server-side handlers are missing this same posture.
 
-## 7. The Three-Card Synthesis Results Are Computed But Not Trusted Enough to Show
-
-`computeThreeCardSynthesis` produces `astroResonanceNote` — a pre-computed synthesis string. This string is passed to GPT but not shown to the user. The system computed it. The system trusts it enough to send it to GPT. The system does not trust it enough to show it to users directly.
-
-This is a false distinction. If the string is good enough to anchor GPT synthesis, it is good enough to show users as an immediate constellation summary. The reluctance to show it suggests either: (a) the string's quality is inconsistent and production exposure would reveal this, or (b) the team has not considered making this change.
-
-If it is (a), the solution is to improve the string quality before showing it. If it is (b), the solution is to show it.
-
-The fragility of not showing it is that users experience a dead period between completing the three-card draw and receiving GPT synthesis. During this period, the reading has no forward momentum. The interpretation panels for individual cards are available but the inter-card meaning — which is what a three-card spread is about — is absent. Users in this dead period are more likely to disengage or lose the thread of the reading.
-
-Surfacing the `astroResonanceNote` as a preview resolves a user-experience fragility without introducing any new computational cost. The computation already happened. Show the result.
+The fix: wrap the entire `if (ctx)` block in try/catch and fall through to client-supplied payload data on any exception. This is a two-line change that converts a hard crash into a graceful fallback.
 
 ---
 
-## Summary of Remaining Fragilities
+## 4. The Three-Card Stale Closure Is a Pattern, Not Just a Bug
 
-| # | Fragility | Risk Level | Status |
-|---|-----------|------------|--------|
-| 1 | Dominant transit planet single-winner selection ignores orb/applying | High | Deferred from sprint-0027 |
-| 2 | Pre-existing failing test unrepaird for 2+ sprints | Medium | Process failure |
-| 3 | Coverage test is a floor, not a contract — suite/planet specifics unguarded | Medium | New this review |
-| 4 | `formatTransitSummary` truncation not significance-ordered | Medium | Deferred from sprint-0027 |
-| 5 | Natal correspondence layer absent from static interpretation | Medium | No coverage target defined |
-| 6 | Dead code in gptTarot.ts | Low-Medium | Deferred from sprint-0027 |
-| 7 | Three-card synthesis `astroResonanceNote` computed but not surfaced | Low-Medium | New this review |
+The vision document correctly identifies the stale closure in `ThreeCardReading.tsx`: `handleCardTap` depends on `activeCardIndex`, which is derived from `activeRevealIndex`, which is derived from `revealedCount`, which is derived from `revealedMask`. This is a four-level derivation chain. A rerender that updates any node in the chain without triggering `useCallback` memoization leaves the handler with a captured stale value.
+
+The vision document proposes ensuring `activeCardIndex` is not stale when `handleCardTap` is reconstructed. That is the correct fix for Bug 2. But the structural pattern that enables this bug will enable the next bug the moment anyone modifies the reveal state logic. Every future sprint that touches `revealedMask`, `flipDoneMask`, `phase`, or `activeRevealIndex` in `ThreeCardReading.tsx` is working against a closure staleness surface with no test coverage. The test the vision document proposes — a test that confirms `handleCardTap(0)` updates `revealedMask[0]` and transitions phase — is necessary. It is not sufficient to prevent the next variation of this bug.
+
+The underlying structural fragility is that reveal state is managed through five pieces of `useState` (`revealedMask`, `flipDoneMask`, `phase`, `synthesisStartedRef`, `abortRef`) with complex interdependencies and no reducer. Any future sprint that wants to add a feature to the reveal flow — an undo-reveal option, a skip-to-synthesis affordance, an animation state — will be working in a system where it is easy to introduce closure staleness and difficult to detect it without running the exact user interaction sequence that triggers it.
 
 ---
 
-## What This Sprint Should Not Touch
+## 5. The Celtic Cross Synthesis Fire Assumes `drawnCards` Is Fully Populated
 
-The GPT prompt architecture is settled. The synthesis handlers are producing quality output. The two-pass retrograde fix is correct. The transit entry data is the best it has been.
+In `CelticCrossReading.tsx`, `fireEarlySynthesis` reads `drawnCards` from its `useCallback` closure. The `useCallback` dependency list includes `drawnCards`, which is correct. The assumption is that by the time `fireEarlySynthesis` is invoked (inside the `cross-staff-transition` phase effect), `drawnCards` is fully populated with all 10 entries.
 
-The improvements I am naming are about: making the existing quality visible to users faster (three-card preview), making the existing natal data speak in the static layer (natal correspondence), and fixing the underlying signal that determines which transit entry fires (dominance weighting). These are improvements that honor the work that has already been done rather than layering more complexity on top of it.
+This assumption is guaranteed by the current phase machine: `cross-staff-transition` only fires after `selectedCount === 10` and the `awaiting-12` phase has completed. The guarantee holds as long as `setDrawnCards` is synchronous and React batches updates consistently.
 
-What gets measured gets managed. Give the natal correspondence layer a measurable target and it will be addressed. Give the transit dominance weighting a test and it will be fixed. Give the truncation ordering a documented contract and it will not persist as a silent misconfiguration.
+The fragility: React 18 and later batch state updates by default. If `setDrawnCards` and the phase transition that triggers `fireEarlySynthesis` happen in the same synchronous event handler, there is a window where the phase transitions but `drawnCards` has not yet committed the full 10 entries. The synthesis fires with a stale, partial `drawnCards`. With fewer than 10 cards, `positions[i]` may be `undefined` (as described above), or the synthesis prompt will contain fewer than 10 card lines, which may cause the GPT model to produce a malformed or incomplete synthesis.
 
-The fragility of quality work is that it tends to stop being examined precisely when it has gotten good enough to stop being obviously broken. The reading experience is genuinely good now. That is the moment when the next layer of fragility becomes consequential, because the obvious problems have been removed and the subtle ones remain.
+This is not currently observed in production — the phase machine's current structure makes it unlikely. But it is a latent fragility that will surface if the card selection flow is modified.
+
+---
+
+## 6. `parseCelticChapters` Returns Empty Arrays on GPT Format Drift
+
+In `src/services/gptInterpretation.ts`, `parseCelticChapters` splits the GPT response on heading markers using:
+
+```typescript
+const parts = text
+  .split(/\n(?=(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$|\d+\.\s+[A-Z]))/m)
+```
+
+This regex handles three heading formats: markdown (`## Heading`), bold (`**Heading**`), and numbered (`1. Heading`). If GPT produces a response that uses none of these formats — because a model update changes default formatting, or because the response starts with narrative text before the first heading — `parseCelticChapters` returns `[]`. Then:
+
+```typescript
+if (chapters.length === 0) throw new Error('Empty synthesis response')
+```
+
+The user receives the error panel. The synthesis text exists — GPT returned something — but the parser could not structure it. The synthesis is lost entirely.
+
+The assumption is that GPT will always format its response in one of these three ways. GPT models are not deterministic. Format drift across model updates is a documented category of API regression. The current parser has no fallback: if the regex fails to split, the entire synthesis is discarded.
+
+The fix is a single line: if `chapters.length === 0` and `text.trim().length > 0`, return `[{ heading: 'Reading', body: text.trim() }]`. The user receives the synthesis as unstructured text rather than structured chapters. This degrades the reading experience slightly. It does not discard a completed synthesis.
+
+This is untested. The `parseCelticChapters` function is not tested anywhere in the current test suite. It is the sole boundary between raw GPT text and the displayed reading, and it has no test coverage.
+
+---
+
+## 7. The Tests That Do Not Exist
+
+The existing test suite covers the data layer (`cards.completeness.test.ts`) and the engine's core functions (`tarot.test.ts`). What is absent:
+
+**`computeInstantInterpretation` with a Celtic Cross position.** The vision document identifies that `getThreeCardSpreadProfile` returns null for `spreadType === 'celtic-cross'`, causing `positionLabel` and `positionMeaning` to be null for all 10 Celtic Cross positions. This is Bug 4's root cause. There is no test asserting that `computeInstantInterpretation` with a Celtic Cross position produces non-null `positionLabel` and `positionMeaning`. If sprint 0029 fixes this by wiring the position fields through, a future sprint could silently break the wiring without any test catching it.
+
+**`parseCelticChapters`.** The GPT response parser is untested. It is the most complex string-parsing function in the client codebase and the only barrier between GPT output and rendered chapters. It handles three heading formats, produces a filtered array, and throws on empty output. None of this is tested.
+
+**`buildCelticSynthesisPayload`.** The function that produces the synthesis payload is untested. Its hardcoded `personalYear: 0` and `lifePathNumber: 0` are not caught by any assertion. A test asserting that the payload contains `null` (not `0`) for numerology fields when birth data is unavailable would have caught Bug 5's contributing factor.
+
+**`handleTarotCelticSynthesis` route behavior.** No test exercises the server-side Celtic Cross handler. The handler that is currently failing in production has never been tested. Any future modification to the prompt template, the cardLines construction, or the signals block can break the synthesis silently.
+
+The vision document proposes two new tests. These are the right two tests. They are not sufficient. The parser test and the payload builder test are higher-value additions because they test the boundaries between system components — the places where format assumptions are load-bearing and silent failures are most likely.
+
+---
+
+## 8. The Duplicated Logic Is Now in Three Places for Celtic Cross Signals
+
+There are now three separate computations of Celtic Cross structural signals:
+
+1. `computeCelticStructuralSignals` in `server/services/gptTarot.ts` — server-canonical, used as fallback
+2. `clientComputeCelticStructuralSignals` in `src/services/gptInterpretation.ts` — client computation, enriches the payload before sending
+3. `computeCelticCrossSignals` in `src/components/tarot/CelticCrossReading.tsx` — used for the discuss context and internal UI signals
+
+These three functions compute overlapping but not identical fields. The field names differ between the server version and the component version. The thresholds differ: the server uses `>= 5` Major Arcana for `archetypal-heavy`, the client uses the same threshold in `clientComputeCelticStructuralSignals`, but the component version does not compute a `majorArcanaWeight` field at all. If the threshold for `archetypal-heavy` is changed in one function, the behavior diverges silently in the other two.
+
+Sprint 0029 is not the moment to refactor this. But it is the moment to name it, because sprint 0029 is adding positional meaning strings to the Celtic Cross interpretation — meaning the Celtic Cross data layer is about to grow again. Each addition increases the surface area of the divergence.
+
+---
+
+## Summary of Fragility Points
+
+**Will cause visible failures under normal use (already causing Bug 5):**
+- `positions[i]` access without null guard in `handleTarotCelticSynthesis`
+- `calculateChart` called without try/catch in server auth block — crash path on engine exceptions
+- `parseCelticChapters` returns empty on GPT format drift — silent discard of completed synthesis
+
+**Already corrupting output for unauthenticated users (invisible, no error panel):**
+- `personalYear: 0` and `lifePathNumber: 0` in `buildCelticSynthesisPayload` — invalid numerology sent to synthesis
+
+**Will be reintroduced by future sprints if not addressed structurally:**
+- Stale closure pattern in three-card reveal — any modification to `revealedMask` management reintroduces Bug 2
+- Celtic Cross synthesis fires with closure-captured `drawnCards` — vulnerable to React batching changes
+- Three separate Celtic Cross structural signal computations that can diverge silently
+
+**Test coverage gaps that make regressions invisible:**
+- Zero tests for `computeInstantInterpretation` with Celtic Cross position (the root of Bug 4)
+- Zero tests for `parseCelticChapters` (the sole synthesis parsing boundary)
+- Zero tests for `buildCelticSynthesisPayload` (where the hardcoded zeros live)
+- Zero tests for `handleTarotCelticSynthesis` server behavior
+
+The system fails at the boundaries. Not inside the well-tested engine functions. Not in the GPT prompts, which are strong. At the joints: where client meets server, where GPT text meets the parser, where `useState` closures meet React's rendering scheduler. These are the places no one tests because they are not "the algorithm" — they are the plumbing. And it is always the plumbing that fails in production.
+
+*Five confirmed bugs. All five live in the plumbing.*
+
+---
+
+## What the Previous Sprint Review Named That Remains
+
+From my sprint 0028 review, three items remain unaddressed and relevant to sprint 0029:
+
+**The dominant transit planet single-winner selection.** Still selects by static planet priority rather than weighted orb × applying. Still causes wide Pluto transits to suppress tight Saturn transits. Not a sprint 0029 item, but the quality ceiling of the transit layer.
+
+**The pre-existing failing test** (`adapts the instant interpretation text to the actual spread position`). The import is still type-only; `SPREAD_POSITIONS` value is missing. This test has been broken since before sprint 0027. It tests position adaptation logic — the exact logic that Bug 4 breaks. This test should be fixed as part of Bug 4.
+
+**The `formatTransitSummary` truncation ordering.** Transit aspects are sliced to the top 5 without significance ordering. The transit summary sent to GPT synthesis may not contain the most symbolically significant aspects for the user's current sky. Not a sprint 0029 item.
+
+These remain open. They will remain open as long as they have no measurable target assigned to them. The transit dominance weighting and the truncation ordering are quality improvements. The failing test is a correctness guarantee. The failing test should be fixed in sprint 0029 as a side effect of Bug 4.
+

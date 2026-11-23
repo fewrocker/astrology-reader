@@ -1,124 +1,309 @@
-# Technical Analysis — Tarot Module (Sprint 0028)
+# Technical Analysis — Tarot Module (Sprint 0029)
 *Voice: John Carmack*
 
 ---
 
-## What Changed in Sprint 0027
+## What This Sprint Actually Is
 
-Sprint 0027 closed the pip transit adaptation gap. 101 new entries across 30 cards. Coverage test added and passing. The `retrogradePlanets` rename landed. Single-card draws now route through `present-active` position register instead of falling to the unregistered null path. The Taleb fragility about retrograde `condition: 'any'` entries overriding the dominant planet was addressed by the two-pass approach in `buildTransitInfluence`.
+Five bugs. Three of them block core interactions. Two are content failures that make the premium feature look unfinished. The vision document gives a technically precise account of each one, and I've verified it against the code. My job here is to say where the analysis is correct, where it's incomplete, and what the cleanest fix path looks like for each.
 
-These are real, verifiable improvements. The architecture is in the state I described as the correct target state.
-
-Now let me describe what the code actually looks like from a technical standpoint after those changes, and where the remaining fragilities live.
+Sprint 0028 was a depth sprint. This is a repair sprint. The distinction matters because the right engineering posture is different: no new abstractions, no infrastructure changes, no feature gating. Every fix should be the smallest change that makes the observable behavior correct.
 
 ---
 
-## The Dominant Transit Planet Selection Is Still a Single Winner
+## Bug 1 — Single-card: card stands with no affordance after shuffle
 
-Taleb named this in the sprint-0027 review and it wasn't addressed — correctly, because it was out of scope. I want to be precise about the actual impact now that the data layer is complete.
+**Root cause:** `SingleCardReading.tsx` renders `card !== null` and `revealReady = selectedCount > 0` immediately after `handleSelect` fires — but `setRevealed(true)` doesn't happen until 480ms later via `window.setTimeout`. The gap state (`card present, revealReady true, revealed false`) has no UX attached to it. The "Seeking clarity on:" text was in `DeckShuffleAnimation` and disappears when that component unmounts.
 
-`buildTarotAstroContext` computes `dominantTransitPlanet` as a single string: the highest-priority planet in `PLANET_PRIORITY` among all active transit aspects. The priority is: Pluto=10, Neptune=9, Uranus=8, Saturn=7, Jupiter=5, Mars=3, Sun=2, Venus=2, Mercury=1, Moon=1.
+The current render path at the gap state:
+- `card` is not null — CardReveal renders
+- `revealReady` is true — opacity ramps to 1 (via `translateY(0)` and `opacity: 1` on the container)
+- `revealed` is false — CardReveal shows the back face
+- No text, no instruction, no glow
 
-With 193 transit entries across 78 cards, the question is now: for a given user's sky, which entries actually fire? If a user has an active Pluto trine (orb 4°, separating) and an active Saturn opposition (orb 0.5°, applying), Pluto still wins by priority and the Saturn entry fires. This was less consequential when most cards lacked Saturn entries entirely. Now that every card has specific Saturn entries, the priority override means: tight Saturn aspects are being systematically underrepresented relative to their actual astrological significance.
+The vision document's description of this as a "72% opacity" limbo is correct except that opacity actually reaches 1 by `revealReady = true`. The card is fully visible and fully silent.
 
-The correct fix would require factoring orb and applying/separating into the dominance computation. Something like: `priorityScore = planetPriority × (1 + (1 - orb/maxOrb) × 0.5) × (applying ? 1.2 : 1.0)`. This would make a tight 0.5° applying Saturn square more dominant than a wide 4° separating Pluto trine.
+**Clean fix:** Add a conditional block to `SingleCardReading.tsx` that renders when `revealReady && !revealed`. Inside it: a glow animation on the card container (CSS keyframes, same approach used in `ThreeCardReading.tsx` for `tarot-ring-pulse`), and the text "Visualize your intention and click on the card to start the ritual." This is a one-spot render gate. No state machine change, no new hooks.
 
-This change touches `buildTarotAstroContext` in `src/engine/tarot.ts` and the mock data in `src/engine/__tests__/tarot.test.ts`. The transit data structure already has `orb` and `applying` fields on each `TransitAspect` — the engine doesn't need new data, it needs a different weighting computation.
+The text and glow should render beneath the card visual, not overlaid on it — preserve the existing layout contract. The glow should be on the card's wrapping `div` (the one with `maxHeight: 'none'`), not on `CardReveal` internally, because `CardReveal` is a shared component.
 
-**Impact:** Medium-to-high. The most symbolically significant transits for many users are not outer planets but tight personal planet transits. The current system will routinely surface the wrong card-transit pairing.
+**One thing the vision document doesn't mention:** `handleSelect` in `SingleCardReading` also calls `onPickCard(deckIndex)` before starting the 480ms timer. That means the parent has already pre-picked the card via its own `useEffect` in `SingleReadingFlow` before `handleSelect` fires. The 480ms timer in `SingleCardReading` is the only gate between card selection and reveal. If someone clicks the card in that window — which is now going to be afforded by the glow — the `onClick` on `CardReveal` needs to be wired. Looking at `CardReveal.tsx` (the version imported in `SingleCardReading`, not the inline one in `ThreeCardReading`), it handles reveal via props. `SingleCardReading` doesn't pass an `onClick` to `CardReveal` at all — it's treating the card as a pure display component and relying on the timer. The affordance text is inviting the user to click something that has no click handler. **This is the actual bug to fix: wire a click handler on the card back that fires `setRevealed(true)` immediately when `revealReady && !revealed`.** The timer is there as a fallback for the ritual flow path; direct click should shortcut it.
 
 ---
 
-## The Pre-existing Failing Test Is Still Failing
+## Bug 2 — Three-card: stuck after placement, first card has no glow or click
 
-The changelog for sprint 0027 notes: "1 pre-existing failure: `adapts the instant interpretation text to the actual spread position` (SPREAD_POSITIONS missing from import in tarot.test.ts — pre-dates this sprint)."
+The vision document's diagnosis here is correct but slightly misdirected about which staleness path is actually failing. Let me be precise.
 
-I looked at the test file. The test at line 348 imports `SPREAD_POSITIONS` from `'../../data/tarot/spreadPositions'` — or it should. Looking at the actual imports at the top of `tarot.test.ts`:
+`handleCardTap` is a `useCallback` with dependency array `[activeCardIndex, triggerRevealOverlay]`. `activeCardIndex` is derived as:
 
 ```typescript
-import type { SpreadPosition } from '../../data/tarot/spreadPositions'
+const activeRevealIndex = placementComplete && revealedCount < 3 ? revealedCount : null
+const activeCardIndex = activeRevealIndex
 ```
 
-This is a `type`-only import. `SPREAD_POSITIONS` (the value) is not imported. The test tries to use `SPREAD_POSITIONS.find(...)` but the value isn't available, so it fails at runtime. The fix is one line: change the import to include the value alongside the type.
+When `placementComplete` transitions from false to true (the `selectedCount === 3 && drawnCards.length === 3` check), `activeCardIndex` immediately becomes `0`. React re-renders. `handleCardTap` is reconstructed because `activeCardIndex` changed. **That part is fine.**
 
-This is a real test that covers real behavior — the position adaptation logic that was improved in sprint 0026. The test has been broken since sprint 0025 and has been deferred sprint after sprint. It should be fixed. It tests whether `computeInstantInterpretation` correctly adapts text when passed a `situation` position vs an `advice` position. This behavior is production code. The test failure is masking a regression surface.
+The actual problem is in `CardReveal`'s `onClick` binding:
 
-**Fix:** Add `SPREAD_POSITIONS` to the import in `src/engine/__tests__/tarot.test.ts`.
+```tsx
+onClick={hasPickedCard && !revealed && isActive ? onTap : undefined}
+```
 
----
+`isActive` is `i === activeCardIndex`. On the render immediately after `placementComplete` becomes true, `activeCardIndex` is `0` and `revealedCount` is `0`. Card 0 should be active. But look at what's above the card grid in the render:
 
-## The Dead Code in gptTarot.ts
+```tsx
+{selectedCount < 3 && (
+  <TarotDeckSelection ... />
+)}
+```
 
-`gptTarot.ts` contains two functions that compute dominant modality:
-- `computeDominantModality()` at approximately line 88 — uses `SIGN_MODALITIES_SERVER`
-- `computeServerDominantModality()` at approximately line 481 — uses `SERVER_SIGN_MODALITIES`
+When `selectedCount === 3`, `TarotDeckSelection` unmounts. React performs a batch update. The question is whether `drawnCards.length === 3` has caught up at the moment `selectedCount === 3` is true. The parent calls `onPickCard(deckIndex)` via `handleActualDeckSelect`, which sets `selectedCount` via `handleDeckSelect`. But `drawnCards` is set in the parent and passed as a prop — it's owned by the parent. The `drawnCards` prop and `selectedCount` state are out of sync by exactly one render in the common case: the parent sets `drawnCards` and triggers a re-render, then the child receives the new `drawnCards`, but `selectedCount` was already at 3 from the previous render.
 
-Both exist in the same file. Only `computeServerDominantModality` is called by the handlers. The first function is dead code. The two lookup tables (`SIGN_MODALITIES_SERVER` and `SERVER_SIGN_MODALITIES`) are identical but named differently.
+So `placementComplete = selectedCount === 3 && drawnCards.length === 3` actually gates correctly — it requires both. This is fine.
 
-This is three copies of the same data and two copies of the same function in a single file. Taleb noted this in sprint-0027; it was deferred. It should be cleaned up in the next code-quality sprint. The risk is divergence: if someone fixes a modality edge case, they may fix it in one function and miss the other. The dead function provides false confidence that there are two paths.
+**The real bug I see:** look at `dimmed`:
 
-**Fix:** Remove `computeDominantModality` and `SIGN_MODALITIES_SERVER` from `gptTarot.ts`, rename `SERVER_SIGN_MODALITIES` to something consistent, keep only `computeServerDominantModality`.
+```tsx
+dimmed={!revealedMask[i] && (selectedCount === 0 || i !== activeCardIndex)}
+```
 
----
+When `placementComplete` is true and `activeCardIndex === 0`:
+- Card 0: `dimmed = !false && (false || 0 !== 0) = false` — not dimmed, correct
+- Card 1: `dimmed = !false && (false || 1 !== 0) = true` — dimmed
+- Card 2: `dimmed = !false && (false || 2 !== 0) = true` — dimmed
 
-## The Three-Card Synthesis Signals Are Computed but Not Directly Surfaced
+The ring-pulse animation fires on card 0:
+```
+animation: !revealed ? `tarot-breathe 3s ease-in-out infinite${isActive ? ', tarot-ring-pulse 2s ease-in-out infinite' : ''}` : 'none',
+```
 
-`computeThreeCardSynthesis` in `src/engine/tarot.ts` returns a rich `ThreeCardSynthesisInput` object that includes:
-- `elementDistribution` (elements, dominant, allSame, crossElement, fireWaterTension)
-- `polarityProfile` (reversedCount, allReversed, allUpright, centerReversed)
-- `archetypeFraming` (hasFool, hasWorld, hasDeathOrTower, numericalProgression)
-- `suitPattern` (suits, allSameSuit, noMinorArcana)
-- `astroResonanceNote` — a string that already synthesizes the most interesting structural feature
+So card 0 DOES get the pulse when `isActive = true`. This means the visual affordance should be there. If it's not visible in testing, the problem is either:
+1. The `phase !== 'all-revealed'` guard on the instruction panel — it correctly shows "All three cards are placed. Reveal them one by one." But this panel only shows when `activePosition` is defined, and `activePosition` is null when both `activePlacementIndex` and `activeRevealIndex` are null. Wait — `activeRevealIndex` is `revealedCount < 3 ? revealedCount : null` when `placementComplete` — so it IS 0. So `activePosition` is `spreadPositions[0]`, and the panel should show "Click [Position] to reveal it."
 
-On the client side, `ThreeCardReading.tsx` calls `getTarotThreeSynthesis` to send this to GPT. The GPT synthesis receives it and produces chapters. But the `astroResonanceNote` and element/polarity signals are not shown to the user before GPT returns.
+Let me look more carefully. The instruction panel shows when `phase !== 'all-revealed'`. The initial `phase` is `'idle'`. After `placementComplete`, `phase` is still `'idle'` until the first `handleCardTap` fires. So the instruction panel IS visible. The text is "Click [Position] to reveal it." The glow should be on card 0.
 
-The `astroResonanceNote` is a pre-computed string like: "Fire and Water meet across the spread under a Saturn sky — emotional pressure and creative drive are in direct conversation." This string exists in the engine. It is passed to GPT as context. It is not rendered to the user directly.
+The vision document says the bug is a stale closure where `activeCardIndex` is `null` in the old `handleCardTap`. I think the actual failure mode is more likely a timing issue with `drawnCards.length` — specifically: if `selectedCount` reaches 3 but `drawnCards` has only 2 entries (because the parent hasn't finished processing the third selection), then `placementComplete` is false, `activeCardIndex` is null, and the old `handleCardTap` correctly guards with `if (index !== activeCardIndex) return` (where `activeCardIndex` is null, so `index !== null` is always true, meaning the tap does nothing).
 
-Showing `astroResonanceNote` immediately after the three cards are drawn — before GPT loads — would give users a structural orientation for the constellation. This is a small UI change: render the synthesis input's `astroResonanceNote` as a brief display note while GPT processes. The data is already there. No additional computation required.
+**The real fix:** The parent component needs to guarantee that `drawnCards.length === selectedCount` at all times. If `drawnCards` is populated synchronously when `onPickCard` fires, there's no gap. If it's async or batched differently, there is. Verify the parent's state update order. If the gap is real, the fix is to merge `selectedCount` into derived state from `drawnCards.length` rather than tracking them separately.
 
-**Implementation:** In `ThreeCardReading.tsx`, after all three cards are selected, show the `astroResonanceNote` from `computeThreeCardSynthesis` above the GPT skeleton. Takes the synthesis call that already runs and surfaces one of its outputs immediately. Low effort, high readability gain.
+**Secondary fix:** Even if the glow and click work correctly, the instruction text "All three cards are placed. Reveal them one by one." shows in `activeInstruction` only when `activePlacementIndex === null && activeRevealIndex === null` — but as I showed, `activeRevealIndex` is 0 when `placementComplete`, so the instruction says "Click [position] to reveal it." That's correct. No bug here.
 
----
-
-## The Natal-to-Card Correspondence Is Not in the Static Layer
-
-The `TarotAstroContext` has: `natalSunSign`, `natalMoonSign`, `natalAscendantSign`, `chartRulerPlanet`, `natalDominantElement`, `natalMoonHouse`, `natalVenusHouse`, `natalNorthNodeHouse`, `natalMarsHouse`.
-
-The `TarotCard` has: `element`, `rulingPlanet`, `rulingSign`.
-
-The `ASTRO_CONNECTIONS` has per-card `rulingPlanet`, `rulingSign`, `baselineNote`.
-
-There is currently no function that takes these two and produces a natal resonance note — a sentence that says "this card's Venus ruler aligns with your natal chart ruler (also Venus)" or "this card's Water element resonates with your Moon in Cancer." The closest thing is `buildElementResonanceNote`, which compares `card.element` to `natalDominantElement` but produces a generic comparison string.
-
-A `buildNatalResonanceNote` function would take a card and an astro context and produce a specific one-sentence note when a meaningful correspondence exists. The correspondences to detect:
-1. Card's ruling planet === `chartRulerPlanet` — highest resonance signal
-2. Card's element === natal dominant element — strong resonance
-3. Card's ruling planet === planet in a key natal house (Moon house, Venus house, Mars house, North Node house) — specific house activation
-
-This function would live in `src/engine/tarot.ts` alongside `buildElementResonanceNote`. The output would appear in `InstantInterpretation.astroConnection`. The `TarotInterpretationPanel` would render it in the "In Your Sky Now" section alongside or immediately after the transit influence.
-
-**Cost:** Medium. New function, new field on `AstroConnection`, minor panel update. No GPT prompt changes. All data is already in the engine.
+**The actual fix needed:** Wire `handleCardTap` correctly so the click registers. The vision doc's "stale closure" framing is plausible in development/StrictMode but not the production failure. In production, the more likely bug is that `drawnCards.length` lags `selectedCount` by one render frame. The fix: in the parent component, update `drawnCards` synchronously with `selectedCount`, or derive `selectedCount` from `drawnCards.length`.
 
 ---
 
-## The Test for `buildNatalResonanceNote` Is Implicit
+## Bug 3 — Celtic Cross: clicking a card does not scroll to interpretation content
 
-If this function is added, it should be tested in `src/engine/__tests__/tarot.test.ts`. The existing mock context has `chartRulerPlanet: null` — a test for the ruling-planet-match case would need a context where `chartRulerPlanet` matches a card's `rulingPlanet`. The test structure already exists; adding one more describe block for the new function is straightforward.
+This one is simple and the vision document nails it. `InterpretationPanel` in `CelticCrossReading.tsx` mounts below the card grid. The card grid takes up most of the viewport. The user taps a card (which calls `handleContinue`), `setPhase('holding')` fires, `reveal(next)` fires, `InterpretationPanel` mounts — but it's 600–900px below the fold on mobile.
+
+The fix: add a `useRef` to the `InterpretationPanel` container div, and in the `useEffect` that watches `activePosition` and `phase`, call `interpretatonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })`. Guard with `window.matchMedia('(prefers-reduced-motion: reduce)').matches` — if reduced motion, use `behavior: 'instant'`.
+
+There are two places where `reveal()` can be called that should trigger scroll:
+1. `revealInitialCross()` — positions 1 and 2 simultaneously
+2. `handleContinue()` — each subsequent position
+
+The cleanest approach: `useEffect` that watches `[activePosition, revealedPositions]`. When `revealedPositions.has(activePosition)` and `phase === 'holding' || phase === 'continuing'`, scroll to the panel ref. This handles both paths.
+
+One practical issue: the `InterpretationPanel` is conditionally rendered based on `currentInterp && currentDc && (phase === 'holding' || phase === 'continuing')`. If the ref is on the conditional container, it won't exist until after the re-render that creates the panel. Use `useEffect` with a small `requestAnimationFrame` or `setTimeout(0)` to wait one frame before scrolling, giving React time to mount the panel DOM node.
+
+**Do not use `window.scrollTo` with a hardcoded pixel value.** Use `scrollIntoView` on the ref — it's layout-agnostic and survives mobile/desktop/font-size differences.
 
 ---
 
-## Summary of Technical Priorities
+## Bug 4 — Celtic Cross instant interpretations have zero positional awareness
 
-In order of impact and implementation clarity:
+This is the cleanest diagnosis in the whole vision document and it's exactly right. The call chain:
 
-1. **Fix the pre-existing failing test** — one import line, restores coverage of position adaptation logic. Should have been done in sprint 0027. Zero risk.
+`computeInstantInterpretation(sourceCard, reversed, celticPosition, tarotAstroContext)`
+→ `adaptInterpretationToPosition(interpretation, position)`
+→ `getThreeCardSpreadProfile(position)`
+→ returns `null` because `position.spreadType === 'celtic-cross'`
+→ returns interpretation unchanged
 
-2. **Surface `astroResonanceNote` in three-card reading** — pre-computed string already exists, UI addition only. Shows users the constellation structure before GPT loads.
+The position data is being passed in — `celticPosition` is a `CelticCrossPosition` from `CELTIC_CROSS_POSITIONS` — but the `adaptInterpretationToPosition` function only handles three-card spread types. The Celtic Cross positions aren't in `SPREAD_POSITIONS` at all; they use the parallel `CELTIC_CROSS_POSITIONS` array with `CelticCrossPosition` type (which has `name`/`description` instead of `label`/`meaning`). These are two different data shapes for the same conceptual thing.
 
-3. **Build `buildNatalResonanceNote`** — medium effort, high interpretive value. Surfaces natal-card correspondence in the static layer before GPT synthesis. The data is all there.
+**The structural problem:** `computeInstantInterpretation` takes a `SpreadPosition` from `src/data/tarot/spreadPositions.ts` — the SPREAD_POSITIONS array. But `handleActualDeckSelect` in `CelticCrossReading.tsx` passes `CELTIC_CROSS_POSITIONS[selectionIndex]` which is a `CelticCrossPosition`, a different interface. TypeScript is allowing this because `CelticCrossPosition` has compatible required fields for `SpreadPosition`. But the `label` and `meaning` fields on `SpreadPosition` come from `CELTIC_CROSS_POSITIONS`'s `name` and `description` — except... wait. Let me check the actual call:
 
-4. **Fix dominant-transit weighting** — requires factoring orb and applying status into planet dominance scoring. The `TransitAspect` type already has these fields. Medium effort, corrects a systematic misallocation of which transit is "dominant."
+```typescript
+const celticPosition = CELTIC_CROSS_POSITIONS[selectionIndex]
+const interpretation = computeInstantInterpretation(
+  sourceCard,
+  reversed,
+  celticPosition ?? null,
+  tarotAstroContext,
+)
+```
 
-5. **Dead code cleanup in `gptTarot.ts`** — low-risk deduplication, removes divergence surface for future modality computation fixes.
+And `computeInstantInterpretation` expects `SpreadPosition | null`. `CelticCrossPosition` has `id`, `number`, `name`, `description`, `zone`, `gridArea` but NOT `label`, `meaning`, `spreadType`, `positionIndex`. These are different types entirely. TypeScript should be catching this. It's passing `null` check because `celticPosition ?? null` can be null, and when it's not null, TypeScript is either doing structural duck-typing or the types have been incorrectly widened somewhere.
 
-*The code is in the best state it has been. These are improvements on a solid foundation, not repairs to a broken one.*
+Looking at the engine call: `positionLabel: position?.id !== 'single' ? (position?.label ?? null) : null`. If `CelticCrossPosition` doesn't have `label`, this resolves to `undefined ?? null = null`. So `positionLabel` in the InstantInterpretation is always null for Celtic Cross cards.
+
+**The fix has two parts:**
+
+1. Wire `positionLabel` and `positionMeaning` to the Celtic Cross card's position name and description. In `handleActualDeckSelect`, before calling `computeInstantInterpretation`, construct a minimal adapter or pass position info separately. The cleanest approach: in `computeInstantInterpretation`, add a separate `celticPositionOverride?: { label: string; meaning: string }` parameter, or check for `CelticCrossPosition` shape by duck-typing on `name` vs `label`. I'd prefer just adapting `CelticCrossPosition` to `SpreadPosition` at the call site — it's one mapping.
+
+2. Add static positional meaning strings. The vision document is right that these should be written at the same register as the existing `CELTIC_CROSS_POSITIONS` descriptions — not generic. Each string should name what this card's draw at this position means for reading: "The Outcome position asks what this card points toward when all other energies have had their say — not what it promises, but what its direction implies." That register. This can live directly in `CELTIC_CROSS_POSITIONS` as a new `cardDemand` field, or in a separate map keyed by position id.
+
+**What not to do:** Don't try to make `adaptInterpretationToPosition` handle Celtic Cross positions. That function is built around the three-card spread profile model (5 spread types × 3 positions × 4 interpretation frames). Adding Celtic Cross would require 10 positions × 4 frames = 40 strings, and the result would be a massive expansion of a function that already has a clear, bounded scope. Keep Celtic Cross positional depth separate — in the position data itself, surfaced in the rendering layer.
+
+---
+
+## Bug 5 — Celtic Cross GPT synthesis always fails
+
+The vision document lists three candidates. I've read the code and I can rank them.
+
+**The most likely failure:** The client-side `TarotCelticSynthesisPayload` interface in `src/services/gptInterpretation.ts` has `natalDominantModality: 'Cardinal' | 'Fixed' | 'Mutable' | null`, but the server-side `TarotCelticSynthesisPayload` in `server/services/gptTarot.ts` has `natalMoonPhase: string | null` as a field. The client sends `natalMoonPhase` because the interface has it — but does the client's `buildCelticSynthesisPayload` actually populate it?
+
+Looking at `buildCelticSynthesisPayload` in `CelticCrossReading.tsx`:
+```typescript
+natalMoonPhase: astroContext.lunarPhaseName,
+```
+
+`astroContext.lunarPhaseName` is `string | null`. This populates fine.
+
+**What's actually different between client and server types:**
+
+Client's `TarotCelticSynthesisPayload` has `natalDominantModality`. Server's has `natalDominantModality` too. They match. But the client's payload-building code in `buildCelticSynthesisPayload` doesn't include `chartRulerPlanet` — check line by line:
+
+```typescript
+// Server type has:
+chartRulerPlanet: string | null
+
+// Client buildCelticSynthesisPayload sends:
+// ... not listed in the function
+```
+
+Looking at `buildCelticSynthesisPayload`:
+```typescript
+return {
+  cards: cards.map(...),
+  positions: ...,
+  userIntention,
+  natalSunSign: astroContext.natalSunSign ?? '',
+  natalMoonSign: astroContext.natalMoonSign ?? '',
+  natalAscSign: astroContext.natalAscendantSign ?? '',
+  chartRulerPlanet: astroContext.chartRulerPlanet,   // ← present
+  natalDominantModality: astroContext.natalDominantModality,
+  natalMoonPhase: astroContext.lunarPhaseName,
+  ...
+  personalYear: 0,   // ← HARDCODED ZERO
+  lifePathNumber: 0, // ← HARDCODED ZERO
+```
+
+The `personalYear: 0` and `lifePathNumber: 0` are hardcoded. These go into the prompt. The server computes authoritative versions from `userId` when available. This is not the crash cause — it's a data quality issue.
+
+**The actual crash site:** The server's `handleTarotCelticSynthesis` does this:
+
+```typescript
+const { cards, positions } = payload
+const signals = payload.signals ?? computeCelticStructuralSignals(cards)
+
+const cardLines = cards.slice(0, 10).map((card, i) => {
+  const pos = positions[i]
+  const reversalText = card.reversed ? ' (reversed)' : ' (upright)'
+  return `${i + 1}. ${pos.label} — ${card.name}${reversalText}
+   ${card.symbolicTheme}. ${card.coreMeaning}
+   Sky connection: ${card.astroHeadline}`
+}).join('\n\n')
+```
+
+If `positions[i]` is undefined for any `i` in `[0, 9]`, `pos.label` throws `TypeError: Cannot read properties of undefined (reading 'label')`. When does this happen?
+
+The client sends `positions` as:
+```typescript
+positions: CELTIC_CROSS_POSITIONS.map((pos, i) => ({
+  index: i,
+  label: pos.name,
+  meaning: pos.description,
+})),
+```
+
+`CELTIC_CROSS_POSITIONS` has 10 entries. `cards` is `drawnCards.map(...)`. But `drawnCards` in `CelticCrossReading.tsx` is populated one at a time as users select cards. `fireEarlySynthesis` fires during `cross-staff-transition` phase — that's when `activePosition` moves from 6 to 7. At that point, 6 cards have been revealed (positions 1-6), but ALL 10 cards have been DRAWN (the user selects all 10 in the drawing phase before any reveals happen). So `drawnCards.length` should be 10 when synthesis fires.
+
+**Wait, look more carefully.** The `fireEarlySynthesis` fires inside the `cross-staff-transition` `useEffect`:
+
+```typescript
+useEffect(() => {
+  if (phase !== 'cross-staff-transition') return
+  setTransitionVisible(true)
+  fireEarlySynthesis()
+  ...
+}, [phase])
+```
+
+`fireEarlySynthesis` is a `useCallback` with `[drawnCards, tarotAstroContext, userIntention, dailyTransitSummary, weeklyTransitSummary, moonSign]`. At the time `cross-staff-transition` fires, `drawnCards` should have all 10 cards. The `selectedCount === 10` happens in the drawing phase, before the reading phase begins. This path looks correct.
+
+**The real failure is somewhere else.** The curl in `aios/guidelines.md` sends 10 cards and 10 positions. The request gets to the server. The server routes to `handleTarotCelticSynthesis`. Let me look at what can throw between route entry and the OpenAI call.
+
+The server handler starts with:
+```typescript
+if (userId) {
+  const ctx = resolveUserBirthContext(userId)
+  if (ctx) {
+    ...
+    const natalChart = calculateChart(ctx.birthDate, ctx.birthTime, ctx.lat, ctx.lng, ctx.tz, ctx.unknownTime)
+```
+
+If `resolveUserBirthContext` returns a context with missing/malformed `lat`, `lng`, or `tz` fields, `calculateChart` may throw. This error is NOT caught — the `if (userId)` block has no try/catch. A thrown error propagates to the route handler and returns a 500.
+
+**This is the most likely actual failure** for authenticated users. The curl in the guidelines sends a valid `auth_token` cookie. The session resolves to a user. The birth context lookup or chart calculation throws.
+
+**The fix:** Wrap the entire `if (userId)` block in `try/catch`. On catch, log the error and fall through to the client-supplied values. This is the defensive pattern used elsewhere in the codebase (both `computeDominantElement` and `computeDominantModality` in `tarot.ts` have `try/catch` with null fallback).
+
+There's also a secondary robustness issue: `getTarotCelticSynthesis` on the client side throws `Error('Empty synthesis response')` if `parseCelticChapters` returns zero chapters. The regex split in `parseCelticChapters` is:
+
+```typescript
+text.split(/\n(?=(?:#{1,6}\s+|\*\*[^*\n]+\*\*\s*$|\d+\.\s+[A-Z]))/m)
+```
+
+If GPT returns its sections in a format that doesn't match any of these three heading patterns — a realistic failure when the model deviates from formatting instructions — the entire response is not split, falls through, and the single part becomes one chapter with heading `'Synthesis'` and body equal to the full text. The filter `c.body.length > 0 || c.heading !== 'Synthesis'` then drops it because heading IS 'Synthesis' and body.length > 0... wait, no: `c.body.length > 0 || c.heading !== 'Synthesis'`. For our case: `true || false = true`. So it's kept. The `chapters.length === 0` check would only fail if the text is empty. The real issue is structural, not the empty check.
+
+**Summary of Bug 5 fixes:**
+1. Add `try/catch` around `if (userId)` block in `handleTarotCelticSynthesis` — primary fix
+2. Log the error server-side so it can be diagnosed
+3. Verify that `payload.cards.length === 10` at the server before accessing `positions[i]` — add a guard
+4. Fix the hardcoded `personalYear: 0` in `buildCelticSynthesisPayload` — not the crash cause but wrong data going to GPT
+
+---
+
+## The Structural Problem Nobody Named
+
+There are two parallel data models for Celtic Cross positions. `CELTIC_CROSS_POSITIONS` (with `name`/`description`/`number`/`zone`/`gridArea`) and the entries in `SPREAD_POSITIONS` filtered by `spreadType === 'celtic-cross'` (with `id`/`label`/`meaning`/`positionIndex`). The `CelticCrossReading.tsx` component uses `CELTIC_CROSS_POSITIONS`. The engine (`computeInstantInterpretation`) uses `SPREAD_POSITIONS`. These never meet, which is why Bug 4 exists.
+
+The right long-term fix is to have one authoritative Celtic Cross position array. Either:
+- Make `CELTIC_CROSS_POSITIONS` the authority and have the component + engine both use it
+- Or merge the grid layout data (`zone`, `gridArea`) into the `SPREAD_POSITIONS` entries
+
+Either approach eliminates the current fragility where a developer can add a new field to one array and not update the other. For sprint 0029, an adapter at the call site is faster and lower risk. But this structural debt should be logged as a follow-on task.
+
+---
+
+## The Dead Code from Sprint 0028 Is Still There
+
+In the previous analysis I noted that `gptTarot.ts` had duplicate `computeDominantModality` functions. After reading the current file, there's now only one (`computeDominantModality` with `SIGN_MODALITIES` from the same file). Sprint 0029's version has cleaned this up — or it was cleaned between sprints. Either way, the dead code concern from sprint 0028 is resolved.
+
+---
+
+## What I Would Not Do
+
+- Don't try to generalize `adaptInterpretationToPosition` to handle Celtic Cross. It's a clean, bounded three-card function. Keep it that way.
+- Don't add a feature flag or runtime config for the scroll behavior. Just scroll.
+- Don't add new state to `ThreeCardReading.tsx` to track the "tap affordance shown" phase. The existing state is sufficient — derive from `placementComplete && revealedCount === 0`.
+- Don't use `window.scrollTo` with computed pixel offsets for Bug 3. `scrollIntoView` on the panel ref is the right primitive.
+
+---
+
+## Priority Order
+
+1. **Bug 5 — GPT crash:** Wrap `if (userId)` in try/catch in `handleTarotCelticSynthesis`. This unblocks the premium feature entirely. Should take 15 minutes.
+
+2. **Bug 2 — Three-card stuck:** Verify whether `drawnCards.length` and `selectedCount` are synchronized at the parent level. If not, derive `selectedCount` from `drawnCards.length`. If they are synchronized, the `useCallback` dependency array is the issue — add a direct `activeCardIndex` ref that updates synchronously.
+
+3. **Bug 1 — Single-card no affordance:** Wire click handler on the card back + render the glow + instruction text at `revealReady && !revealed`. The text and glow are additive UI; the click handler is the functional fix.
+
+4. **Bug 3 — Celtic Cross no scroll:** Add ref to `InterpretationPanel` container, add `useEffect` that calls `scrollIntoView` when `revealedPositions` changes.
+
+5. **Bug 4 — Celtic Cross positional awareness:** Map `CelticCrossPosition` to `SpreadPosition` at the call site in `handleActualDeckSelect`. Write the 10 static positional demand strings directly into `CELTIC_CROSS_POSITIONS` as a new `cardDemand` field. Render in `InterpretationPanel`.
+
+*The code is structurally sound. These are real bugs in real interaction paths, and they're all fixable without architectural changes.*
