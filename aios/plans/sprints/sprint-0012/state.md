@@ -11,6 +11,6 @@
 | 0002 | code-server-astrocore-module | pending |
 | 0003 | feat-server-aspect-engine | pending |
 | 0004 | feat-server-numerology-engine | pending |
-| 0005 | feat-server-solar-return-engine | pending |
+| 0005 | feat-server-solar-return-engine | done |
 | 0006 | feat-server-synastry-engine | pending |
 | 0007 | feat-server-transit-engine | pending |

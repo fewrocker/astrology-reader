@@ -81,3 +81,22 @@ The client continues to compute and display the solar return chart immediately o
 3. **Year-defaulting logic on the server.** The frontend's `calculateSolarReturn` auto-selects the target year by checking whether the current year's SR has already passed (`if (srThisYear < now)`, line 33–37 of `solarReturn.ts`). The server handler receives `targetYear` explicitly from the client. The question is whether the server should also implement the auto-select path for cases where the client sends `targetYear: 0` or omits the field. Recommended: require `targetYear` as a non-optional integer in the handler payload; the client's year selector always sends an explicit value and the ambiguity is already resolved client-side.
 
 4. **`ServerChartData` vs frontend `ChartData` type compatibility in `buildSolarReturnPrompt`.** The ported prompt builder accesses `p.longitude`, `p.degree`, `p.minute`, `p.house`, `p.retrograde`, `p.sign`, `p.name`, and `srChart.angles.ascendant`/`midheaven` with their `degree`, `minute`, `sign` fields. `ServerChartData` in `chartEngine.ts` includes all of these fields (the full `ZodiacPosition` type has `longitude`, `sign`, `degree`, `minute`). The stripped `ChartData` interface currently defined inline in `gpt.ts` (lines 10–28) omits `longitude` and `minute` — it must not be used for the solar return prompt builder. The handler must work with `ServerChartData` throughout.
+
+---
+
+## Implementation Notes (2026-05-14)
+
+**Status:** Done — build passes clean.
+
+**Files created/modified:**
+- `server/engine/solarReturnEngine.ts` (new) — `findSolarReturn`, `calculateSolarReturn`, `buildSolarReturnPrompt`, plus inline `analyzeElements` with sync comment
+- `server/services/gpt.ts` — import added, `handleSolarReturnInterpretation` added, dispatcher registered as `'solar-return'`
+- `src/services/gptInterpretation.ts` — `getSolarReturnInterpretation(targetYear: number)` added
+
+**Open question resolutions:**
+1. `analyzeElements` — `server/engine/astroCore.ts` did not exist. Inlined with explicit sync comment pointing to `src/data/interpretations/index.ts` and `src/engine/types.ts`.
+2. `resolveUserBirthContext` — Draft 1 not yet implemented. Used inline validation pattern matching `handleDreamInterpretation`, with explicit error logging via `GptServiceError`.
+3. Year-defaulting — `targetYear` is required in the handler payload. Auto-select logic (`calculateSolarReturn` default path) is retained for the case where `targetYear` is omitted from `calculateSolarReturn` call, but handler enforces the year from client.
+4. `ServerChartData` compatibility — `buildSolarReturnPrompt` typed with `ServerChartData` throughout; stripped `ChartData` interface in `gpt.ts` not used.
+
+**Birth-location assumption documented** in `solarReturnEngine.ts` with comment on the relocation scope exclusion.
